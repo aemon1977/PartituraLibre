@@ -482,18 +482,53 @@ class PaginaPartituras(QWidget):
         self.notas, self.bpm, self._cargando = [list(n) for n in notas], bpm, True
         self.letra = (self.letra + [""] * len(self.notas))[:len(self.notas)]
         self.tabla.setRowCount(len(self.notas))
-        for i, (ini, fin, tono, _v) in enumerate(self.notas):
-            for c, texto in enumerate((f"{ini:.2f}", f"{fin - ini:.2f}", str(tono), partituras.nombre_nota(tono), self.letra[i])):
-                it = QTableWidgetItem(texto)
-                it.setTextAlignment(Qt.AlignCenter)
-                if c == 3:
-                    it.setFlags(it.flags() & ~Qt.ItemIsEditable)
-                self.tabla.setItem(i, c, it)
+        for i in range(len(self.notas)):
+            self._llenar_fila(i)
         self._cargando = False
         if 0 <= sel < len(self.notas):
             self.tabla.selectRow(sel)
         self._dibujar()
         self._botones()
+
+    def _llenar_fila(self, i):
+        for c, texto in enumerate(self._fila(i)):
+            it = QTableWidgetItem(texto)
+            it.setTextAlignment(Qt.AlignCenter)
+            if c == 3:
+                it.setFlags(it.flags() & ~Qt.ItemIsEditable)
+            self.tabla.setItem(i, c, it)
+
+    def _fila_puesta(self, i, nueva):
+        """Tras insertar (`nueva`) o borrar la nota i: se toca solo esa fila de la tabla, no todas."""
+        self._cargando = True
+        if nueva:
+            self.tabla.insertRow(i)
+            self._llenar_fila(i)
+        else:
+            self.tabla.removeRow(i)
+        self._cargando = False
+        i = min(i, len(self.notas) - 1)
+        if i >= 0:
+            self.tabla.selectRow(i)
+        self._dibujar()
+        self._botones()
+
+    def _fila(self, i):
+        ini, fin, tono, _v = self.notas[i]
+        return f"{ini:.2f}", f"{fin - ini:.2f}", str(tono), partituras.nombre_nota(tono), self.letra[i]
+
+    def _nota_cambiada(self, i, recomponer=True):
+        """Tras cambiar UNA nota: actualiza solo su fila de la tabla y, en la hoja, solo lo necesario.
+        Con `recomponer=False` (cambio de altura al arrastrar) no se recoloca nada: se repinta su sistema."""
+        self._cargando = True
+        for c, texto in enumerate(self._fila(i)):
+            self.tabla.item(i, c).setText(texto)
+        self._cargando = False
+        if recomponer:
+            self._dibujar()
+            self._botones()
+        else:
+            self.vista.repintar_nota(i)
 
     def _dibujar(self):
         sel = self.tabla.currentRow()
@@ -520,7 +555,7 @@ class PaginaPartituras(QWidget):
         self._recordar()
         if it.column() == 4:  # letra de esa nota: texto libre
             self.letra[i] = it.text().strip()
-            return self._poner_notas(self.notas, self.bpm, i)
+            return self._nota_cambiada(i)
         try:
             v = float(it.text().replace(",", "."))
             if it.column() == 0:
@@ -531,7 +566,7 @@ class PaginaPartituras(QWidget):
                 n[2] = max(0, min(127, int(v)))
         except ValueError:
             pass  # texto no numérico: se restaura el valor anterior
-        self._poner_notas(self.notas, self.bpm, i)
+        self._nota_cambiada(i)
 
     def _atajo(self, accion):
         """Teclas sobre la partitura, como en un editor de notación."""
@@ -560,14 +595,14 @@ class PaginaPartituras(QWidget):
         if i >= 0:
             self._recordar()
             self.notas[i][1] = self.notas[i][0] + partituras.segundos_de(fig, self.tempo.value() or self.bpm)
-            self._poner_notas(self.notas, self.bpm, i)
+            self._nota_cambiada(i)
 
     def _letra_editada(self):
         i = self.tabla.currentRow()
         if 0 <= i < len(self.letra) and self.letra[i] != self.e_letra.text().strip():
             self._recordar()
             self.letra[i] = self.e_letra.text().strip()
-            self._poner_notas(self.notas, self.bpm, i)
+            self._nota_cambiada(i)
 
     def _zoom(self, paso):
         self.vista.cambiar_zoom((round(self.vista.zoom * 100) + paso) / 100)
@@ -586,7 +621,7 @@ class PaginaPartituras(QWidget):
         if i >= 0:
             self._recordar()
             self.notas[i][2] = max(0, min(127, self.notas[i][2] + semitonos))
-            self._poner_notas(self.notas, self.bpm, i)
+            self._nota_cambiada(i)
 
     def _anadir(self):
         i = self.tabla.currentRow()
@@ -594,7 +629,7 @@ class PaginaPartituras(QWidget):
         self._recordar()
         self.notas.insert(i + 1, [base[1], base[1] + 0.5, base[2], 0.7])
         self.letra.insert(i + 1, "")
-        self._poner_notas(self.notas, self.bpm, i + 1)
+        self._fila_puesta(i + 1, True)
 
     def _borrar(self):
         i = self.tabla.currentRow()
@@ -602,7 +637,7 @@ class PaginaPartituras(QWidget):
             self._recordar()
             del self.notas[i]
             del self.letra[i:i + 1]
-            self._poner_notas(self.notas, self.bpm, min(i, len(self.notas) - 1))
+            self._fila_puesta(i, False)
 
     # -- salida -----------------------------------------------------------------
     def _copiar(self, clave, filtro):
@@ -682,14 +717,15 @@ class PaginaPartituras(QWidget):
         inicio = self.notas[tras][1] if 0 <= tras < len(self.notas) else 0.0
         self.notas.insert(tras + 1, [inicio, inicio + partituras.segundos_de(self._fig_nueva, self.tempo.value() or self.bpm), tono, 0.7])
         self.letra.insert(tras + 1, "")
-        self._poner_notas(self.notas, self.bpm, tras + 1)
+        self._fila_puesta(tras + 1, True)
 
     def _arrastrar(self, i, tono, primero):
         if self.b_borrar.isEnabled() and 0 <= i < len(self.notas) and self.notas[i][2] != tono:
             if primero:
                 self._recordar()
+                self._botones()               # activa «Deshacer» una vez, no en cada paso
             self.notas[i][2] = tono
-            self._poner_notas(self.notas, self.bpm, i)
+            self._nota_cambiada(i, recomponer=False)
 
     def _desplazar(self, semicorcheas):
         """Mueve la nota elegida en el tiempo, de semicorchea en semicorchea."""
@@ -699,7 +735,7 @@ class PaginaPartituras(QWidget):
             paso = semicorcheas * 15 / (self.tempo.value() or self.bpm)
             n = self.notas[i]
             n[0], n[1] = max(0.0, n[0] + paso), max(0.0, n[0] + paso) + (n[1] - n[0])
-            self._poner_notas(self.notas, self.bpm, i)
+            self._nota_cambiada(i)
 
     def reproducir(self):
         """Hace sonar la partitura tal como está escrita (desde la nota elegida, si hay una)."""

@@ -133,6 +133,24 @@ class Pentagrama(QWidget):
         self._sis_y = [self._papel.top() + cabecera + 8.5 * e + s * alto for s in range(len(self.sistemas))]
         self._papel.setHeight(cabecera + len(self.sistemas) * alto + 40 * z)
         self.setMinimumHeight(int(self._papel.bottom() + 26))
+        self._cajas = []   # zona sensible de cada nota; se calcula aquí y no al pintar, porque solo se pinta lo visible
+        for piezas, base in zip(self.sistemas, self._sis_y):
+            for p in piezas:
+                for i in p["col"]:
+                    pos = max(-10, min(17, partituras.posicion(self.notas[i][2], self.clave)[0]))
+                    self._cajas.append((QRectF(p["x"] - 6 * z, base - pos * e / 2 - e, 1.18 * e + 12 * z, 2 * e), i))
+
+    def _banda(self, s):
+        """Franja de la hoja que ocupa un sistema, con sus notas más agudas y graves y su texto."""
+        e = ESP * self.zoom
+        return QRectF(0, self._sis_y[s] - 9.5 * e, self.width(), self._alto_sistema(self.zoom) + 2 * e)
+
+    def repintar_nota(self, indice):
+        """Redibuja solo el sistema de esa nota: lo único que cambia al arrastrarla."""
+        for s, piezas in enumerate(self.sistemas):
+            if any(indice in p["col"] for p in piezas):
+                return self.update(self._banda(s).toAlignedRect())
+        self.update()
 
     def rect_de(self, indice):
         """Zona de una nota (para llevar la vista hasta ella)."""
@@ -143,17 +161,18 @@ class Pentagrama(QWidget):
         return QRect(0, 0, 1, 1)
 
     # -- dibujo ---------------------------------------------------------------
-    def paintEvent(self, _):
+    def paintEvent(self, ev):
         g = QPainter(self)
         g.setRenderHint(QPainter.Antialiasing)
-        g.fillRect(self.rect(), QColor(MESA))
+        g.fillRect(ev.rect(), QColor(MESA))
         g.fillRect(self._papel.translated(3, 4), QColor(0, 0, 0, 70))      # sombra de la hoja
         g.fillRect(self._papel, QColor(PAPEL))
-        self._cajas = []
-        self._pintar(g, self._papel, self.sistemas, self._sis_y, self.zoom, True, 0, len(self.sistemas), self._cajas, self.sel)
+        visibles = [s for s in range(len(self.sistemas)) if self._banda(s).intersects(QRectF(ev.rect()))]   # solo lo que se ve
+        self._pintar(g, self._papel, [self.sistemas[s] for s in visibles], [self._sis_y[s] for s in visibles], self.zoom,
+                     True, visibles, len(self.sistemas), True, self.sel)
 
-    def _pintar(self, g, papel, sistemas, bases, z, cabecera, primero, total, cajas, sel):
-        """Dibuja en `papel` los `sistemas` dados (del n.º `primero` de un total de `total`)."""
+    def _pintar(self, g, papel, sistemas, bases, z, cabecera, numeros, total, pantalla, sel):
+        """Dibuja en `papel` los `sistemas` dados; `numeros` es el n.º de orden de cada uno dentro de un total de `total`."""
         familia = fuente_musical()
         g.setPen(QColor(TINTA))
         if not familia:
@@ -176,8 +195,7 @@ class Pentagrama(QWidget):
                        f"{partituras.CLAVES[self.clave][0]}   ♩ = {self.bpm}" if self.notas else partituras.CLAVES[self.clave][0])
 
         ancho = 1.18 * e                                  # ancho de una cabeza de nota
-        for n, (piezas, base) in enumerate(zip(sistemas, bases)):
-            s = primero + n
+        for s, piezas, base in zip(numeros, sistemas, bases):
             y = lambda pos: base - pos * e / 2
             ultimo = s == total - 1
             fin = der if not ultimo or not piezas else min(der, piezas[-1]["x"] + piezas[-1]["ancho"] + 10 * z)
@@ -239,14 +257,12 @@ class Pentagrama(QWidget):
                     if i == sel:                            # marco de selección, como en un editor
                         g.setPen(QPen(QColor(ELEGIDA), 1, Qt.DashLine))
                         g.drawRoundedRect(QRectF(x - 6 * z, y(pos) - 1.1 * e, ancho + 12 * z, 2.2 * e), 3, 3)
-                    if cajas is not None:
-                        cajas.append((QRectF(x - 6 * z, y(pos) - e, ancho + 12 * z, 2 * e), i))
                     if self.nombres and k < 2:              # nombres bajo el pentagrama; en acordes, del grave al agudo
                         g.setFont(f_nombre)
                         g.setPen(color)
                         g.drawText(QRectF(x - 20 * z, base + TEXTO_Y * e + (19 * z if hay_letra else 0) + 14 * z * k, ancho + 40 * z, 16 * z),
                                    Qt.AlignCenter, partituras.solfeo(tono))
-        if not self.notas and cabecera and cajas is not None:
+        if not self.notas and cabecera and pantalla and bases:
             g.setFont(self._fuente(13, z))
             g.setPen(QColor(TENUE))
             g.drawText(QRectF(izq, bases[0] + 5 * e, der - izq, 40 * z), Qt.AlignCenter,
@@ -285,7 +301,7 @@ class Pentagrama(QWidget):
                     pdf.newPage()
                 arriba = papel.top() + (96 if n == 0 else 0)
                 bases = [arriba + 8.5 * e + k * alto for k in range(len(pagina))]
-                self._pintar(g, papel, pagina, bases, 1.0, n == 0, hechos, total, None, -1)
+                self._pintar(g, papel, pagina, bases, 1.0, n == 0, range(hechos, hechos + len(pagina)), total, False, -1)
                 hechos += len(pagina)
                 g.setFont(self._fuente(10, 1.0))
                 g.setPen(QColor(TENUE))
@@ -324,6 +340,9 @@ class Pentagrama(QWidget):
                 self.arrastrada.emit(i, partituras.midi_de(pos0 + pasos, self.clave), primero)
 
     def mouseReleaseEvent(self, _):
+        if self._arrastre and self._arrastre[3]:   # al soltar se recalculan las zonas sensibles con la altura final
+            self._componer()
+            self.update()
         self._arrastre = None
 
     def keyPressEvent(self, ev):

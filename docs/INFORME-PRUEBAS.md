@@ -6,7 +6,7 @@ Equipo de pruebas: Debian 13 (trixie) x86_64 real, sesión Wayland con PipeWire,
 
 Cada prueba se clasifica como **superada**, **fallida** o **no ejecutable aquí**.
 
-## 1. Pruebas automatizadas — superadas (75 de 75, ninguna omitida)
+## 1. Pruebas automatizadas — superadas (76 de 76, ninguna omitida)
 
 Se ejecutan con `./herramientas/probar.sh`, siempre con el Python del paquete. Usan los motores reales, no simulacros.
 
@@ -19,7 +19,7 @@ Se ejecutan con `./herramientas/probar.sh`, siempre con el Python del paquete. U
 | `test_exportar` | 10 | SRT, VTT y LRC exactos; ida y vuelta; texto editado conserva tiempos; una línea nueva no recibe un tiempo inventado |
 | `test_rutas_proyectos` | 10 | Nombres con tildes y caracteres prohibidos; nombres únicos; audio asociado a resultados; toma interrumpida marcada y conservada; solo se borran proyectos |
 | `test_limpieza` | 4 | La desinstalación borra la carpeta del programa y nada más; se niega ante cualquier otra carpeta |
-| `test_ui` | 9 | La ventana real sin pantalla: navegación, botones bloqueados según el estado, partitura y letra de principio a fin, **partitura en vivo** (una melodía conocida entra por el callback de audio y sus notas aparecen antes de detener; al detener se crea la definitiva), error explicado, cancelación, diagnóstico |
+| `test_ui` | 10 | La ventana real sin pantalla: navegación, botones bloqueados según el estado, partitura y letra de principio a fin, **partitura en vivo** (una melodía conocida entra por el callback de audio y sus notas aparecen antes de detener; al detener se crea la definitiva), error explicado, cancelación, diagnóstico |
 
 ## 2. Instalación desde cero en Debian 13 — superada
 
@@ -88,6 +88,20 @@ Rediseño al estilo de un editor de notación. Probado en la ventana real sin pa
 - **PDF propio:** una melodía con letra y silencios en 1 página A4; 260 notas en 4 páginas. Revisado a la vista convirtiendo el PDF a imagen.
 - **No ejecutable aquí:** el arrastre y los clics con un ratón real, y la reproducción (*▶ Oír*) por tus altavoces: no se hizo sonar nada en tu equipo.
 - Fallo encontrado y corregido: al reabrir un MusicXML propio, la línea de nombres Do-Re-Mi se tomaba por letra.
+
+### Fluidez del arrastre (añadido después) — superada con ratón simulado
+
+Medido antes y después, por cada paso de un arrastre (incluido el repintado):
+
+| Notas en la partitura | Antes | Después |
+|---|---|---|
+| 40 | 4,4 ms | 2,0 ms |
+| 300 | 23,6 ms | 1,8 ms |
+| 1200 | 88,1 ms | 1,9 ms |
+
+Causa: cada paso reconstruía la tabla entera y redibujaba todos los sistemas, también los que no se veían. Ahora solo se actualiza la fila de la nota movida y se repinta su sistema; la hoja solo dibuja lo visible. Hay una prueba que arrastra con eventos de ratón sobre 1200 notas y falla si un paso supera 20 ms.
+
+- **No ejecutable aquí:** la sensación con tu ratón y tu pantalla; las cifras son de este equipo (rápido) y sin pantalla real.
 
 ## 7. Comparación de modelos de voz — superada
 

@@ -228,6 +228,45 @@ class Interfaz(Aislada):
         self.assertEqual([round(n[1] - n[0], 2) for n in p.notas], [1.0, 1.0, 0.5])
         self.assertEqual(p.letra, ["", "", "sol"])
 
+    def test_arrastrar_con_el_raton_es_inmediato_aunque_la_partitura_sea_larga(self):
+        """Ratón simulado sobre una partitura de 1200 notas: el arrastre cambia la nota correcta, la tabla
+        y la hoja quedan al día, y cada paso cuesta lo mismo que en una partitura corta."""
+        from PySide6.QtCore import QPoint, Qt
+        from PySide6.QtTest import QTest
+        p = self.v.partituras
+        p.nueva()
+        p.b_insertar.setChecked(False)
+        p.clave.setCurrentIndex(p.clave.findData("sol"))
+        p._poner_notas([[i * 0.5, i * 0.5 + 0.5, 60, 0.7] for i in range(1200)], 120)   # todo Do4
+        QApplication.processEvents()
+        i = 5
+        caja = next(c for c, k in p.vista._cajas if k == i)
+        origen = QPoint(int(caja.center().x()), int(caja.center().y()))
+        QTest.mousePress(p.vista, Qt.LeftButton, Qt.NoModifier, origen)
+        self.assertEqual(p.tabla.currentRow(), i)
+        tiempos = []
+        for paso in range(1, 9):                       # ocho pasos hacia arriba: medio espacio cada uno
+            t = time.perf_counter()
+            QTest.mouseMove(p.vista, origen - QPoint(0, paso * 5))
+            QApplication.processEvents()               # incluye el repintado
+            tiempos.append(time.perf_counter() - t)
+        self.assertEqual(p.notas[i][2], 74)            # Do4 + 8 posiciones = Re5
+        self.assertEqual(p.tabla.item(i, 2).text(), "74")
+        self.assertEqual(p.tabla.item(i, 3).text(), "Re5")
+        self.assertEqual([n[2] for k, n in enumerate(p.notas) if k != i], [60] * 1199)   # las demás, intactas
+        QTest.mouseRelease(p.vista, Qt.LeftButton, Qt.NoModifier, origen - QPoint(0, 40))
+        nueva_caja = next(c for c, k in p.vista._cajas if k == i)
+        self.assertLess(nueva_caja.center().y(), caja.center().y() - 30)                  # la zona sensible sigue a la nota
+        self.assertLess(sorted(tiempos)[len(tiempos) // 2], 0.02, f"arrastre lento: {tiempos}")
+        p._atajo("deshacer")                            # todo el arrastre es un solo paso
+        self.assertEqual(p.notas[i][2], 60)
+
+        t = time.perf_counter()                         # añadir y borrar tampoco rehacen toda la tabla
+        p.tabla.selectRow(600); p._anadir(); p._borrar()
+        self.assertEqual(len(p.notas), 1200)
+        self.assertEqual(p.tabla.rowCount(), 1200)
+        self.assertLess(time.perf_counter() - t, 0.5)
+
     def test_fallo_del_analisis_se_explica_y_conserva_el_audio(self):
         p = self.v.partituras
         d = proyectos.crear("rota", "partitura")
