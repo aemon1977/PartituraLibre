@@ -44,8 +44,8 @@ class PanelCaptura(QWidget):
         v.setContentsMargins(0, 0, 0, 0)
         v.setSpacing(10)
         v.addWidget(tema.etiqueta("Micrófono", "tenue"))
-        v.addLayout(tema.fila(self.micro, self.b_actualizar, self.b_probar, estirar=self.micro))
-        v.addLayout(tema.fila(tema.etiqueta("Nivel", "tenue", False), self.nivel, estirar=self.nivel))
+        v.addWidget(self.micro)
+        v.addLayout(tema.fila(self.b_actualizar, self.b_probar, tema.etiqueta("Nivel", "tenue", False), self.nivel, estirar=self.nivel))
         v.addLayout(tema.fila(self.reloj, self.texto, estirar=self.texto))
         v.addLayout(tema.fila(self.b_grabar, self.b_pausa, self.b_detener, self.b_cancelar, estirar=self.b_grabar))
 
@@ -61,7 +61,7 @@ class PanelCaptura(QWidget):
         return self.g is not None and self.g.destino is not None
 
     def _botones(self):
-        hay, grab, prueba = self.micro.count() > 0 and self.micro.currentData() is not None, self.grabando, self.g is not None and not self.grabando
+        hay, grab, prueba = self.micro.currentData() is not None, self.grabando, self.g is not None and not self.grabando
         self.b_grabar.setEnabled(hay and not grab)
         self.b_probar.setEnabled(hay and not grab)
         self.b_probar.setText("Parar prueba" if prueba else "Probar nivel")
@@ -85,22 +85,29 @@ class PanelCaptura(QWidget):
             self._botones()
             return
         for m in micros:
-            self.micro.addItem(m["nombre"] + ("  (predeterminado)" if m["predeterminado"] else ""), m["indice"])
+            self.micro.addItem(m["nombre"] + ("  (predeterminado)" if m["predeterminado"] else ""), m)
+            self.micro.setItemData(self.micro.count() - 1, m["nombre"], Qt.ToolTipRole)
         if not micros:
             self.micro.addItem("No se ha encontrado ningún micrófono", None)
             self._decir("Conecta un micrófono y pulsa «Actualizar». También puedes importar un archivo.", "aviso")
         else:
             guardado = self.micro.findText(config.cargar()["microfono"], Qt.MatchStartsWith) if config.cargar()["microfono"] else -1
             self.micro.setCurrentIndex(max(guardado, 0))
-            self._decir("Listo para grabar.")
+            self._decir("Listo para grabar." if len(micros) == 1 else f"{len(micros)} micrófonos disponibles: elige cuál usar.")
         self._botones()
+
+    def _micro(self):
+        """(índice de dispositivo, fuente del servidor de sonido) del micrófono elegido."""
+        m = self.micro.currentData()
+        return m["indice"], m["fuente"]
 
     # -- prueba de nivel ------------------------------------------------------
     def probar(self):
         if self.g:
             return self._parar_prueba()
         try:
-            self.g = audio.Grabadora(dispositivo=self.micro.currentData())
+            indice, fuente = self._micro()
+            self.g = audio.Grabadora(dispositivo=indice, fuente=fuente)
             self.g.iniciar()
         except audio.ErrorAudio as e:
             self.g = None
@@ -133,12 +140,12 @@ class PanelCaptura(QWidget):
             return tema.error(self, "No se pudo crear el proyecto", f"{e}\n\nElige otra carpeta de destino.")
         wav = rutas.ruta_unica(self.proyecto, self.proyecto.name, ".wav")
         seg = self._segmento_s()
-        carpeta_seg = rutas.TEMP / "vivo"
+        carpeta_seg = rutas.TEMP / f"vivo-{self.tipo}"
         if seg:
             shutil.rmtree(carpeta_seg, ignore_errors=True)
             carpeta_seg.mkdir(parents=True, exist_ok=True)
-        self.g = audio.Grabadora(wav, self.micro.currentData(), seg, carpeta_seg,
-                                 lambda ruta, t0: self.segmento.emit(ruta, t0))
+        indice, fuente = self._micro()
+        self.g = audio.Grabadora(wav, indice, seg, carpeta_seg, lambda ruta, t0: self.segmento.emit(ruta, t0), fuente)
         try:
             self.g.iniciar()
         except audio.ErrorAudio as e:
@@ -151,7 +158,7 @@ class PanelCaptura(QWidget):
         a = config.cargar()
         a["microfono"] = self.micro.currentText().replace("  (predeterminado)", "")
         config.guardar(a)
-        self._decir(f"Grabando en «{wav.name}»…", "aviso")
+        self._decir(f"Grabando con «{a['microfono']}»…", "aviso")
         self.b_pausa.setText("Pausar")
         self._tic.start()
         self._botones()

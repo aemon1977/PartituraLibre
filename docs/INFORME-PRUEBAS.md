@@ -6,7 +6,7 @@ Equipo de pruebas: Debian 13 (trixie) x86_64 real, sesión Wayland con PipeWire,
 
 Cada prueba se clasifica como **superada**, **fallida** o **no ejecutable aquí**.
 
-## 1. Pruebas automatizadas — superadas (61 de 61, ninguna omitida)
+## 1. Pruebas automatizadas — superadas (63 de 63, ninguna omitida)
 
 Se ejecutan con `./herramientas/probar.sh`, siempre con el Python del paquete. Usan los motores reales, no simulacros.
 
@@ -14,12 +14,12 @@ Se ejecutan con `./herramientas/probar.sh`, siempre con el Python del paquete. U
 |---|---|---|
 | `test_dependencias` | 7 | El intérprete en uso es el del paquete (3.11); `sounddevice` y `soundfile` se cargan desde `runtime/`; una dependencia ausente se detecta y se nombra; con el Python del sistema el programa se niega a abrir y dice cómo arrancar; el diagnóstico no filtra rutas personales |
 | `test_audio` | 11 | Señal sintética guardada idéntica muestra a muestra; pausa; cola saturada y desbordamiento notificados y toma marcada incompleta; disco lleno conserva lo grabado; WAV válido antes de cerrarse; cancelar borra; segmentos en vivo contiguos; **sesión simulada de 40 min** sin pérdidas |
-| `test_partitura_flujo` | 8 | WAV sintético (escala de Do) → notas exactas → MIDI → MusicXML; corrección manual crea versión nueva sin tocar la anterior; nota que cruza trozos no se parte; silencio no inventa notas; archivo ilegible da error explicado; cancelación sin restos |
+| `test_partitura_flujo` | 9 | WAV sintético (escala de Do) → notas exactas → MIDI → MusicXML; corrección manual crea versión nueva sin tocar la anterior; nota que cruza trozos no se parte; silencio no inventa notas; archivo ilegible da error explicado; cancelación sin restos |
 | `test_letras_flujo` | 6 | Audio libre en español: idioma detectado, palabras esperadas, tiempos crecientes, exportación y reimportación; idioma manual; error sin tumbar el motor; el modo «voz cantada» no da por bueno texto en música sin voz |
 | `test_exportar` | 9 | SRT, VTT y LRC exactos; ida y vuelta; texto editado conserva tiempos; una línea nueva no recibe un tiempo inventado |
 | `test_rutas_proyectos` | 10 | Nombres con tildes y caracteres prohibidos; nombres únicos; audio asociado a resultados; toma interrumpida marcada y conservada; solo se borran proyectos |
 | `test_limpieza` | 4 | La desinstalación borra la carpeta del programa y nada más; se niega ante cualquier otra carpeta |
-| `test_ui` | 6 | La ventana real sin pantalla: navegación, botones bloqueados según el estado, partitura y letra de principio a fin, error explicado, cancelación, diagnóstico |
+| `test_ui` | 7 | La ventana real sin pantalla: navegación, botones bloqueados según el estado, partitura y letra de principio a fin, **partitura en vivo** (una melodía conocida entra por el callback de audio y sus notas aparecen antes de detener; al detener se crea la definitiva), error explicado, cancelación, diagnóstico |
 
 ## 2. Instalación desde cero en Debian 13 — superada
 
@@ -42,6 +42,8 @@ Tras borrar la carpeta de prueba (1,6 GB): 0 archivos en el `HOME` de prueba, 0 
 ## 5. Grabación real con micrófono — superada en parte
 
 Con los dispositivos `default` y `pulse` del equipo se grabaron 4 s con 1 s de pausa: archivos de 2,95 s y 3,00 s a 44,1 kHz, 0 desbordes, 0 muestras perdidas. El dispositivo `hw:` directo estaba ocupado por PipeWire y la app dio el mensaje previsto.
+
+**Elección de micrófono (añadida después):** la app lista los dos micrófonos reales del equipo por su nombre («G435 Wireless Gaming Headset Mono» y «Starship/Matisse HD Audio Controller Estéreo analógico»). Grabando con cada uno, el servidor de sonido confirmó que el flujo estaba conectado al micrófono pedido.
 
 **Límite de esta prueba:** la señal recibida fue silencio absoluto (el micrófono del equipo estaba apagado o silenciado), así que queda verificada la captura en tiempo real pero no el contenido sonoro. A raíz de esto la app avisa ahora cuando una toma queda muda. Ver «Qué necesito de ti».
 
@@ -82,7 +84,7 @@ No hay Windows en este entorno. **No se declara validado.** Como aproximación s
 - **Ubuntu 24.04:** sin probar. Usa los mismos binarios (glibc compatible).
 - **Debian sin `libportaudio2` o sin `libxcb-cursor0`:** este equipo los tiene; el mensaje de PortAudio ausente no se ha visto en un sistema real.
 - **Sesión larga en tiempo real** (horas con un micrófono): solo la simulada de 40 min.
-- **Dictado en vivo con voz real:** el mecanismo de segmentos está probado, no la experiencia con un micrófono con señal.
+- **Dictado y partitura en vivo con un micrófono con señal:** el camino completo está probado con una melodía sintética que entra por el mismo callback, no con sonido real.
 - **Transcripción de una canción real con instrumentos:** sin audio libre adecuado; el modo cantado se probó con voz hablada y con música sin voz.
 
 ## 10. Fallidas
@@ -95,6 +97,8 @@ Ninguna en el estado entregado. Fallos encontrados por las pruebas y corregidos 
 4. `uv` reinstalaba TensorFlow al instalar → instalación desde el bloqueo sin re-resolver.
 5. MuseScore portable creaba `~/Documents/MuseScore4` y solo arranca con X11 → `HOME`/`XDG` propios y `xcb`.
 6. Botones de semitono inactivos al seleccionar una nota.
+8. En Linux no se podía elegir entre los micrófonos reales (solo nombres ALSA) → lista del servidor de sonido.
+9. El borrador en vivo perdía la nota que empezaba justo en el corte entre segmentos → regla de integración corregida.
 7. Lanzador de Linux: la búsqueda de Python abortaba con `set -e`.
 
 ## Qué necesito de ti
@@ -105,7 +109,7 @@ Una sola comprobación que solo puede hacerse con tu micrófono encendido:
 cd /media/aemon77/dockerjuegos/Partituras/PartituraLibre && ./iniciar-linux.sh
 ```
 
-En **Partituras**: *Probar nivel* (la barra debe moverse al hablar), *Grabar* 10 s tarareando, *Detener*, *Detectar notas*. Si algo falla, envíame el resultado de:
+En **Partituras**: elige el micrófono, *Probar nivel* (la barra debe moverse al hablar) y *Grabar* 10 s tarareando: las notas deben ir apareciendo a los pocos segundos. Al *Detener* se crea sola la partitura definitiva. Si algo falla, envíame el resultado de:
 
 ```sh
 ./iniciar-linux.sh --diagnostico

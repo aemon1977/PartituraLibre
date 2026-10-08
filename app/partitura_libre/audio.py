@@ -1,7 +1,10 @@
 """Captura de audio: callback ligero -> cola acotada -> hilo que escribe WAV por bloques."""
 import errno
+import os
 import queue
+import shutil
 import struct
+import subprocess
 import threading
 import time
 from pathlib import Path
@@ -32,15 +35,42 @@ def sd():
             f"Mientras tanto puedes importar archivos de audio. Detalle: {e}") from e
 
 
+def fuentes_del_servidor():
+    """Micrófonos que publica el servidor de sonido de Linux (PipeWire o PulseAudio), con el nombre
+    que ve el usuario: [{'nombre', 'fuente', 'predeterminado'}]. Vacío si no hay servidor o en Windows.
+    Solo consulta con `pactl`, que ya forma parte del sistema; no cambia nada en él."""
+    if rutas.WINDOWS or not shutil.which("pactl"):
+        return []
+    try:
+        entorno = {**os.environ, "LC_ALL": "C.UTF-8"}
+        texto = subprocess.run(["pactl", "list", "sources"], capture_output=True, text=True, timeout=5, env=entorno).stdout
+        pred = subprocess.run(["pactl", "get-default-source"], capture_output=True, text=True, timeout=5, env=entorno).stdout.strip()
+    except (OSError, subprocess.SubprocessError):
+        return []
+    fuentes = []
+    for bloque in texto.split("\n\n"):
+        campos = dict(l.strip().split(": ", 1) for l in bloque.splitlines() if ": " in l and l.startswith("\t") and not l.startswith("\t\t"))
+        if campos.get("Name") and campos.get("Monitor of Sink", "n/a") == "n/a":  # los «monitor» no son micrófonos
+            fuentes.append({"nombre": campos.get("Description") or campos["Name"], "fuente": campos["Name"],
+                            "predeterminado": campos["Name"] == pred})
+    return fuentes
+
+
 def microfonos(refrescar=False):
-    """Entradas disponibles: [{'indice', 'nombre', 'sr', 'predeterminado'}], la predeterminada primero."""
+    """Entradas disponibles: [{'indice', 'nombre', 'sr', 'predeterminado', 'fuente'}], la predeterminada primero.
+    En Linux con servidor de sonido se listan sus micrófonos reales; `fuente` es el que hay que pedirle."""
     s = sd()
     if refrescar:  # PortAudio solo vuelve a enumerar al reiniciarse
         s._terminate()
         s._initialize()
+    puente = next((i for i, d in enumerate(s.query_devices()) if d["name"] == "pulse" and d["max_input_channels"] > 0), None)
+    fuentes = fuentes_del_servidor() if puente is not None else []
+    if fuentes:
+        sr = int(s.query_devices(puente)["default_samplerate"])
+        return sorted(({"indice": puente, "sr": sr, **f} for f in fuentes), key=lambda d: not d["predeterminado"])
     pred = s.default.device[0]
     api = s.query_devices(pred)["hostapi"] if pred is not None and pred >= 0 else 0
-    lista = [{"indice": i, "nombre": d["name"], "sr": int(d["default_samplerate"]), "predeterminado": i == pred}
+    lista = [{"indice": i, "nombre": d["name"], "sr": int(d["default_samplerate"]), "predeterminado": i == pred, "fuente": None}
              for i, d in enumerate(s.query_devices()) if d["max_input_channels"] > 0 and d["hostapi"] == api]
     return sorted(lista, key=lambda d: not d["predeterminado"])
 
@@ -87,8 +117,8 @@ class Grabadora:
     COLA = 4000        # bloques en espera antes de declarar pérdida (≈ 1-2 min de audio)
     SILENCIO_S = 3     # sin bloques durante este tiempo = dispositivo caído
 
-    def __init__(self, destino=None, dispositivo=None, segmento_s=0, carpeta_segmentos=None, al_segmento=None):
-        self.destino, self.dispositivo = (Path(destino) if destino else None), dispositivo
+    def __init__(self, destino=None, dispositivo=None, segmento_s=0, carpeta_segmentos=None, al_segmento=None, fuente=None):
+        self.destino, self.dispositivo, self.fuente = (Path(destino) if destino else None), dispositivo, fuente
         self.segmento_s, self.carpeta_segmentos, self.al_segmento = segmento_s, carpeta_segmentos, al_segmento
         self.sr = 44100
         self.nivel = 0.0       # pico 0..1 del último bloque
@@ -129,6 +159,8 @@ class Grabadora:
     # -- ciclo de vida -------------------------------------------------------
     def iniciar(self):
         s = sd()
+        if self.fuente:  # el servidor de sonido conecta este flujo al micrófono elegido
+            os.environ["PULSE_SOURCE"] = self.fuente
         try:
             self.sr = int(s.query_devices(self.dispositivo, "input")["default_samplerate"])
             self._preparar()

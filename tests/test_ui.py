@@ -85,6 +85,49 @@ class Interfaz(Aislada):
         self.assertTrue(all((d / r[k]).is_file() for r in ficha["resultados"] for k in ("midi", "musicxml", "notas")))
         self.assertEqual(len(self.v.proyectos.lista), 1)   # el historial se actualiza solo
 
+    def test_partitura_en_vivo_mientras_se_graba_y_definitiva_al_detener(self):
+        """Una grabación real salvo por el micrófono: los bloques de una melodía conocida entran por el
+        mismo callback que usa PortAudio, y las notas deben ir apareciendo antes de detener."""
+        import numpy as np
+        from partitura_libre import audio, rutas
+        from tests.comun import tono
+        p, panel = self.v.partituras, self.v.partituras.captura
+        self.assertTrue(p.en_vivo.isChecked())
+        melodia = ESCALA * 2
+        pcm = (np.concatenate([tono(m, 0.5) for m in melodia]) * 32767).astype(np.int16).reshape(-1, 1)
+
+        panel.proyecto = proyectos.crear("en vivo", "partitura")
+        wav = panel.proyecto / "en vivo.wav"
+        carpeta_seg = rutas.TEMP / "vivo-prueba"
+        carpeta_seg.mkdir(parents=True, exist_ok=True)
+        panel.g = audio.Grabadora(wav, None, panel._segmento_s(), carpeta_seg, lambda r, t0: panel.segmento.emit(r, t0))
+        self.assertEqual(panel.g.segmento_s, 3)
+        panel.g._preparar()
+        proyectos.actualizar(panel.proyecto, audio=wav.name, origen="grabación", estado="grabando")
+        panel._tic.start()
+        panel._botones()                                   # la página ve que empieza una grabación
+        self.assertIsNotNone(p.vivo)
+        self.assertFalse(p.b_transcribir.isEnabled() or p.b_importar.isEnabled())
+
+        class Estado:
+            input_overflow = False
+        for i in range(0, len(pcm), 1024):
+            panel.g._bloque(pcm[i:i + 1024], len(pcm[i:i + 1024]), None, Estado)
+        self.assertTrue(esperar(lambda: len(p.notas) >= 12, 180), f"no aparecieron notas en vivo: {p.notas}")
+        self.assertTrue(panel.grabando)                    # las notas llegaron ANTES de detener
+        self.assertEqual([n[2] for n in p.notas], melodia[:12])   # dos segmentos de 3 s = 12 notas
+        self.assertIn("Borrador en vivo", p.e_estado.text())
+        self.assertFalse(p.b_regenerar.isEnabled())        # un borrador no se puede exportar ni editar
+        self.assertEqual(list(carpeta_seg.glob("*.wav")), [])     # los segmentos temporales se borran
+
+        panel.detener()                                    # al detener: partitura definitiva de la toma entera
+        self.assertIsNone(p.vivo)
+        self.assertIsNotNone(p.tarea)
+        self.assertTrue(esperar(lambda: p.tarea is None))
+        self.assertEqual([n[2] for n in p.notas], melodia)
+        self.assertEqual(len(proyectos.leer(p.proyecto)["resultados"]), 1)
+        self.assertTrue(p.b_regenerar.isEnabled())
+
     def test_fallo_del_analisis_se_explica_y_conserva_el_audio(self):
         p = self.v.partituras
         d = proyectos.crear("rota", "partitura")

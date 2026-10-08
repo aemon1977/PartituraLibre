@@ -41,7 +41,7 @@ def comprobar(probar_micro=True):
                   or "No hay ninguna entrada de audio. Conecta un micrófono y pulsa «Actualizar»."))
         if micros and probar_micro:
             try:
-                g = audio.Grabadora(dispositivo=micros[0]["indice"])
+                g = audio.Grabadora(dispositivo=micros[0]["indice"], fuente=micros[0]["fuente"])
                 g.iniciar()
                 g.detener()
                 r.append(("Acceso al micrófono", OK, f"se abre «{micros[0]['nombre']}» a {g.sr} Hz"))

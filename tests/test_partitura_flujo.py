@@ -123,6 +123,13 @@ class Integracion(unittest.TestCase):
         partituras.integrar(hechas, ultima, [[3.0, 4.0, 67, 0.8], [4.01, 5.5, 72, 0.9]], 3, 4, float("inf"))
         self.assertEqual(hechas, [[0.0, 1.0, 60, 0.7], [1.0, 4.0, 67, 0.8], [3.99, 5.5, 72, 0.9]])
 
+    def test_en_vivo_sin_contexto_no_pierde_la_nota_que_empieza_en_el_corte(self):
+        hechas, ultima = [], {}
+        partituras.integrar(hechas, ultima, [[2.5, 2.98, 69, 0.7], [1.0, 3.0, 55, 0.7]], 0, 0, float("inf"))
+        # segmento siguiente (empieza en 3.02): un Si nuevo y el Sol grave que seguía sonando
+        partituras.integrar(hechas, ultima, [[3.03, 3.5, 71, 0.7], [3.03, 4.0, 55, 0.7]], 3.02, 3.02, float("inf"))
+        self.assertEqual(sorted(hechas), [[1.0, 4.0, 55, 0.7], [2.5, 2.98, 69, 0.7], [3.03, 3.5, 71, 0.7]])
+
     def test_notas_repetidas_del_mismo_tono_siguen_separadas(self):
         hechas, ultima = [], {}
         partituras.integrar(hechas, ultima, [[0.0, 0.5, 60, 0.7], [0.5, 1.0, 60, 0.7], [1.0, 1.5, 60, 0.7]], 0, 0, 10)

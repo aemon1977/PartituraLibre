@@ -57,7 +57,7 @@ Opcionales, solo cuando pulsas el botón correspondiente:
 
 ### Partituras
 
-1. **Grabar o importar.** Elige el micrófono, pulsa *Probar nivel* para ver si la barra se mueve y después *Grabar*. Puedes pausar, detener o descartar. O importa un WAV, MP3, FLAC u OGG. La toma original se guarda siempre en WAV dentro del proyecto, aunque falle lo demás.
+1. **Grabar o importar.** Si hay más de un micrófono, elígelo en la lista (aparecen con su nombre real; *Actualizar* vuelve a buscarlos), pulsa *Probar nivel* para ver si la barra se mueve y después *Grabar*. Con *Ver las notas mientras grabo* la partitura se va dibujando **en vivo** cada 3 segundos como borrador; al detener se analiza la toma completa y se crea la definitiva. Puedes pausar, detener o descartar. O importa un WAV, MP3, FLAC u OGG. La toma original se guarda siempre en WAV dentro del proyecto, aunque falle lo demás.
 2. **Convertir.** *Detectar notas y crear partitura* analiza el audio con Basic Pitch (se puede cancelar). El tempo se estima solo o lo fijas tú.
 3. **Revisar.** Verás las notas en un rollo de piano y en una tabla. Corrige inicio, duración o altura, añade o borra notas y pulsa *Guardar cambios como nueva versión*: se crean archivos nuevos, nunca se pisa lo anterior.
 4. **Exportar.** *Guardar MIDI…*, *Guardar MusicXML…*, y con MuseScore: *Abrir en MuseScore* (edición gráfica completa) y *Exportar PDF…*.
@@ -97,7 +97,8 @@ Cada proyecto es una carpeta en `data/proyectos/` (o donde tú elijas).
 | Quiero ver qué falla sin abrir la ventana | `./iniciar-linux.sh --diagnostico` (o `iniciar-windows.bat --diagnostico`). |
 | «No se pudo cargar PortAudio» (Linux) | Falta la biblioteca de audio del sistema `libportaudio2`. El programa no instala nada en el sistema: pídeselo a quien administre el equipo. Mientras tanto puedes importar archivos. |
 | La ventana no se abre en una sesión X11 (Linux) | Qt necesita `libxcb-cursor0` del sistema. En sesiones Wayland (las de Debian 13 y Ubuntu 24.04 por defecto) no hace falta. |
-| «No se pudo abrir el micrófono» | Otro programa lo está usando o no hay permiso. En Linux elige `default` o `pulse` (los `hw:` directos suelen estar ocupados por PipeWire). En Windows: Configuración → Privacidad y seguridad → Micrófono. |
+| «No se pudo abrir el micrófono» | Otro programa lo está usando o no hay permiso. Pulsa *Actualizar* y elige otro. En Windows: Configuración → Privacidad y seguridad → Micrófono. |
+| No aparece mi micrófono | Conéctalo y pulsa *Actualizar*. En Linux se listan los que publica PipeWire/PulseAudio; si no hay servidor de sonido se muestran los dispositivos ALSA. |
 | «La toma está en silencio» | El micrófono está silenciado, apagado o no es la entrada elegida. Usa *Probar nivel*. |
 | «Grabación incompleta» | El equipo iba muy cargado o el disco se llenó. La toma se conserva; el aviso dice cuánto falta. |
 | La transcripción se cierra sola | Falta memoria: usa un modelo más pequeño. Detalle en `logs/motores.log`. |

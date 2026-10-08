@@ -77,7 +77,7 @@ class Ventana(QMainWindow):
         self.ir(i)
 
     def _cerrar_motores(self):
-        self.partituras.captura.cerrar()
+        self.partituras.cerrar()
         self.letras.cerrar()
         tareas.cancelar_todas()
 

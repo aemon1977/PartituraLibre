@@ -2,10 +2,12 @@
 
 Uso: python -m partitura_libre.workers.voz <carpeta_del_modelo>
 Recibe órdenes JSON por la entrada estándar, una por línea:
-    {"id": 1, "audio": "...", "idioma": "es" | "", "cantada": false, "desfase": 0.0}
+    {"id": 1, "audio": "...", "idioma": "es" | "", "cantada": false, "desfase": 0.0, "borrar": false}
+`borrar` elimina el audio al terminar (segmentos temporales del dictado en vivo).
 """
 import json
 import sys
+from pathlib import Path
 
 from .. import letras
 from . import emitir
@@ -34,6 +36,9 @@ def main():
             import traceback
             traceback.print_exc()
             emitir("error", id=o["id"], msg=f"No se pudo transcribir: {type(e).__name__}: {e}")
+        finally:
+            if o.get("borrar"):
+                Path(o["audio"]).unlink(missing_ok=True)
 
 
 if __name__ == "__main__":

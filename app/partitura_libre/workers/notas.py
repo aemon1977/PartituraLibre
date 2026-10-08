@@ -3,6 +3,8 @@
 Se ejecuta con el conjunto «partituras». Uso:
     python -m partitura_libre.workers.notas '{"cmd": "transcribir", "audio": ..., "carpeta": ..., "nombre": ...}'
     python -m partitura_libre.workers.notas '{"cmd": "regenerar", "notas": ..., "carpeta": ..., "nombre": ...}'
+    python -m partitura_libre.workers.notas '{"cmd": "vivo"}'    borrador mientras se graba: recibe por la
+        entrada estándar una línea JSON por segmento, {"audio": ..., "desfase": s}, y emite sus notas
 
 Método para audios largos: el archivo se lee en trozos de TROZO_S segundos (nunca
 entero en memoria). Cada trozo se analiza con MARGEN_S segundos de contexto por
@@ -59,6 +61,26 @@ def detectar(audio, trozo_s=TROZO_S):
     return sorted(partituras.quitar_armonicos(notas)), bpm or 120
 
 
+def en_vivo():
+    """Borrador durante la grabación: el modelo se carga una vez y cada segmento se analiza al llegar."""
+    from basic_pitch import FilenameSuffix, build_icassp_2022_model_path
+    from basic_pitch.inference import Model, predict
+
+    modelo = Model(build_icassp_2022_model_path(FilenameSuffix.onnx))
+    emitir("listo")
+    for linea in sys.stdin:
+        o = json.loads(linea)
+        try:
+            notas = [[round(o["desfase"] + float(i), 3), round(o["desfase"] + float(e), 3), int(t), round(float(v), 3)]
+                     for i, e, t, v, _ in predict(o["audio"], modelo)[2]]
+            emitir("notas", desfase=o["desfase"], notas=partituras.quitar_armonicos(notas))
+        except Exception as e:
+            print("Segmento en vivo no analizado:", e)
+        finally:
+            Path(o["audio"]).unlink(missing_ok=True)  # los segmentos son temporales
+    return 0
+
+
 def estimar_bpm(x, sr):
     try:
         import librosa
@@ -101,6 +123,8 @@ def main():
     o = json.loads(sys.argv[1])
     rutas.TEMP.mkdir(parents=True, exist_ok=True)
     try:
+        if o["cmd"] == "vivo":
+            return en_vivo()
         if o["cmd"] == "transcribir":
             emitir("progreso", v=0.0, msg="Cargando el motor Basic Pitch")
             notas, bpm = detectar(o["audio"], o.get("trozo_s", TROZO_S))

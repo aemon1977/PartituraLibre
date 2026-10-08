@@ -25,10 +25,9 @@ def integrar(hechas, ultima, nuevas, a0, c0, c1):
         previa = ultima.get(n[2])
         if previa and abs(previa[0] - n[0]) <= UNION_S:          # la misma nota vista en dos trozos
             previa[1], previa[3] = max(previa[1], n[1]), max(previa[3], n[3])
-        elif a0 > 0 and n[0] <= a0 + UNION_S:                    # ya sonaba al empezar este trozo
-            if previa and previa[0] < n[0] and previa[1] >= n[0] - UNION_S:
-                previa[1] = max(previa[1], n[1])
-        elif c0 <= n[0] < c1:
+        elif a0 > 0 and n[0] <= a0 + UNION_S and previa and previa[0] < n[0] and previa[1] >= n[0] - UNION_S:
+            previa[1] = max(previa[1], n[1])                     # ya sonaba al empezar este trozo: se alarga
+        elif c0 <= n[0] < c1:                                    # empieza dentro del núcleo: nota nueva
             nota = list(n)
             hechas.append(nota)
             ultima[n[2]] = nota

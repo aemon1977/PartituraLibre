@@ -56,6 +56,10 @@ Lo cubre `tests/test_dependencias.py`, incluido el caso de dependencia ausente y
 
 **7. Captura que no pierde audio en silencio.** Callback mínimo → cola acotada → hilo escritor. Si la cola se llena o PortAudio avisa de desbordamiento, se cuenta y la toma queda marcada como incompleta con el motivo. El WAV se escribe con un escritor propio que **corrige la cabecera cada segundo**: tras un cierre brusco el archivo es válido hasta ese punto y el proyecto aparece como «interrumpido». No hay límite de duración; el único tope es el del formato WAV (4 GB ≈ 13 h en mono), que se avisa y cierra bien la toma.
 
+**7 bis. Elección de micrófono por su nombre real.** En Linux, PortAudio solo ve dispositivos ALSA (`default`, `pulse`, `hw:…`) y los `hw:` están ocupados por PipeWire. La lista se obtiene del servidor de sonido (`pactl list sources`, herramienta del propio sistema, solo lectura) y la grabación se abre por el dispositivo `pulse` indicando la fuente elegida con `PULSE_SOURCE`. Sin servidor de sonido, o en Windows, se usa la lista de PortAudio.
+
+**7 ter. Partitura en vivo.** Mientras se graba, la grabadora entrega segmentos de 3 s a un motor de notas persistente (`workers/notas.py`, orden `vivo`); sus notas se integran con la misma regla que el troceado y se dibujan como borrador. Al detener se analiza la toma entera, que es la que se guarda. El borrador no se puede exportar.
+
 **8. Audio largo por trozos con solape.** `workers/notas.py` lee 120 s cada vez (nunca el archivo entero) con 2 s de contexto a cada lado. Solo cuentan las notas que empiezan dentro del trozo; una nota que sigue sonando en el siguiente se alarga en vez de partirse (`partituras.integrar`). Se descartan notas «fantasma» que son armónicos débiles de otra simultánea (`quitar_armonicos`).
 
 **9. Análisis en procesos aparte.** Interfaz siempre libre; cancelar es terminar el proceso. Los resultados se escriben como `.parcial` y solo se renombran al acabar; al cancelar se borran. El motor de voz es un proceso persistente (carga el modelo una vez) que recibe órdenes por la entrada estándar.
@@ -81,6 +85,8 @@ Lo cubre `tests/test_dependencias.py`, incluido el caso de dependencia ausente y
 | Voz → texto | Idioma detectado, tiempos crecientes, exportación y reimportación | `test_letras_flujo` |
 | Exportación de letras | TXT/SRT/VTT/LRC exactos y de ida y vuelta | `test_exportar` |
 | Proyectos | Nombres únicos, audio asociado a resultados, tomas interrumpidas marcadas | `test_rutas_proyectos` |
+| Partitura en vivo | Las notas de una melodía conocida aparecen antes de detener; al detener queda la definitiva | `test_ui` |
+| Elección de micrófono | Cada opción graba del micrófono pedido | Informe, apartado 5 |
 | Interfaz | Botones bloqueados según el estado; errores explicados; cancelación limpia | `test_ui` |
 | PDF | MuseScore portable convierte MusicXML y MIDI sin escribir fuera | Informe, apartado 6 |
 | Desinstalación | Borra la carpeta y solo la carpeta | `test_limpieza`, informe apartado 4 |

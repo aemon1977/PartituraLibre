@@ -255,11 +255,11 @@ class PaginaLetras(QWidget):
             self.voz = None
         self._vivos.clear()
 
-    def _pedir(self, audio, desfase=0.0):
+    def _pedir(self, audio, desfase=0.0, borrar=False):
         self._asegurar_motor()
         self._id += 1
         self.voz.enviar(id=self._id, audio=str(audio), idioma=self.idioma.currentData(),
-                        cantada=self.cantada.isChecked(), desfase=desfase)
+                        cantada=self.cantada.isChecked(), desfase=desfase, borrar=borrar)
         return self._id
 
     def transcribir(self):
@@ -276,7 +276,7 @@ class PaginaLetras(QWidget):
 
     def _segmento_vivo(self, ruta, t0):
         if self._modelo_listo():
-            self._vivos.add(self._pedir(ruta, t0))
+            self._vivos.add(self._pedir(ruta, t0, borrar=True))
 
     def cancelar(self):
         if self._final is not None:

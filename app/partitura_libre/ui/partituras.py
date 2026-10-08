@@ -3,16 +3,17 @@ import json
 import shutil
 from pathlib import Path
 
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import Qt, QTimer, Signal
 from PySide6.QtGui import QColor, QPainter
-from PySide6.QtWidgets import (QAbstractItemView, QFileDialog, QHBoxLayout, QHeaderView, QLineEdit, QProgressBar,
+from PySide6.QtWidgets import (QAbstractItemView, QCheckBox, QFileDialog, QHBoxLayout, QHeaderView, QLineEdit, QProgressBar,
                                QScrollArea, QSpinBox, QTableWidget, QTableWidgetItem, QVBoxLayout, QWidget)
 
-from .. import config, editor, partituras, proyectos, rutas, tareas
+from .. import config, editor, lanzar, partituras, proyectos, rutas, tareas
 from . import tema
 from .captura import PanelCaptura
 
 PX_S = 70  # píxeles por segundo en la vista de notas
+SEGMENTO_VIVO_S = 3  # cada cuánto se analiza lo recién grabado para el borrador en vivo
 
 
 class VistaNotas(QWidget):
@@ -69,20 +70,28 @@ class PaginaPartituras(QWidget):
         self.version = None    # resultado mostrado: {'midi', 'musicxml', 'notas', …}
         self.externa = None    # partitura existente abierta sin proyecto
         self.notas, self.bpm, self.tarea, self._cargando = [], 120, None, False
+        self.vivo = None       # motor del borrador en vivo mientras se graba
+        self._ultima, self._grababa, self._hubo_vivo, self._auto = {}, False, False, False
 
         # -- columna izquierda: entrada ------------------------------------
         self.nombre = QLineEdit()
         self.nombre.setPlaceholderText("Nombre de la toma (opcional)")
         self.destino = config.cargar()["carpeta_proyectos"]
         self.e_destino = tema.etiqueta("", "tenue")
-        self.captura = PanelCaptura("partitura", lambda: self.nombre.text().strip(), lambda: self.destino or None)
+        self.en_vivo = QCheckBox("Ver las notas mientras grabo (borrador)")
+        self.en_vivo.setChecked(True)
+        self.en_vivo.setToolTip("Las notas van apareciendo cada pocos segundos. Al detener se analiza la toma completa, que es más precisa.")
+        self.captura = PanelCaptura("partitura", lambda: self.nombre.text().strip(), lambda: self.destino or None,
+                                    lambda: SEGMENTO_VIVO_S if self.en_vivo.isChecked() and lanzar.instalado("partituras") else 0)
         self.captura.terminada.connect(self._toma_lista)
-        self.captura.estado.connect(self._botones)
+        self.captura.segmento.connect(self._segmento_vivo)
+        self.captura.estado.connect(self._al_cambiar_captura)
         self.b_importar = tema.boton("Importar audio…", self.importar, ayuda="WAV, MP3, FLAC u OGG")
         t1, v1 = tema.tarjeta("1 · Grabar o importar")
         v1.addLayout(tema.fila(self.nombre, tema.boton("Carpeta…", self.elegir_destino), estirar=self.nombre))
         v1.addWidget(self.e_destino)
         v1.addWidget(self.captura)
+        v1.addWidget(self.en_vivo)
         v1.addLayout(tema.fila(tema.etiqueta("¿Ya tienes el audio en un archivo?", "tenue", False), None, self.b_importar))
 
         self.e_toma = tema.etiqueta("Ninguna toma abierta. Graba, importa un audio o abre un proyecto.", "tenue")
@@ -109,7 +118,7 @@ class PaginaPartituras(QWidget):
         # -- columna derecha: revisión -------------------------------------
         self.vista = VistaNotas()
         self.vista.elegida.connect(lambda i: self.tabla.selectRow(i))
-        rollo = QScrollArea()
+        rollo = self.rollo = QScrollArea()
         rollo.setWidget(self.vista)
         rollo.setWidgetResizable(True)
         rollo.setFixedHeight(160)
@@ -183,6 +192,7 @@ class PaginaPartituras(QWidget):
         hay = self.version is not None and not analizando
         exe, origen = editor.buscar()
         self.b_importar.setEnabled(not analizando and not grabando)
+        self.en_vivo.setEnabled(not grabando)
         self.b_transcribir.setEnabled(audio and not analizando and not grabando)
         self.b_cancelar.setEnabled(analizando)
         self.b_oir.setEnabled(audio)
@@ -223,12 +233,55 @@ class PaginaPartituras(QWidget):
             proyectos.importar_audio(d, ruta)
         except OSError as e:
             return tema.error(self, "No se pudo importar", f"{e}\n\nComprueba que el archivo existe y que hay espacio libre.")
+        self._auto = False
         self._toma_lista(d)
 
     def _toma_lista(self, carpeta):
         self.nombre.clear()
         self.abrir_proyecto(carpeta)
         self.cambio.emit()
+        if self._auto and self._audio():  # tras el borrador en vivo, la partitura definitiva de la toma entera
+            self._auto = False
+            self.transcribir()
+
+    # -- borrador en vivo -----------------------------------------------------
+    def _al_cambiar_captura(self):
+        grabando = self.captura.grabando
+        if grabando and not self._grababa:      # empieza una toma: lienzo en blanco y motor en marcha
+            self._hubo_vivo = self.en_vivo.isChecked() and lanzar.instalado("partituras")
+            self.proyecto = self.version = self.externa = None
+            self._ultima = {}
+            self._poner_notas([], 120)
+            self.e_toma.setText("Grabando una toma nueva…")
+            self.e_estado.setText("Preparando el borrador en vivo: las primeras notas tardan unos segundos." if self._hubo_vivo else "")
+            if self._hubo_vivo:
+                self.vivo = tareas.Tarea("partitura_libre.workers.notas", [json.dumps({"cmd": "vivo"})], "partituras",
+                                         lambda ev: tema.en_ui(lambda: self._notas_vivas(ev)))
+        elif not grabando and self._grababa:
+            self._parar_vivo()
+            self._auto = self._hubo_vivo
+        self._grababa = grabando
+        self._botones()
+
+    def _parar_vivo(self):
+        if self.vivo:
+            self.vivo.cancelar()
+            self.vivo = None
+
+    def _segmento_vivo(self, ruta, t0):
+        if not (self.vivo and self.vivo.enviar(audio=str(ruta), desfase=t0)):
+            Path(ruta).unlink(missing_ok=True)
+
+    def _notas_vivas(self, ev):
+        if ev["t"] != "notas" or not self.captura.grabando:
+            return
+        # Misma regla que al trocear audio largo: una nota que seguía sonando se alarga, no se duplica.
+        partituras.integrar(self.notas, self._ultima, ev["notas"], ev["desfase"], ev["desfase"], float("inf"))
+        self._poner_notas(self.notas, 120)
+        self._ultima = {n[2]: n for n in self.notas}
+        self.e_estado.setText(f"Borrador en vivo: {len(self.notas)} notas. Al detener se creará la partitura definitiva.")
+        QTimer.singleShot(0, lambda: (self.rollo.horizontalScrollBar().setValue(self.rollo.horizontalScrollBar().maximum()),
+                                     self.tabla.scrollToBottom()))
 
     def abrir_proyecto(self, carpeta):
         self.proyecto, self.externa, self.version = Path(carpeta), None, None
@@ -398,3 +451,7 @@ class PaginaPartituras(QWidget):
             else:
                 self.e_estado.setText(f"PDF guardado en {ruta}")
         tema.en_hilo(lambda: editor.exportar_pdf(origen, ruta), fin)
+
+    def cerrar(self):
+        self.captura.cerrar()
+        self._parar_vivo()
