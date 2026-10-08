@@ -267,6 +267,44 @@ class Interfaz(Aislada):
         self.assertEqual(p.tabla.rowCount(), 1200)
         self.assertLess(time.perf_counter() - t, 0.5)
 
+    def test_nivel_bajo_se_avisa_en_directo_y_el_dialogo_solo_una_vez(self):
+        import numpy as np
+        from partitura_libre import audio
+        from partitura_libre.ui.captura import PanelCaptura
+        panel = self.v.partituras.captura
+        PanelCaptura._avisado_flojo = False
+
+        class Estado:
+            input_overflow = False
+
+        def toma(amplitud, nombre):
+            panel.proyecto = proyectos.crear(nombre, "partitura")
+            panel.g = audio.Grabadora(panel.proyecto / f"{nombre}.wav")
+            panel.g._preparar()
+            panel._decir("Grabando…", "aviso")                # lo que pone «Grabar» al empezar
+            bloque = (np.sin(np.arange(4410) / 10) * amplitud * 32767).astype(np.int16).reshape(-1, 1)
+            for _ in range(30):                               # 3 s de señal
+                panel.g._bloque(bloque, len(bloque), None, Estado)
+            esperar(lambda: panel.g.frames >= 30 * 4410, 5)
+            panel._refrescar()
+            en_directo = (panel.texto.text(), panel.nivel.property("clase"))
+            panel.detener()
+            return en_directo
+
+        texto, barra = toma(0.04, "floja")                    # como un micrófono que llega al 4 %
+        self.assertIn("Nivel muy bajo (pico del 4 %)", texto)
+        self.assertEqual(barra, "bajo")
+        self.assertEqual([t for t, _ in self.dialogos], ["Nivel de grabación muy bajo"])
+        self.assertIn("nivel muy bajo", panel.texto.text())
+        toma(0.04, "floja otra vez")
+        self.assertEqual(len(self.dialogos), 1)               # la segunda vez no interrumpe
+        self.assertIn("nivel muy bajo", panel.texto.text())   # pero lo sigue diciendo
+        texto, barra = toma(0.5, "normal")
+        self.assertNotIn("bajo", texto)
+        self.assertEqual(barra, "")
+        self.assertEqual(len(self.dialogos), 1)
+        self.v.partituras._auto = False
+
     def test_fallo_del_analisis_se_explica_y_conserva_el_audio(self):
         p = self.v.partituras
         d = proyectos.crear("rota", "partitura")

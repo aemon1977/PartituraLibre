@@ -13,6 +13,7 @@ ESPACIO_MINIMO_MB = 200
 
 
 class PanelCaptura(QWidget):
+    _avisado_flojo = False           # el diálogo de nivel bajo ya se mostró en esta sesión
     terminada = Signal(object)       # carpeta del proyecto con la toma guardada
     segmento = Signal(object, float)  # (wav temporal, segundo de inicio) para transcripción en vivo
     estado = Signal()                 # cambió grabando/parado: las páginas ajustan sus botones
@@ -192,11 +193,15 @@ class PanelCaptura(QWidget):
                          "Comprueba que no esté silenciado o apagado y que has elegido la entrada correcta; usa «Probar nivel» "
                          "y mira si la barra se mueve al hablar. En el control de sonido del sistema, sube el volumen de entrada.", tipo="aviso")
         elif g.floja:
-            self._decir(f"Toma guardada, pero con un nivel muy bajo (pico del {g.pico * 100:.0f} %).", "aviso")
-            tema.dialogo(self, "Nivel de grabación muy bajo", f"La toma se ha guardado, pero el sonido llegó muy flojo (pico del {g.pico * 100:.0f} %) "
+            self._decir(f"Toma guardada, pero con un nivel muy bajo (pico del {g.pico * 100:.0f} %): el reconocimiento puede fallar.", "aviso")
+            if not PanelCaptura._avisado_flojo:   # el diálogo, solo la primera vez; después basta la línea de estado
+                PanelCaptura._avisado_flojo = True
+                tema.dialogo(self, "Nivel de grabación muy bajo", f"La toma se ha guardado, pero el sonido llegó muy flojo (pico del {g.pico * 100:.0f} %) "
                          "y el reconocimiento puede fallar o salir vacío.\n\n• Acerca el micrófono a la fuente o sube el volumen de entrada del sistema.\n"
                          "• Si lo que quieres transcribir suena en este equipo (Spotify, un vídeo…), no lo grabes con el micrófono: elige en "
-                         "«Entrada de audio» una opción «Sonido del equipo» y se capturará directamente, sin ruido ambiente.", tipo="aviso")
+                             "«Entrada de audio» una opción «Sonido del equipo» y se capturará directamente, sin ruido ambiente.\n\n"
+                             "A partir de ahora lo verás mientras grabas: la barra de nivel se pone ámbar y aparece un aviso bajo el reloj. "
+                             "Este mensaje no volverá a interrumpirte en esta sesión.", tipo="aviso")
         else:
             self._decir(f"Toma guardada ({g.segundos:.1f} s) en {carpeta.name}.")
         self.terminada.emit(carpeta)
@@ -225,7 +230,13 @@ class PanelCaptura(QWidget):
             return
         db = 20 * math.log10(max(g.nivel, 1e-4))            # -80..0 dB
         self.nivel.setValue(int(max(0, min(100, (db + 60) / 60 * 100))))
-        clase = "alto" if g.nivel > 0.97 else ""
+        flojo = g.frames > 2 * g.sr or (not self.grabando and self._fin_prueba < 8_000 // self._tic.interval())
+        if flojo and g.pico < 0.1 and not g.pausada and self.texto.property("clase") != "error":   # aviso en directo, antes de perder la toma
+            self._decir(f"Nivel muy bajo (pico del {g.pico * 100:.0f} %): acerca el micrófono o sube su ganancia"
+                        + (". No se guarda nada." if not self.grabando else "; así el reconocimiento puede fallar."), "aviso")
+        elif g.pico >= 0.1 and self.texto.text().startswith("Nivel muy bajo"):   # la señal ya llega bien
+            self._decir("Grabando…" if self.grabando else "Probando: el nivel es correcto. No se guarda nada.", "aviso" if self.grabando else "tenue")
+        clase = "alto" if g.nivel > 0.97 else "bajo" if flojo and g.pico < 0.1 else ""
         if self.nivel.property("clase") != clase:
             tema.reclasificar(self.nivel, clase)
         if not self.grabando:

@@ -53,6 +53,7 @@ QTableCornerButton::section {{ background: #162b45; border: none; }}
 QProgressBar {{ background: #0c1929; border: 1px solid {BORDE}; border-radius: 6px; height: 12px; text-align: center; font-size: 11px; }}
 QProgressBar::chunk {{ background: {ACENTO}; border-radius: 5px; }}
 QProgressBar[clase="alto"]::chunk {{ background: {PELIGRO}; }}
+QProgressBar[clase="bajo"]::chunk {{ background: {AVISO}; }}
 QCheckBox, QRadioButton {{ spacing: 8px; background: transparent; }}
 QCheckBox::indicator, QRadioButton::indicator {{ width: 16px; height: 16px; border: 1px solid {TENUE}; background: #0c1929; }}
 QCheckBox::indicator {{ border-radius: 4px; }} QRadioButton::indicator {{ border-radius: 9px; }}
