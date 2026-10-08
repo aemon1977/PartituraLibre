@@ -1,0 +1,7 @@
+# Audio -> MIDI -> MusicXML. Basic Pitch 0.4.0 con su modelo ONNX (sin TensorFlow,
+# ver exclusiones.txt). Bloqueo: herramientas/bloquear.sh
+basic-pitch==0.4.0
+onnxruntime
+music21
+soundfile
+setuptools<81

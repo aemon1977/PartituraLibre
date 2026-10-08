@@ -1,0 +1,5 @@
+# Basic Pitch trae su modelo también en ONNX; se omiten los otros motores (≈ 1,5 GB menos).
+tensorflow ; sys_platform == 'never'
+tensorflow-macos ; sys_platform == 'never'
+tflite-runtime ; sys_platform == 'never'
+coremltools ; sys_platform == 'never'

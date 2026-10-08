@@ -1,0 +1,6 @@
+# Interfaz, captura de audio y voz a texto. Bloqueo: herramientas/bloquear.sh
+numpy
+PySide6-Essentials
+sounddevice
+soundfile
+faster-whisper

@@ -1,0 +1,11 @@
+# Todo lo que el programa descarga o genera (nunca se versiona ni se empaqueta)
+/runtime/
+/models/
+/data/
+/config/
+/logs/
+/temp/
+/dist/
+__pycache__/
+*.pyc
+*.parcial

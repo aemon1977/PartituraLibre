@@ -1,0 +1,6 @@
+voz-es.flac  Primeros 25 s de «Es-Corto desambiguacion-article.ogg» (lectura de un artículo de
+             Wikipedia en español). Autor: usuario Midolight, Wikimedia Commons. Licencia CC BY 4.0.
+             https://commons.wikimedia.org/wiki/File:Es-Corto_desambiguacion-article.ogg
+             Modificación: recorte a 25 s, mono, 16 kHz, FLAC.
+jfk.flac     Fragmento del discurso inaugural de John F. Kennedy (1961). Dominio público
+             (obra del gobierno de EE. UU.). Tomado de las pruebas de faster-whisper.
