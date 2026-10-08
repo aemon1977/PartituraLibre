@@ -164,6 +164,21 @@ class Notacion(unittest.TestCase):
         self.assertEqual(partituras.silencios(0.1), [])                    # un respiro no es un silencio
         self.assertEqual(sum(partituras.NEGRAS[f] for f in partituras.silencios(2.75)), 2.75)
 
+    def test_puntillo_y_teclas_de_nota(self):
+        self.assertEqual(partituras.figura_y_puntillo(0.75, 120), ("negra", True))      # negra con puntillo a 120 = 0,75 s
+        self.assertEqual(partituras.figura_y_puntillo(0.5, 120), ("negra", False))
+        self.assertEqual(partituras.figura_y_puntillo(0.37, 120), ("negra", False))     # imprecisión de un audio: sin puntillo
+        for fig in ("blanca", "negra", "corchea", "semicorchea"):
+            self.assertEqual(partituras.figura_y_puntillo(partituras.segundos_de(fig, 90, True), 90), (fig, True))
+        # escribir «Do Re Mi Fa Sol La Si Do» con el teclado sube por grados: cada nota, la más cercana a la anterior
+        tono, escala = 60, []
+        for letra in "DEFGABC":
+            tono = partituras.tono_cercano(letra, tono)
+            escala.append(tono)
+        self.assertEqual(escala, [62, 64, 65, 67, 69, 71, 72])
+        self.assertEqual(partituras.tono_cercano("G", 60), 55)     # Sol más cercano al Do4: el de abajo (una cuarta), no el de arriba (una quinta)
+        self.assertEqual(partituras.tono_cercano("c", 61), 60)
+
     def test_nombres_figuras_acordes_y_clave_automatica(self):
         self.assertEqual([partituras.solfeo(m) for m in (60, 62, 64, 65, 67, 69, 71, 73)], ["Do", "Re", "Mi", "Fa", "Sol", "La", "Si", "Do♯"])
         self.assertEqual([partituras.figura(s, 120) for s in (2.0, 1.0, 0.5, 0.25, 0.12)], ["redonda", "blanca", "negra", "corchea", "semicorchea"])

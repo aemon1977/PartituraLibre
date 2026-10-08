@@ -31,6 +31,9 @@ class PanelCaptura(QWidget):
         self.micro.setMinimumContentsLength(16)
         self.b_actualizar = tema.boton("Actualizar", self.cargar_micros, ayuda="Volver a buscar micrófonos")
         self.b_probar = tema.boton("Probar nivel", self.probar, ayuda="Escucha el micrófono 10 s sin grabar nada")
+        self.b_sistema = tema.boton("Sonido del equipo", self.usar_sonido_del_equipo,
+                                    ayuda="Para música o vídeos que suenan en este ordenador (Spotify, YouTube…): se graban "
+                                          "directamente de la salida, sin pasar por altavoces y micrófono")
         self.nivel = QProgressBar()
         self.nivel.setRange(0, 100)
         self.nivel.setTextVisible(False)
@@ -46,10 +49,12 @@ class PanelCaptura(QWidget):
         v.setSpacing(10)
         v.addWidget(tema.etiqueta("Entrada de audio", "tenue"))
         v.addWidget(self.micro)
-        v.addLayout(tema.fila(self.b_actualizar, self.b_probar, tema.etiqueta("Nivel", "tenue", False), self.nivel, estirar=self.nivel))
+        v.addLayout(tema.fila(self.b_actualizar, self.b_probar, self.b_sistema, None))
+        v.addLayout(tema.fila(tema.etiqueta("Nivel", "tenue", False), self.nivel, estirar=self.nivel))
         v.addLayout(tema.fila(self.reloj, self.texto, estirar=self.texto))
         v.addLayout(tema.fila(self.b_grabar, self.b_pausa, self.b_detener, self.b_cancelar, estirar=self.b_grabar))
 
+        self.micro.currentIndexChanged.connect(lambda _: self._botones() if hasattr(self, "_tic") else None)
         self._tic = QTimer(self)
         self._tic.setInterval(60)
         self._tic.timeout.connect(self._refrescar)
@@ -69,6 +74,9 @@ class PanelCaptura(QWidget):
         for b in (self.b_pausa, self.b_detener, self.b_cancelar):
             b.setEnabled(grab)
         self.micro.setEnabled(self.g is None)
+        sistema = self._indice_sistema()
+        self.b_sistema.setVisible(sistema >= 0)
+        self.b_sistema.setEnabled(self.g is None and sistema != self.micro.currentIndex())
         self.b_actualizar.setEnabled(self.g is None)
         self.estado.emit()
 
@@ -98,6 +106,17 @@ class PanelCaptura(QWidget):
             self._decir("Listo para grabar." if len(micros) == 1 else f"{n} micrófono(s)"
                         + (" y el sonido del equipo" if n < len(micros) else "") + " disponibles: elige la entrada.")
         self._botones()
+
+    def _indice_sistema(self):
+        """Posición en la lista de la entrada que graba lo que suena por la salida en uso (-1 si no hay)."""
+        return next((i for i in range(self.micro.count()) if (self.micro.itemData(i) or {}).get("sistema")), -1)
+
+    def usar_sonido_del_equipo(self):
+        i = self._indice_sistema()
+        if i >= 0:
+            self.micro.setCurrentIndex(i)
+            self._decir("Se grabará lo que suene en este equipo. Pon la música y pulsa «Grabar».")
+            self._botones()
 
     def _micro(self):
         """(índice de dispositivo, fuente del servidor de sonido) del micrófono elegido."""

@@ -71,31 +71,36 @@ Tres maneras de empezar:
 - **Desde una partitura existente.** *Abrir…* convierte un MusicXML, MXL o MIDI en una partitura editable; el archivo original se guarda en el proyecto.
 - **En blanco.** *Nueva* crea una hoja vacía con el modo *Introducir* activado.
 
-Editar:
+Editar, con las mismas teclas que MuseScore:
 
-| Quiero… | Cómo |
+| Tecla | Qué hace |
 |---|---|
-| Elegir una nota | Clic sobre ella; **← →** pasan a la anterior o la siguiente |
-| Cambiar su altura | Arrastrarla arriba o abajo, **↑ ↓** (con **Ctrl**, una octava) o los botones ♯ ♭ 8ª |
-| Cambiar su duración | Pulsar una figura |
-| Moverla en el tiempo | **Mayús + ← →** o los botones ◀ ▶ (de semicorchea en semicorchea) |
-| Escribir notas nuevas | Activar *✎ Introducir*, elegir figura y hacer clic en el pentagrama a la altura deseada; o **N** para añadir tras la nota elegida |
-| Borrar | **Supr** |
-| Poner o corregir la letra | Campo *Letra de la nota* |
-| Deshacer o rehacer | **Ctrl+Z**, **Ctrl+Y** |
-| Oír el resultado | **Espacio** o *▶ Oír* (suena desde la nota elegida, con un timbre sencillo) |
-| Ajustar al segundo | Panel *Lista de notas* |
+| **N** | Entra o sale del modo de introducción de notas |
+| **3 4 5 6 7** | Semicorchea, corchea, negra, blanca, redonda. En modo introducir eligen la figura de la próxima nota; fuera de él cambian la nota elegida |
+| **.** (punto) | Puntillo |
+| **A B C D E F G** | La Si Do Re Mi Fa Sol. En modo introducir escriben la nota tras la elegida, en la octava más cercana a la anterior; fuera de él cambian la altura de la nota elegida |
+| **Mayús + letra** | Añade esa nota al acorde |
+| **0** | Silencio de la figura elegida |
+| **↑ ↓** | Sube o baja un semitono; con **Ctrl**, una octava |
+| **← →** | Nota anterior o siguiente; con **Mayús**, mueve la nota en el tiempo una semicorchea |
+| **Ctrl+L** | Escribir la letra: espacio o guion pasan a la nota siguiente, Esc vuelve a la partitura |
+| **Supr** | Borra la nota (queda un silencio) |
+| **Ctrl+Z / Ctrl+Y** | Deshacer y rehacer |
+| **Espacio** | Oír desde la nota elegida |
+| **Esc** | Sale del modo introducir o quita la selección |
+
+Con el ratón: clic elige una nota, arrastrarla arriba o abajo cambia su altura y, en modo introducir, un clic en el pentagrama escribe una nota a esa altura. Al introducir una nota en medio, las siguientes se desplazan para hacerle sitio. Todo está también en los botones de la barra de notas, y los valores exactos en el panel *Lista de notas*.
 
 Guardar y exportar: *Guardar versión* crea MIDI y MusicXML nuevos con tus cambios, sin pisar los anteriores. *PDF…* escribe en A4 la partitura tal como la ves, con clave, nombres y letra. MuseScore es opcional: si lo tienes, aparece un botón para abrir en él el MusicXML guardado.
 
-> La hoja de la app coloca cada nota a su altura exacta, elige la figura más parecida a su duración y marca compases y silencios según el tempo. No dibuja puntillos, ligaduras, tresillos ni armaduras, y las alteraciones se escriben siempre con sostenidos. El MusicXML se cuantiza a semicorcheas.
+> La hoja de la app coloca cada nota a su altura exacta, elige la figura más parecida a su duración y marca compases y silencios según el tempo. No dibuja ligaduras, tresillos ni armaduras; el puntillo solo aparece en duraciones exactas (las que escribes tú), y las alteraciones se escriben siempre con sostenidos. El MusicXML se cuantiza a semicorcheas.
 >
 > La detección desde audio es automática y aproximada. Va bien con una melodía o un instrumento solo. Con varios instrumentos, acordes densos o batería habrá notas falsas o ausentes: revisa siempre el resultado.
 
 ### Letras
 
 1. **Elige un modelo** y pulsa *Descargar modelo* (una sola vez). `small` es el recomendado para español; `tiny` y `base` son más rápidos y fallan más; `medium` y `large-v3` son más precisos y lentos.
-2. **Elige la entrada de audio.** Además de los micrófonos, en Linux aparecen entradas **«Sonido del equipo · …»**, que graban directamente lo que suena por una salida (Spotify, un vídeo, una videollamada). Para transcribir algo que suena en el ordenador usa siempre esa opción —la marcada «salida en uso»— y no el micrófono: por los altavoces llega flojo y con ruido, y el reconocimiento sale vacío.
+2. **Elige la entrada de audio.** El botón *Sonido del equipo* selecciona con un clic la captura directa de lo que suena en el ordenador. Además de los micrófonos, en Linux aparecen entradas **«Sonido del equipo · …»**, que graban directamente lo que suena por una salida (Spotify, un vídeo, una videollamada). Para transcribir algo que suena en el ordenador usa siempre esa opción —la marcada «salida en uso»— y no el micrófono: por los altavoces llega flojo y con ruido, y el reconocimiento sale vacío.
 3. **Graba, dicta o importa** audio o vídeo (WAV, MP3, FLAC, OGG, M4A, MP4, MKV…). Con *Transcribir mientras hablo* aparece un borrador cada pocos segundos; al detener, la toma completa se transcribe de nuevo con más precisión.
 4. **Idioma:** español, detección automática u otro de la lista.
 5. **Voz hablada o voz cantada (modo de prueba).** Con canto, la música y los coros confunden al modelo: los versos poco fiables se marcan con **⚠** para que los escuches y corrijas. El programa no inventa texto donde no entiende.

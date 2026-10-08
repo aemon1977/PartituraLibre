@@ -201,6 +201,7 @@ class Interfaz(Aislada):
         for tono in (60, 64, 67):
             p.vista.insertada.emit(tras, tono)
             tras += 1
+        p._atajo("escape")                                     # fuera del modo introducir, la figura cambia la nota elegida
         p.tabla.selectRow(2)
         p._figura("negra")
         p.e_letra.setText("sol"); p._letra_editada()
@@ -304,6 +305,65 @@ class Interfaz(Aislada):
         self.assertEqual(barra, "")
         self.assertEqual(len(self.dialogos), 1)
         self.v.partituras._auto = False
+
+    def test_escribir_con_el_teclado_como_en_musescore(self):
+        """N, cifras de figura, letras de nota, silencio, puntillo, acorde, letra con Ctrl+L y Esc, tecleados sobre la hoja."""
+        from PySide6.QtCore import Qt
+        from PySide6.QtTest import QTest
+        p = self.v.partituras
+        p.nueva()
+        p.b_insertar.setChecked(False)
+        p.clave.setCurrentIndex(p.clave.findData("sol"))
+        p.vista.setFocus()
+        teclear = lambda tecla, mod=Qt.NoModifier: (QTest.keyClick(p.vista, tecla, mod), QApplication.processEvents())
+
+        teclear(Qt.Key_N)                                   # entrar en el modo de introducción
+        self.assertTrue(p.b_insertar.isChecked() and p.vista.insertar)
+        teclear(Qt.Key_5)                                   # negra
+        for t in (Qt.Key_C, Qt.Key_D, Qt.Key_E):            # Do Re Mi
+            teclear(t)
+        self.assertEqual([n[2] % 12 for n in p.notas], [0, 2, 4])
+        self.assertEqual([round(n[0], 2) for n in p.notas], [0.0, 0.5, 1.0])          # una tras otra, sin huecos
+        teclear(Qt.Key_0)                                   # silencio de negra
+        teclear(Qt.Key_6)                                   # blanca
+        teclear(Qt.Key_G)
+        self.assertEqual((round(p.notas[3][0], 2), round(p.notas[3][1] - p.notas[3][0], 2)), (2.0, 1.0))   # tras el silencio, blanca
+        teclear(Qt.Key_B, Qt.ShiftModifier)                 # Mayús+letra: nota añadida al acorde
+        self.assertEqual(len(p.notas), 5)
+        self.assertEqual((p.notas[4][0], p.notas[4][1]), (p.notas[3][0], p.notas[3][1]))
+        self.assertEqual(p.notas[4][2] % 12, 11)
+        self.assertEqual(len([c for s in p.vista.sistemas for c in s if c["silencio"]]), 1)   # el silencio se ve en la hoja
+        self.assertEqual(len([c for s in p.vista.sistemas for c in s if len(c["col"]) == 2]), 1)   # y el acorde
+
+        teclear(Qt.Key_Escape)                              # salir del modo
+        self.assertFalse(p.b_insertar.isChecked())
+        p.tabla.selectRow(0)
+        teclear(Qt.Key_Period)                              # puntillo a la primera negra
+        self.assertAlmostEqual(p.notas[0][1] - p.notas[0][0], 0.75, places=3)
+        self.assertTrue(p.b_puntillo.isChecked())
+        teclear(Qt.Key_Period)
+        self.assertAlmostEqual(p.notas[0][1] - p.notas[0][0], 0.5, places=3)
+        teclear(Qt.Key_A)                                   # fuera del modo, la letra cambia la nota elegida
+        self.assertEqual((len(p.notas), p.notas[0][2] % 12), (5, 9))
+        teclear(Qt.Key_Z, Qt.ControlModifier)
+        self.assertEqual(p.notas[0][2] % 12, 0)
+        teclear(Qt.Key_C, Qt.ControlModifier)               # Ctrl+C no escribe un Do
+        self.assertEqual(len(p.notas), 5)
+
+        teclear(Qt.Key_L, Qt.ControlModifier)               # letra: espacio pasa a la nota siguiente
+        self.assertTrue(p.e_letra.hasFocus())
+        QTest.keyClicks(p.e_letra, "can"); QTest.keyClick(p.e_letra, Qt.Key_Minus)
+        QTest.keyClicks(p.e_letra, "ta"); QTest.keyClick(p.e_letra, Qt.Key_Space)
+        QTest.keyClicks(p.e_letra, "re"); QTest.keyClick(p.e_letra, Qt.Key_Escape)
+        self.assertEqual(p.letra[:3], ["can", "ta", "re"])
+        self.assertTrue(p.vista.hasFocus())
+
+        p.tabla.selectRow(0)                                # introducir en medio desplaza lo que sigue, no lo pisa
+        teclear(Qt.Key_N); teclear(Qt.Key_5); teclear(Qt.Key_F)
+        self.assertEqual(len(p.notas), 6)
+        inicios = sorted(round(n[0], 2) for n in p.notas)
+        self.assertEqual(inicios, [0.0, 0.5, 1.0, 1.5, 2.5, 2.5])
+        self.assertEqual(p.letra[2:4], ["ta", "re"])        # cada palabra sigue con su nota
 
     def test_fallo_del_analisis_se_explica_y_conserva_el_audio(self):
         p = self.v.partituras

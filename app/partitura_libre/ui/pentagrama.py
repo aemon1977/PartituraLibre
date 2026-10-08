@@ -16,7 +16,7 @@ A4_ANCHO, A4_ALTO = 1000, 1414   # hoja A4 en unidades de dibujo para el PDF
 # Símbolos SMuFL de Bravura
 G_CLAVE = {"sol": "", "fa": "", "do3": "", "do4": ""}
 G_CABEZA = {"redonda": "", "blanca": ""}
-G_NEGRA, G_SOSTENIDO, G_CUATRO = "", "", ""
+G_NEGRA, G_SOSTENIDO, G_CUATRO, G_PUNTILLO = "", "", "", ""
 G_CORCHETE = {("corchea", True): "", ("corchea", False): "",
               ("semicorchea", True): "", ("semicorchea", False): ""}
 G_SILENCIO = {"redonda": ("", 6), "blanca": ("", 4), "negra": ("", 4),
@@ -40,8 +40,10 @@ class Pentagrama(QWidget):
     insertada = Signal(int, int)          # modo introducir: (nota tras la que va, o -1 al principio; tono)
     tecla = Signal(str)                   # atajos de edición
 
+    # Mismas teclas que MuseScore: N introducir, 3-7 figura, A-G nota, 0 silencio, . puntillo, Ctrl+L letra
     TECLAS = {Qt.Key_Up: "arriba", Qt.Key_Down: "abajo", Qt.Key_Left: "anterior", Qt.Key_Right: "siguiente",
-              Qt.Key_Delete: "borrar", Qt.Key_Backspace: "borrar", Qt.Key_N: "nueva", Qt.Key_Space: "reproducir"}
+              Qt.Key_Delete: "borrar", Qt.Key_Backspace: "borrar", Qt.Key_N: "modo", Qt.Key_Space: "reproducir",
+              Qt.Key_0: "silencio", Qt.Key_Period: "puntillo", Qt.Key_Escape: "escape"}
 
     def __init__(self):
         super().__init__()
@@ -71,6 +73,7 @@ class Pentagrama(QWidget):
     def modo_insertar(self, si):
         self.insertar = si
         self.setCursor(Qt.CrossCursor if si else Qt.ArrowCursor)
+        self.update()
 
     def resizeEvent(self, _):
         self._componer()
@@ -238,7 +241,7 @@ class Pentagrama(QWidget):
                     ini, final, tono, _v = self.notas[i]
                     pos, sostenido = partituras.posicion(tono, self.clave)
                     pos = max(-10, min(17, pos))           # fuera de ese margen no cabría en el sistema
-                    fig = partituras.figura(final - ini, self.bpm)
+                    fig, puntillo = partituras.figura_y_puntillo(final - ini, self.bpm)
                     color = QColor(ELEGIDA if i == sel else TINTA)
                     g.setPen(QPen(color, max(1.0, 1.1 * z)))
                     for extra in [q for q in range(-2, pos - 1, -2)] + [q for q in range(10, pos + 1, 2)]:
@@ -247,6 +250,8 @@ class Pentagrama(QWidget):
                     g.drawText(QPointF(x, y(pos)), G_CABEZA.get(fig, G_NEGRA))
                     if sostenido:
                         g.drawText(QPointF(x - 1.15 * e, y(pos)), G_SOSTENIDO)
+                    if puntillo:   # a la derecha de la cabeza, siempre en un espacio
+                        g.drawText(QPointF(x + ancho + 3 * z, y(pos if pos % 2 else pos + 1)), G_PUNTILLO)
                     if fig != "redonda":
                         arriba = pos < 4
                         xp = x + ancho - 0.6 if arriba else x + 0.6
@@ -257,6 +262,8 @@ class Pentagrama(QWidget):
                     if i == sel:                            # marco de selección, como en un editor
                         g.setPen(QPen(QColor(ELEGIDA), 1, Qt.DashLine))
                         g.drawRoundedRect(QRectF(x - 6 * z, y(pos) - 1.1 * e, ancho + 12 * z, 2.2 * e), 3, 3)
+                        if pantalla and self.insertar:      # cursor de introducción: ahí irá la próxima nota
+                            g.fillRect(QRectF(x + p["ancho"] - 6 * z, y(9), 5 * z, 5 * e), QColor(15, 157, 143, 90))
                     if self.nombres and k < 2:              # nombres bajo el pentagrama; en acordes, del grave al agudo
                         g.setFont(f_nombre)
                         g.setPen(color)
@@ -347,7 +354,17 @@ class Pentagrama(QWidget):
 
     def keyPressEvent(self, ev):
         accion, ctrl, mayus = self.TECLAS.get(ev.key()), ev.modifiers() & Qt.ControlModifier, ev.modifiers() & Qt.ShiftModifier
-        if ctrl and ev.key() == Qt.Key_Z:
+        letra = chr(ev.key()) if Qt.Key_A <= ev.key() <= Qt.Key_G else ""
+        numero = chr(ev.key()) if Qt.Key_0 <= ev.key() <= Qt.Key_9 else ""
+        if ctrl and ev.key() == Qt.Key_L:
+            accion = "letra"
+        elif ctrl and (letra or accion in ("modo", "silencio", "puntillo")):
+            accion = None                        # Ctrl+C y similares no escriben notas
+        elif letra:
+            accion = ("acorde:" if mayus else "nota:") + letra
+        elif numero in partituras.TECLAS_FIGURA:
+            accion = "fig:" + partituras.TECLAS_FIGURA[numero]
+        elif ctrl and ev.key() == Qt.Key_Z:
             accion = "rehacer" if mayus else "deshacer"
         elif ctrl and ev.key() == Qt.Key_Y:
             accion = "rehacer"

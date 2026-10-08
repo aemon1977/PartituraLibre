@@ -6,7 +6,7 @@ Equipo de pruebas: Debian 13 (trixie) x86_64 real, sesión Wayland con PipeWire,
 
 Cada prueba se clasifica como **superada**, **fallida** o **no ejecutable aquí**.
 
-## 1. Pruebas automatizadas — superadas (77 de 77, ninguna omitida)
+## 1. Pruebas automatizadas — superadas (79 de 79, ninguna omitida)
 
 Se ejecutan con `./herramientas/probar.sh`, siempre con el Python del paquete. Usan los motores reales, no simulacros.
 
@@ -14,12 +14,12 @@ Se ejecutan con `./herramientas/probar.sh`, siempre con el Python del paquete. U
 |---|---|---|
 | `test_dependencias` | 7 | El intérprete en uso es el del paquete (3.11); `sounddevice` y `soundfile` se cargan desde `runtime/`; una dependencia ausente se detecta y se nombra; con el Python del sistema el programa se niega a abrir y dice cómo arrancar; el diagnóstico no filtra rutas personales |
 | `test_audio` | 11 | Señal sintética guardada idéntica muestra a muestra; pausa; cola saturada y desbordamiento notificados y toma marcada incompleta; disco lleno conserva lo grabado; WAV válido antes de cerrarse; cancelar borra; segmentos en vivo contiguos; **sesión simulada de 40 min** sin pérdidas |
-| `test_partitura_flujo` | 18 | **Pentagrama:** posición de las notas en clave de Sol, Fa y Do (3.ª y 4.ª), figuras, acordes; la clave elegida y los nombres Do-Re-Mi llegan al MusicXML. Además: WAV sintético (escala de Do) → notas exactas → MIDI → MusicXML; corrección manual crea versión nueva sin tocar la anterior; nota que cruza trozos no se parte; silencio no inventa notas; archivo ilegible da error explicado; cancelación sin restos |
+| `test_partitura_flujo` | 19 | **Pentagrama:** posición de las notas en clave de Sol, Fa y Do (3.ª y 4.ª), figuras, acordes; la clave elegida y los nombres Do-Re-Mi llegan al MusicXML. Además: WAV sintético (escala de Do) → notas exactas → MIDI → MusicXML; corrección manual crea versión nueva sin tocar la anterior; nota que cruza trozos no se parte; silencio no inventa notas; archivo ilegible da error explicado; cancelación sin restos |
 | `test_letras_flujo` | 6 | Audio libre en español: idioma detectado, palabras esperadas, tiempos crecientes, exportación y reimportación; idioma manual; error sin tumbar el motor; el modo «voz cantada» no da por bueno texto en música sin voz |
 | `test_exportar` | 10 | SRT, VTT y LRC exactos; ida y vuelta; texto editado conserva tiempos; una línea nueva no recibe un tiempo inventado |
 | `test_rutas_proyectos` | 10 | Nombres con tildes y caracteres prohibidos; nombres únicos; audio asociado a resultados; toma interrumpida marcada y conservada; solo se borran proyectos |
 | `test_limpieza` | 4 | La desinstalación borra la carpeta del programa y nada más; se niega ante cualquier otra carpeta |
-| `test_ui` | 11 | La ventana real sin pantalla: navegación, botones bloqueados según el estado, partitura y letra de principio a fin, **partitura en vivo** (una melodía conocida entra por el callback de audio y sus notas aparecen antes de detener; al detener se crea la definitiva), error explicado, cancelación, diagnóstico |
+| `test_ui` | 12 | La ventana real sin pantalla: navegación, botones bloqueados según el estado, partitura y letra de principio a fin, **partitura en vivo** (una melodía conocida entra por el callback de audio y sus notas aparecen antes de detener; al detener se crea la definitiva), error explicado, cancelación, diagnóstico |
 
 ## 2. Instalación desde cero en Debian 13 — superada
 
@@ -102,6 +102,16 @@ Medido antes y después, por cada paso de un arrastre (incluido el repintado):
 Causa: cada paso reconstruía la tabla entera y redibujaba todos los sistemas, también los que no se veían. Ahora solo se actualiza la fila de la nota movida y se repinta su sistema; la hoja solo dibuja lo visible. Hay una prueba que arrastra con eventos de ratón sobre 1200 notas y falla si un paso supera 20 ms.
 
 - **No ejecutable aquí:** la sensación con tu ratón y tu pantalla; las cifras son de este equipo (rápido) y sin pantalla real.
+
+### Edición con las teclas de MuseScore (añadido después) — superada con teclado simulado
+
+Una melodía tecleada sobre la hoja con eventos de teclado reales: N, cifras de figura, letras de nota, silencio con 0, puntillo, acorde con Mayús, letra con Ctrl+L (espacio y guion avanzan), deshacer, Esc, e inserción en medio desplazando lo que sigue sin separar cada palabra de su nota. La prueba destapó y corrigió una diferencia con MuseScore: en modo introducir, la cifra cambiaba la nota elegida en vez de fijar la figura de la siguiente.
+
+- **No ejecutable aquí:** tu teclado físico y su distribución (el punto y las cifras del teclado numérico no se han probado).
+
+### «Subir el volumen» de una toma floja (caso real) — no sirve
+
+Con la última toma de letra (pico del 13 %, señal apenas 3 dB sobre el ruido de fondo) se probó amplificar, limpiar ruido y normalizar. Sin tratar no sale texto. Tratada, el motor produce texto distinto según el tratamiento («y la polsilla» ocho veces, «¡Suscríbete!», otros versos): es inventado. No se añadió un amplificador. Sí un botón *Sonido del equipo* que selecciona con un clic la captura directa de la salida; **no ejecutable aquí** comprobarlo con una canción, porque en el momento de la prueba no sonaba nada en el equipo.
 
 ### Micrófono con señal floja (caso real del usuario)
 

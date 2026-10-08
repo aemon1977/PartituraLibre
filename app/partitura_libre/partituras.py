@@ -73,19 +73,40 @@ def posicion(midi, clave):
     return grado - CLAVES[clave][1], _SOSTENIDO[midi % 12]
 
 
+def figura_y_puntillo(segundos, bpm):
+    """(figura, lleva puntillo) más parecidos a esa duración. El puntillo (figura y media) solo se
+    usa cuando la duración coincide exactamente (una nota escrita a mano); las duraciones detectadas
+    en un audio nunca son tan exactas y se quedan en la figura simple más cercana."""
+    negras = segundos * bpm / 60
+    for fig, valor in (("blanca", 3), ("negra", 1.5), ("corchea", 0.75), ("semicorchea", 0.375)):
+        if abs(negras - valor) <= 0.01 * valor:
+            return fig, True
+    return ("redonda" if negras >= 2.83 else "blanca" if negras >= 1.41 else "negra" if negras >= 0.71
+            else "corchea" if negras >= 0.354 else "semicorchea"), False
+
+
 def figura(segundos, bpm):
     """Figura aproximada según la duración: 'redonda', 'blanca', 'negra', 'corchea' o 'semicorchea'."""
-    negras = segundos * bpm / 60  # se elige la figura más cercana (cada una dura el doble que la siguiente)
-    return ("redonda" if negras >= 2.83 else "blanca" if negras >= 1.41 else "negra" if negras >= 0.71
-            else "corchea" if negras >= 0.354 else "semicorchea")
+    return figura_y_puntillo(segundos, bpm)[0]
 
 
 NEGRAS = {"redonda": 4, "blanca": 2, "negra": 1, "corchea": 0.5, "semicorchea": 0.25}
 
 
-def segundos_de(fig, bpm):
+def segundos_de(fig, bpm, puntillo=False):
     """Duración en segundos de una figura a ese tempo."""
-    return NEGRAS[fig] * 60 / bpm
+    return NEGRAS[fig] * (1.5 if puntillo else 1) * 60 / bpm
+
+
+LETRAS_NOTA = {"C": 0, "D": 2, "E": 4, "F": 5, "G": 7, "A": 9, "B": 11}   # teclas de nota, como en MuseScore
+TECLAS_FIGURA = {"3": "semicorchea", "4": "corchea", "5": "negra", "6": "blanca", "7": "redonda"}
+
+
+def tono_cercano(letra, referencia=67):
+    """Nota de ese nombre (C, D, E, F, G, A, B) más cercana a la de referencia: así, al escribir una
+    melodía con el teclado, cada nota cae en la octava natural respecto a la anterior."""
+    base = LETRAS_NOTA[letra.upper()]
+    return min((o * 12 + base for o in range(11) if o * 12 + base <= 127), key=lambda m: (abs(m - referencia), m))
 
 
 _SEMITONO = [0, 2, 4, 5, 7, 9, 11]   # Do Re Mi Fa Sol La Si

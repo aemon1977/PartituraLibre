@@ -3,7 +3,7 @@ import json
 import shutil
 from pathlib import Path
 
-from PySide6.QtCore import Qt, QTimer, Signal
+from PySide6.QtCore import QEvent, Qt, QTimer, Signal
 from PySide6.QtWidgets import (QAbstractItemView, QCheckBox, QComboBox, QFileDialog, QFrame, QHBoxLayout, QHeaderView, QLineEdit, QProgressBar,
                                QScrollArea, QSpinBox, QTableWidget, QTableWidgetItem, QVBoxLayout, QWidget)
 
@@ -12,6 +12,14 @@ from . import tema
 from .captura import PanelCaptura
 from .pentagrama import Pentagrama, fuente_musical
 
+ATAJOS = ("Atajos, iguales a los de MuseScore:\n"
+          "N: entrar o salir del modo de introducción de notas\n"
+          "3 4 5 6 7: semicorchea, corchea, negra, blanca, redonda · punto: puntillo\n"
+          "A B C D E F G: La Si Do Re Mi Fa Sol (en modo introducir escriben la nota; fuera de él cambian la elegida)\n"
+          "Mayús + letra: añadir esa nota al acorde · 0: silencio\n"
+          "↑ ↓: semitono · Ctrl + ↑ ↓: octava · ← →: nota anterior o siguiente · Mayús + ← →: mover en el tiempo\n"
+          "Ctrl+L: escribir la letra (espacio o guion pasan a la nota siguiente) · Supr: borrar\n"
+          "Ctrl+Z / Ctrl+Y: deshacer y rehacer · Espacio: oír · Esc: salir del modo o quitar la selección")
 SEGMENTO_VIVO_S = 3  # cada cuánto se analiza lo recién grabado para el borrador en vivo
 
 
@@ -24,6 +32,7 @@ class PaginaPartituras(QWidget):
         self.proyecto = None   # carpeta del proyecto abierto
         self.version = None    # resultado mostrado: {'midi', 'musicxml', 'notas', …}
         self._hist, self._rehechos, self._fig_nueva, self._sonando = [], [], "negra", False
+        self._espera = 0.0     # silencios tecleados antes de la próxima nota, en segundos
         self.notas, self.bpm, self.tarea, self._cargando = [], 120, None, False
         self.letra = []        # texto cantado bajo cada nota (paralela a self.notas)
         self.vivo = None       # motor del borrador en vivo mientras se graba
@@ -121,22 +130,27 @@ class PaginaPartituras(QWidget):
                 b.setStyleSheet(f"font-family: '{familia}'; font-size: 22px; padding: 0px;")
             b.setFixedSize(42, 42)
             self.b_fig[fig] = b
+        self.b_puntillo = tema.boton("·", lambda: self._puntillo(), "figura", "Puntillo: figura y media (tecla punto)")
+        self.b_puntillo.setCheckable(True)
+        self.b_puntillo.setFixedSize(30, 42)
         self.b_sube = tema.boton("♯ ↑", lambda: self._mover(1), ayuda="Subir un semitono (flecha arriba)")
         self.b_baja = tema.boton("♭ ↓", lambda: self._mover(-1), ayuda="Bajar un semitono (flecha abajo)")
         self.b_octava_sube = tema.boton("8ª ↑", lambda: self._mover(12), ayuda="Subir una octava (Ctrl + flecha arriba)")
         self.b_octava_baja = tema.boton("8ª ↓", lambda: self._mover(-12), ayuda="Bajar una octava (Ctrl + flecha abajo)")
-        self.b_insertar = tema.boton("✎ Introducir", ayuda="Modo de introducción: cada clic en el pentagrama escribe una nota "
-                                                           "a esa altura, con la última figura pulsada")
+        self.b_insertar = tema.boton("✎ Introducir", ayuda="Modo de introducción de notas (N): elige figura con 3-7 y escribe con las teclas "
+                                                           "A-G o haciendo clic en el pentagrama")
         self.b_insertar.setCheckable(True)
         self.b_insertar.toggled.connect(self.vista.modo_insertar)
+        self.b_insertar.toggled.connect(lambda si: (self.b_puntillo.setChecked(False) if si else None, self._botones()))
         self.b_antes = tema.boton("◀", lambda: self._desplazar(-1), ayuda="Adelantar la nota una semicorchea (Mayús + ←)")
         self.b_despues = tema.boton("▶", lambda: self._desplazar(1), ayuda="Retrasar la nota una semicorchea (Mayús + →)")
-        self.b_anadir = tema.boton("+ Nota", self._anadir, ayuda="Añadir una nota después de la elegida (N)")
+        self.b_anadir = tema.boton("+ Nota", self._anadir, ayuda="Añadir una nota igual después de la elegida")
         self.b_borrar = tema.boton("Borrar", self._borrar, "peligro", "Borrar la nota elegida (Supr)")
         self.e_letra = QLineEdit()
         self.e_letra.setPlaceholderText("Letra de la nota")
         self.e_letra.setFixedWidth(150)
         self.e_letra.editingFinished.connect(self._letra_editada)
+        self.e_letra.installEventFilter(self)
         self.clave = QComboBox()
         self.clave.addItem("Clave automática", "")
         for codigo, (nombre, _, _) in partituras.CLAVES.items():
@@ -149,7 +163,7 @@ class PaginaPartituras(QWidget):
         self.clave.currentIndexChanged.connect(self._cambio_de_vista)
         self.nombres.toggled.connect(self._cambio_de_vista)
         self.e_zoom = tema.etiqueta(f"{round(self.vista.zoom * 100)} %", "tenue", False)
-        notas_barra = tema.herramientas(self.b_insertar, *self.b_fig.values(), "|", self.b_sube, self.b_baja, self.b_octava_sube,
+        notas_barra = tema.herramientas(self.b_insertar, *self.b_fig.values(), self.b_puntillo, "|", self.b_sube, self.b_baja, self.b_octava_sube,
                                         self.b_octava_baja, self.b_antes, self.b_despues, "|",
                                         self.b_anadir, self.b_borrar, "|", self.e_letra, None, self.clave, self.nombres, "|",
                                         tema.boton("−", lambda: self._zoom(-10), ayuda="Reducir"), self.e_zoom,
@@ -163,7 +177,7 @@ class PaginaPartituras(QWidget):
         self.tabla.setSelectionBehavior(QAbstractItemView.SelectRows)
         self.tabla.setAlternatingRowColors(True)
         self.tabla.itemChanged.connect(self._celda_editada)
-        self.tabla.itemSelectionChanged.connect(lambda: (self._dibujar(), self._botones()))
+        self.tabla.itemSelectionChanged.connect(lambda: (setattr(self, "_espera", 0.0), self._dibujar(), self._botones()))
         t3, v3 = tema.tarjeta("Lista de notas")
         v3.addWidget(tema.etiqueta("Inicio y duración en segundos. Doble clic en una celda para cambiarla.", "tenue"))
         v3.addWidget(self.tabla, 1)
@@ -238,9 +252,13 @@ class PaginaPartituras(QWidget):
             b.setEnabled(elegida)
         for b in self.b_fig.values():   # sin nota elegida, las figuras eligen la duración de la próxima nota que se introduzca
             b.setEnabled(hay)
-        actual = partituras.figura(self.notas[fila][1] - self.notas[fila][0], self.tempo.value() or self.bpm) if elegida else self._fig_nueva
+        editando = elegida and not self.b_insertar.isChecked()   # las figuras muestran la nota elegida o, al introducir, la próxima
+        actual = partituras.figura(self.notas[fila][1] - self.notas[fila][0], self.tempo.value() or self.bpm) if editando else self._fig_nueva
         for fig, b in self.b_fig.items():
             b.setChecked(fig == actual)
+        self.b_puntillo.setEnabled(hay)
+        if editando:
+            self.b_puntillo.setChecked(partituras.figura_y_puntillo(self.notas[fila][1] - self.notas[fila][0], self.tempo.value() or self.bpm)[1])
         if not self.e_letra.hasFocus():
             self.e_letra.setText(self.letra[fila] if elegida and fila < len(self.letra) else "")
         guardada = hay and bool(self.version.get("midi"))
@@ -260,7 +278,8 @@ class PaginaPartituras(QWidget):
         self.b_existente.setEnabled(not analizando and not grabando)
         self.b_musescore.setVisible(bool(exe))       # opcional: solo aparece si hay un MuseScore disponible
         self.b_musescore.setEnabled(guardada)
-        self.e_editor.setText("Clic elige · arrastrar o ↑ ↓ cambia la altura · ← → cambia de nota · Mayús+← → la mueve · N añade · Supr borra · Ctrl+Z deshace · Espacio suena")
+        self.e_editor.setText("N introducir · 3-7 figura · A-G nota · 0 silencio · . puntillo · ↑ ↓ altura · ← → nota · Ctrl+L letra · Supr · Ctrl+Z · Espacio")
+        self.e_editor.setToolTip(ATAJOS)
 
     def _pintar_destino(self):
         self.e_destino.setText(f"Se guardará en: {self.destino or rutas.PROYECTOS}"
@@ -574,9 +593,26 @@ class PaginaPartituras(QWidget):
         if accion in ("anterior", "siguiente"):
             if self.notas:
                 self.tabla.selectRow(max(0, min(len(self.notas) - 1, i + (1 if accion == "siguiente" else -1))))
-        elif accion == "nueva":
+        elif accion == "modo":
+            if self.b_insertar.isEnabled():
+                self.b_insertar.toggle()
+        elif accion == "escape":
+            self.b_insertar.setChecked(False) if self.b_insertar.isChecked() else self.tabla.clearSelection()
+        elif accion.startswith("fig:"):
             if self.b_anadir.isEnabled():
-                self._anadir()
+                self._figura(accion[4:])
+        elif accion.startswith(("nota:", "acorde:")):
+            if self.b_anadir.isEnabled():
+                self._tecla_nota(accion[-1], accion.startswith("acorde:"))
+        elif accion == "silencio":
+            self._silencio()
+        elif accion == "puntillo":
+            self.b_puntillo.toggle()
+            self._puntillo()
+        elif accion == "letra":
+            if self.e_letra.isEnabled():
+                self.e_letra.setFocus()
+                self.e_letra.selectAll()
         elif accion == "reproducir":
             if self.b_reproducir.isEnabled():
                 self.reproducir()
@@ -590,11 +626,11 @@ class PaginaPartituras(QWidget):
     def _figura(self, fig):
         self._fig_nueva = fig                 # también es la figura de la próxima nota que se introduzca
         i = self.tabla.currentRow()
-        if i < 0:
+        if i < 0 or self.b_insertar.isChecked():   # en modo introducir la figura es la de la próxima nota, como en MuseScore
             return self._botones()
         if i >= 0:
             self._recordar()
-            self.notas[i][1] = self.notas[i][0] + partituras.segundos_de(fig, self.tempo.value() or self.bpm)
+            self.notas[i][1] = self.notas[i][0] + partituras.segundos_de(fig, self.tempo.value() or self.bpm, self.b_puntillo.isChecked())
             self._nota_cambiada(i)
 
     def _letra_editada(self):
@@ -714,10 +750,68 @@ class PaginaPartituras(QWidget):
         if not self.b_anadir.isEnabled():
             return
         self._recordar()
-        inicio = self.notas[tras][1] if 0 <= tras < len(self.notas) else 0.0
-        self.notas.insert(tras + 1, [inicio, inicio + partituras.segundos_de(self._fig_nueva, self.tempo.value() or self.bpm), tono, 0.7])
+        inicio = (self.notas[tras][1] if 0 <= tras < len(self.notas) else 0.0) + self._espera
+        dur = partituras.segundos_de(self._fig_nueva, self.tempo.value() or self.bpm, self.b_puntillo.isChecked())
+        for n in self.notas:                  # lo que venía después se desplaza para hacer sitio, sin encimarse
+            if n[0] >= inicio - 1e-6:
+                n[0], n[1] = n[0] + dur + self._espera, n[1] + dur + self._espera
+        self._espera = 0.0
+        self.notas.insert(tras + 1, [inicio, inicio + dur, tono, 0.7])
         self.letra.insert(tras + 1, "")
-        self._fila_puesta(tras + 1, True)
+        self._poner_notas(self.notas, self.bpm, tras + 1)
+
+    def _tecla_nota(self, letra, acorde):
+        """Teclas A-G como en MuseScore: en modo introducir escriben una nota tras la elegida (con Mayús,
+        la añaden al acorde); fuera de él cambian la altura de la nota elegida."""
+        i = self.tabla.currentRow()
+        tono = partituras.tono_cercano(letra, self.notas[i][2] if 0 <= i < len(self.notas) else 67)
+        if not self.b_insertar.isChecked():
+            if self.b_borrar.isEnabled() and i >= 0:
+                self._recordar()
+                self.notas[i][2] = tono
+                self._nota_cambiada(i)
+        elif acorde and i >= 0:
+            self._recordar()
+            self.notas.insert(i + 1, [self.notas[i][0], self.notas[i][1], tono, 0.7])
+            self.letra.insert(i + 1, "")
+            self._fila_puesta(i + 1, True)
+        else:
+            self._insertar(i, tono)
+
+    def _silencio(self):
+        """Tecla 0 en modo introducir: deja un silencio de la figura elegida antes de la próxima nota."""
+        if self.b_insertar.isChecked():
+            self._espera += partituras.segundos_de(self._fig_nueva, self.tempo.value() or self.bpm, self.b_puntillo.isChecked())
+            self.e_estado.setText(f"Silencio anotado: la próxima nota empezará {self._espera:.2f} s después de la elegida.")
+
+    def _puntillo(self):
+        """Tecla punto: pone o quita el puntillo (figura y media) a la nota elegida."""
+        i = self.tabla.currentRow()
+        if self.b_borrar.isEnabled() and i >= 0 and not self.b_insertar.isChecked():
+            bpm = self.tempo.value() or self.bpm
+            fig, tiene = partituras.figura_y_puntillo(self.notas[i][1] - self.notas[i][0], bpm)
+            self._recordar()
+            self.notas[i][1] = self.notas[i][0] + partituras.segundos_de(fig, bpm, not tiene)
+            self._nota_cambiada(i)
+        else:
+            self._botones()
+
+    def eventFilter(self, objeto, ev):
+        """En el campo de letra, como en MuseScore: espacio o guion pasan a la nota siguiente; Esc vuelve a la partitura."""
+        if objeto is self.e_letra and ev.type() == QEvent.KeyPress:
+            if ev.key() in (Qt.Key_Space, Qt.Key_Minus) and self.e_letra.cursorPosition() == len(self.e_letra.text()):
+                self._letra_editada()
+                i = self.tabla.currentRow()
+                if i + 1 < len(self.notas):
+                    self.tabla.selectRow(i + 1)
+                    self.e_letra.setText(self.letra[i + 1])
+                    self.e_letra.selectAll()
+                return True
+            if ev.key() == Qt.Key_Escape:
+                self._letra_editada()
+                self.vista.setFocus()
+                return True
+        return super().eventFilter(objeto, ev)
 
     def _arrastrar(self, i, tono, primero):
         if self.b_borrar.isEnabled() and 0 <= i < len(self.notas) and self.notas[i][2] != tono:
