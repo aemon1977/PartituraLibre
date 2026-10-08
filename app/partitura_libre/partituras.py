@@ -5,6 +5,7 @@ from pathlib import Path
 NOMBRES = ["Do", "Do♯", "Re", "Re♯", "Mi", "Fa", "Fa♯", "Sol", "Sol♯", "La", "La♯", "Si"]
 AUDIO = "*.wav *.mp3 *.flac *.ogg"
 PARTITURAS = "*.musicxml *.mxl *.xml *.mid *.midi *.mscz"
+AVISO_BREVE = "Detección automática y aproximada: va mejor con una melodía o un instrumento solo. Revisa siempre el resultado."
 LIMITACIONES = ("La detección es automática y aproximada: funciona mejor con una melodía o un instrumento "
                 "aislado. Con varios instrumentos, acordes densos o batería aparecerán notas falsas o faltarán "
                 "notas. Revisa el resultado en la tabla o en MuseScore antes de darlo por bueno.")
@@ -45,6 +46,53 @@ def quitar_armonicos(notas):
         return any(f[3] > 2 * g[3] and min(f[1], g[1]) - max(f[0], g[0]) >= 0.8 * dur
                    for d in ARMONICOS for f in por_tono.get(g[2] - d, ()))
     return [n for n in notas if not es_fantasma(n)]
+
+
+# Claves: nombre visible, grado diatónico de la línea inferior del pentagrama (Do0 = 0, un paso por
+# nota natural) y posición de la línea a la que da nombre la clave (0 = línea inferior, 2 = segunda…).
+CLAVES = {
+    "sol": ("Clave de Sol", 30, 2),            # línea inferior Mi4; el Sol4 está en la 2.ª línea
+    "fa": ("Clave de Fa (4.ª línea)", 18, 6),  # línea inferior Sol2; el Fa3 está en la 4.ª línea
+    "do3": ("Clave de Do (3.ª línea)", 24, 4), # línea inferior Fa3; el Do4 está en la 3.ª línea
+    "do4": ("Clave de Do (4.ª línea)", 22, 6), # línea inferior Re3; el Do4 está en la 4.ª línea
+}
+_LETRA = [0, 0, 1, 1, 2, 3, 3, 4, 4, 5, 5, 6]          # Do Do♯ Re Re♯ Mi Fa Fa♯ Sol Sol♯ La La♯ Si
+_SOSTENIDO = [False, True, False, True, False, False, True, False, True, False, True, False]
+
+
+def clave_adecuada(notas):
+    """Clave que deja la mayoría de las notas dentro del pentagrama."""
+    tonos = sorted(n[2] for n in notas)
+    return "sol" if not tonos or tonos[len(tonos) // 2] >= 57 else "fa"
+
+
+def posicion(midi, clave):
+    """(posición en el pentagrama, lleva sostenido). 0 es la línea inferior, 1 el primer espacio,
+    8 la línea superior; valores negativos o mayores de 8 necesitan líneas adicionales."""
+    grado = (midi // 12 - 1) * 7 + _LETRA[midi % 12]
+    return grado - CLAVES[clave][1], _SOSTENIDO[midi % 12]
+
+
+def figura(segundos, bpm):
+    """Figura aproximada según la duración: 'redonda', 'blanca', 'negra', 'corchea' o 'semicorchea'."""
+    negras = segundos * bpm / 60  # se elige la figura más cercana (cada una dura el doble que la siguiente)
+    return ("redonda" if negras >= 2.83 else "blanca" if negras >= 1.41 else "negra" if negras >= 0.71
+            else "corchea" if negras >= 0.354 else "semicorchea")
+
+
+def columnas(notas):
+    """Agrupa las notas que suenan a la vez (acordes): [[índice, …], …] en orden de inicio."""
+    cols = []
+    for i in sorted(range(len(notas)), key=lambda i: (notas[i][0], notas[i][2])):
+        if cols and notas[i][0] - notas[cols[-1][0]][0] <= UNION_S:
+            cols[-1].append(i)
+        else:
+            cols.append([i])
+    return cols
+
+
+def solfeo(midi):
+    return NOMBRES[midi % 12]
 
 
 def nombre_nota(midi):

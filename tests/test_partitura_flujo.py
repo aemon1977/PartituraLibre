@@ -63,6 +63,18 @@ class Flujo(Aislada):
         for f, contenido in antes.items():
             self.assertEqual((self.dir / fin[f]).read_bytes(), contenido, f"se modificó la primera versión de {f}")
 
+    def test_la_clave_elegida_y_los_nombres_de_nota_llegan_al_musicxml(self):
+        wav = escribir_wav(self.dir / "escala.wav", [(m, 0.5) for m in ESCALA])
+        eventos, codigo = ejecutar({"cmd": "transcribir", "audio": str(wav), "carpeta": str(self.dir), "nombre": "en fa",
+                                    "clave": "fa", "nombres": True})
+        self.assertEqual(codigo, 0, eventos)
+        raiz = ET.parse(self.dir / eventos[-1]["musicxml"]).getroot()
+        self.assertEqual([(c.findtext("sign"), c.findtext("line")) for c in raiz.iter("clef")], [("F", "4")])
+        self.assertEqual([l.findtext("text") for l in raiz.iter("lyric")], ["Do", "Re", "Mi", "Fa", "Sol", "La", "Si", "Do"])
+        self.assertEqual(tonos_musicxml(self.dir / eventos[-1]["musicxml"]), ESCALA)   # la clave no cambia las notas
+        sin, _ = ejecutar({"cmd": "regenerar", "notas": str(self.dir / eventos[-1]["notas"]), "carpeta": str(self.dir), "nombre": "sin nombres"})
+        self.assertEqual(list(ET.parse(self.dir / sin[-1]["musicxml"]).getroot().iter("lyric")), [])
+
     def test_audio_troceado_conserva_la_continuidad_temporal(self):
         """Con trozos de 2 s, una nota de 3 s cruza un corte: debe salir una sola nota y los tiempos reales."""
         wav = escribir_wav(self.dir / "larga.wav", [(60, 1.0), (67, 3.0), (72, 1.5)])
@@ -109,6 +121,30 @@ class Flujo(Aislada):
         tareas.limpiar_parciales(self.dir)
         self.assertEqual(list(self.dir.glob("cancelada*")), [])
         self.assertTrue(wav.exists())
+
+
+class Notacion(unittest.TestCase):
+    def test_posicion_de_las_notas_en_cada_clave(self):
+        # Hechos de solfeo: la clave da nombre a su línea (0 = línea inferior, 2 = segunda, 8 = superior).
+        self.assertEqual(partituras.posicion(67, "sol"), (2, False))    # Sol4 en la 2.ª línea
+        self.assertEqual(partituras.posicion(60, "sol"), (-2, False))   # Do4 en la primera línea adicional inferior
+        self.assertEqual(partituras.posicion(77, "sol"), (8, False))    # Fa5 en la 5.ª línea
+        self.assertEqual(partituras.posicion(53, "fa"), (6, False))     # Fa3 en la 4.ª línea
+        self.assertEqual(partituras.posicion(60, "fa"), (10, False))    # Do4 en la primera adicional superior
+        self.assertEqual(partituras.posicion(60, "do3"), (4, False))    # Do4 en la 3.ª línea
+        self.assertEqual(partituras.posicion(60, "do4"), (6, False))    # Do4 en la 4.ª línea
+        self.assertEqual(partituras.posicion(66, "sol"), (1, True))     # Fa♯4: primer espacio, con sostenido
+        self.assertEqual(partituras.posicion(59, "sol")[0], partituras.posicion(60, "sol")[0] - 1)  # Si-Do: un solo paso
+
+    def test_nombres_figuras_acordes_y_clave_automatica(self):
+        self.assertEqual([partituras.solfeo(m) for m in (60, 62, 64, 65, 67, 69, 71, 73)], ["Do", "Re", "Mi", "Fa", "Sol", "La", "Si", "Do♯"])
+        self.assertEqual([partituras.figura(s, 120) for s in (2.0, 1.0, 0.5, 0.25, 0.12)], ["redonda", "blanca", "negra", "corchea", "semicorchea"])
+        self.assertEqual(partituras.figura(1.0, 60), "negra")           # a 60 pulsos/min un segundo es una negra
+        self.assertEqual(partituras.figura(0.37, 120), "negra")         # una negra detectada algo corta sigue siendo negra
+        notas = [[0.5, 1.0, 64, .7], [0.0, 0.5, 60, .7], [0.52, 1.0, 67, .7], [0.5, 1.0, 60, .7]]
+        self.assertEqual(partituras.columnas(notas), [[1], [3, 0, 2]])  # un acorde Do-Mi-Sol tras un Do suelto
+        self.assertEqual(partituras.clave_adecuada([[0, 1, m, .7] for m in (60, 64, 67)]), "sol")
+        self.assertEqual(partituras.clave_adecuada([[0, 1, m, .7] for m in (40, 43, 48)]), "fa")
 
 
 class Integracion(unittest.TestCase):

@@ -4,60 +4,15 @@ import shutil
 from pathlib import Path
 
 from PySide6.QtCore import Qt, QTimer, Signal
-from PySide6.QtGui import QColor, QPainter
-from PySide6.QtWidgets import (QAbstractItemView, QCheckBox, QFileDialog, QHBoxLayout, QHeaderView, QLineEdit, QProgressBar,
+from PySide6.QtWidgets import (QAbstractItemView, QCheckBox, QComboBox, QFileDialog, QHBoxLayout, QHeaderView, QLineEdit, QProgressBar,
                                QScrollArea, QSpinBox, QTableWidget, QTableWidgetItem, QVBoxLayout, QWidget)
 
 from .. import config, editor, lanzar, partituras, proyectos, rutas, tareas
 from . import tema
 from .captura import PanelCaptura
+from .pentagrama import Pentagrama
 
-PX_S = 70  # píxeles por segundo en la vista de notas
 SEGMENTO_VIVO_S = 3  # cada cuánto se analiza lo recién grabado para el borrador en vivo
-
-
-class VistaNotas(QWidget):
-    """Rollo de piano: cada nota es una barra (tiempo → derecha, agudo → arriba)."""
-    elegida = Signal(int)
-
-    def __init__(self):
-        super().__init__()
-        self.notas, self.sel = [], -1
-        self.setMinimumHeight(140)
-
-    def poner(self, notas, sel=-1):
-        self.notas, self.sel = notas, sel
-        self.setMinimumWidth(int(max((n[1] for n in notas), default=0) * PX_S) + 40)
-        self.update()
-
-    def _geometria(self):
-        tonos = [n[2] for n in self.notas] or [60]
-        bajo, alto = min(tonos) - 2, max(tonos) + 2
-        return bajo, max(4.0, (self.height() - 8) / (alto - bajo + 1))
-
-    def _rect(self, n, bajo, paso):
-        y = self.height() - 4 - (n[2] - bajo + 1) * paso
-        return int(n[0] * PX_S) + 4, int(y), max(3, int((n[1] - n[0]) * PX_S)), max(3, int(paso) - 1)
-
-    def paintEvent(self, _):
-        g = QPainter(self)
-        g.fillRect(self.rect(), QColor("#0c1929"))
-        bajo, paso = self._geometria()
-        g.setPen(QColor("#152a44"))
-        for s in range(0, self.width() // PX_S + 1):
-            g.drawLine(s * PX_S + 4, 0, s * PX_S + 4, self.height())
-        g.setPen(Qt.NoPen)
-        for i, n in enumerate(self.notas):
-            g.setBrush(QColor("#fbbf24" if i == self.sel else tema.ACENTO))
-            g.drawRoundedRect(*self._rect(n, bajo, paso), 2, 2)
-
-    def mousePressEvent(self, ev):
-        bajo, paso = self._geometria()
-        for i, n in enumerate(self.notas):
-            x, y, w, h = self._rect(n, bajo, paso)
-            if x <= ev.position().x() <= x + w and y <= ev.position().y() <= y + h:
-                self.elegida.emit(i)
-                return
 
 
 class PaginaPartituras(QWidget):
@@ -116,20 +71,33 @@ class PaginaPartituras(QWidget):
 
 
         # -- columna derecha: revisión -------------------------------------
-        self.vista = VistaNotas()
+        a = config.cargar()
+        self.vista = Pentagrama()
         self.vista.elegida.connect(lambda i: self.tabla.selectRow(i))
+        self.clave = QComboBox()
+        self.clave.addItem("Clave automática", "")
+        for codigo, (nombre, _, _) in partituras.CLAVES.items():
+            self.clave.addItem(nombre, codigo)
+        self.clave.setCurrentIndex(max(0, self.clave.findData(a["clave"])))
+        self.clave.setToolTip("Clave del pentagrama. También se usa en el MusicXML de la próxima partitura o versión que crees.")
+        self.nombres = QCheckBox("Nombres de las notas")
+        self.nombres.setChecked(a["nombres"])
+        self.nombres.setToolTip("Escribe Do, Re, Mi… bajo cada nota, aquí y en el MusicXML/PDF")
+        self.clave.currentIndexChanged.connect(self._cambio_de_vista)
+        self.nombres.toggled.connect(self._cambio_de_vista)
         rollo = self.rollo = QScrollArea()
         rollo.setWidget(self.vista)
         rollo.setWidgetResizable(True)
-        rollo.setFixedHeight(160)
+        rollo.setFixedHeight(208)
         self.tabla = QTableWidget(0, 4)
         self.tabla.setHorizontalHeaderLabels(["Inicio (s)", "Duración (s)", "Nota MIDI", "Nombre"])
         self.tabla.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
         self.tabla.verticalHeader().setDefaultSectionSize(26)
+        self.tabla.setMinimumHeight(88)
         self.tabla.setSelectionBehavior(QAbstractItemView.SelectRows)
         self.tabla.setAlternatingRowColors(True)
         self.tabla.itemChanged.connect(self._celda_editada)
-        self.tabla.itemSelectionChanged.connect(lambda: (self.vista.poner(self.notas, self.tabla.currentRow()), self._botones()))
+        self.tabla.itemSelectionChanged.connect(lambda: (self._dibujar(), self._botones()))
         self.b_sube = tema.boton("+ semitono", lambda: self._mover(1))
         self.b_baja = tema.boton("− semitono", lambda: self._mover(-1))
         self.b_anadir = tema.boton("Añadir nota", self._anadir)
@@ -145,7 +113,10 @@ class PaginaPartituras(QWidget):
         self.b_carpeta = tema.boton("Ver carpeta", lambda: tema.abrir_en_sistema(self.proyecto))
         self.e_editor = tema.etiqueta("", "tenue")
         t3, v3 = tema.tarjeta("3 · Revisar, corregir y exportar")
-        v3.addWidget(tema.etiqueta(partituras.LIMITACIONES, "aviso"))
+        aviso = tema.etiqueta(partituras.AVISO_BREVE, "aviso")
+        aviso.setToolTip(partituras.LIMITACIONES)
+        v3.addWidget(aviso)
+        v3.addLayout(tema.fila(self.clave, self.nombres, None))
         v3.addWidget(rollo)
         v3.addWidget(self.tabla, 1)
         v3.addLayout(tema.fila(self.b_sube, self.b_baja, self.b_anadir, self.b_borrar, None))
@@ -207,7 +178,8 @@ class PaginaPartituras(QWidget):
         self.b_musescore.setEnabled(bool(exe) and (hay or self.externa is not None))
         self.b_pdf.setEnabled(bool(exe) and (hay or self.externa is not None))
         self.b_existente.setEnabled(bool(exe))
-        self.e_editor.setText(f"Editor: MuseScore ({origen})." if exe else
+        self.e_editor.setVisible(not exe)
+        self.e_editor.setText("" if exe else
                               "MuseScore no está disponible: edición gráfica y PDF desactivados. Descárgalo en Ajustes (portable).")
 
     def _pintar_destino(self):
@@ -311,14 +283,14 @@ class PaginaPartituras(QWidget):
 
     def transcribir(self):
         self._lanzar({"cmd": "transcribir", "audio": str(self._audio()), "carpeta": str(self.proyecto),
-                      "nombre": self.proyecto.name, "bpm": self.tempo.value() or None}, "Preparando el análisis…")
+                      "nombre": self.proyecto.name, "bpm": self.tempo.value() or None, **self._notacion()}, "Preparando el análisis…")
 
     def regenerar(self):
         edicion = rutas.TEMP / "edicion.notas.json"
         rutas.TEMP.mkdir(exist_ok=True)
         partituras.guardar_notas(edicion, self.tempo.value() or self.bpm, self.notas)
         self._lanzar({"cmd": "regenerar", "notas": str(edicion), "carpeta": str(self.proyecto),
-                      "nombre": self.proyecto.name, "bpm": self.tempo.value() or None}, "Creando la nueva versión…")
+                      "nombre": self.proyecto.name, "bpm": self.tempo.value() or None, **self._notacion()}, "Creando la nueva versión…")
 
     def cancelar(self):
         if self.tarea:
@@ -375,8 +347,24 @@ class PaginaPartituras(QWidget):
         self._cargando = False
         if 0 <= sel < len(self.notas):
             self.tabla.selectRow(sel)
-        self.vista.poner(self.notas, sel)
+        self._dibujar()
         self._botones()
+
+    def _dibujar(self):
+        sel = self.tabla.currentRow()
+        self.vista.poner(self.notas, sel, self.tempo.value() or self.bpm, self.clave.currentData(), self.nombres.isChecked())
+        if sel >= 0:  # la nota elegida en la tabla queda a la vista en el pentagrama
+            self.rollo.ensureVisible(self.vista.x_de(sel), self.vista.height() // 2, 120, 0)
+
+    def _cambio_de_vista(self):
+        a = config.cargar()
+        a["clave"], a["nombres"] = self.clave.currentData(), self.nombres.isChecked()
+        config.guardar(a)
+        self._dibujar()
+
+    def _notacion(self):
+        """Clave y nombres que se escriben en el MusicXML."""
+        return {"clave": self.clave.currentData(), "nombres": self.nombres.isChecked()}
 
     def _celda_editada(self, it):
         if self._cargando:

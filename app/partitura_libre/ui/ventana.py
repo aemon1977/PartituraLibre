@@ -19,7 +19,7 @@ class Ventana(QMainWindow):
         super().__init__()
         self.setWindowTitle("Partitura Libre")
         self.setWindowIcon(tema.icono())
-        self.resize(1280, 800)
+        self.resize(1280, 840)
 
         self.partituras, self.letras = PaginaPartituras(), PaginaLetras()
         ocupada = lambda: self.partituras.ocupada or self.letras.ocupada

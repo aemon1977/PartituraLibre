@@ -6,7 +6,7 @@ Equipo de pruebas: Debian 13 (trixie) x86_64 real, sesión Wayland con PipeWire,
 
 Cada prueba se clasifica como **superada**, **fallida** o **no ejecutable aquí**.
 
-## 1. Pruebas automatizadas — superadas (63 de 63, ninguna omitida)
+## 1. Pruebas automatizadas — superadas (66 de 66, ninguna omitida)
 
 Se ejecutan con `./herramientas/probar.sh`, siempre con el Python del paquete. Usan los motores reales, no simulacros.
 
@@ -14,7 +14,7 @@ Se ejecutan con `./herramientas/probar.sh`, siempre con el Python del paquete. U
 |---|---|---|
 | `test_dependencias` | 7 | El intérprete en uso es el del paquete (3.11); `sounddevice` y `soundfile` se cargan desde `runtime/`; una dependencia ausente se detecta y se nombra; con el Python del sistema el programa se niega a abrir y dice cómo arrancar; el diagnóstico no filtra rutas personales |
 | `test_audio` | 11 | Señal sintética guardada idéntica muestra a muestra; pausa; cola saturada y desbordamiento notificados y toma marcada incompleta; disco lleno conserva lo grabado; WAV válido antes de cerrarse; cancelar borra; segmentos en vivo contiguos; **sesión simulada de 40 min** sin pérdidas |
-| `test_partitura_flujo` | 9 | WAV sintético (escala de Do) → notas exactas → MIDI → MusicXML; corrección manual crea versión nueva sin tocar la anterior; nota que cruza trozos no se parte; silencio no inventa notas; archivo ilegible da error explicado; cancelación sin restos |
+| `test_partitura_flujo` | 12 | **Pentagrama:** posición de las notas en clave de Sol, Fa y Do (3.ª y 4.ª), figuras, acordes; la clave elegida y los nombres Do-Re-Mi llegan al MusicXML. Además: | WAV sintético (escala de Do) → notas exactas → MIDI → MusicXML; corrección manual crea versión nueva sin tocar la anterior; nota que cruza trozos no se parte; silencio no inventa notas; archivo ilegible da error explicado; cancelación sin restos |
 | `test_letras_flujo` | 6 | Audio libre en español: idioma detectado, palabras esperadas, tiempos crecientes, exportación y reimportación; idioma manual; error sin tumbar el motor; el modo «voz cantada» no da por bueno texto en música sin voz |
 | `test_exportar` | 9 | SRT, VTT y LRC exactos; ida y vuelta; texto editado conserva tiempos; una línea nueva no recibe un tiempo inventado |
 | `test_rutas_proyectos` | 10 | Nombres con tildes y caracteres prohibidos; nombres únicos; audio asociado a resultados; toma interrumpida marcada y conservada; solo se borran proyectos |
@@ -52,6 +52,10 @@ Con los dispositivos `default` y `pulse` del equipo se grabaron 4 s con 1 s de p
 Descarga de 195 MB con sha256, extracción en `runtime/musescore` y exportación a PDF de un MusicXML y de un MIDI generados por la app (PDF válidos; la partitura de la escala se revisó a la vista: ocho negras de Do4 a Do5 en 4/4). Con `HOME` vacío no escribió nada fuera de la carpeta.
 
 - **No ejecutable aquí:** la edición interactiva en la ventana de MuseScore (no se abrieron ventanas en tu escritorio).
+
+### Pentagrama (añadido después)
+
+Revisado a la vista en las cuatro claves con una escala, figuras de redonda a semicorchea, un sostenido y un acorde; y dentro de la app con una melodía conocida (Mi Mi Fa Sol Sol Fa Mi Re Do…). Un MusicXML generado en clave de Do en 3.ª con nombres se renderizó en MuseScore con la clave y los nombres correctos.
 
 ## 7. Comparación de modelos de voz — superada
 
@@ -98,6 +102,7 @@ Ninguna en el estado entregado. Fallos encontrados por las pruebas y corregidos 
 5. MuseScore portable creaba `~/Documents/MuseScore4` y solo arranca con X11 → `HOME`/`XDG` propios y `xcb`.
 6. Botones de semitono inactivos al seleccionar una nota.
 8. En Linux no se podía elegir entre los micrófonos reales (solo nombres ALSA) → lista del servidor de sonido.
+10. El pentagrama dibujaba como corchea una negra detectada algo corta → se elige la figura más cercana.
 9. El borrador en vivo perdía la nota que empezaba justo en el corte entre segmentos → regla de integración corregida.
 7. Lanzador de Linux: la búsqueda de Python abortaba con `set -e`.
 

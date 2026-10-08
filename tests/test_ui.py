@@ -65,9 +65,17 @@ class Interfaz(Aislada):
         self.assertEqual([n[2] for n in p.notas], ESCALA)
         self.assertEqual(p.tabla.rowCount(), 8)
         self.assertEqual(p.tabla.item(0, 3).text(), "Do4")
+        self.assertFalse(p.b_sube.isEnabled())            # sin nota elegida no hay nada que mover
+        from partitura_libre.ui import pentagrama                       # el pentagrama muestra esas mismas notas
+        self.assertIsNotNone(pentagrama.fuente_musical(), "no se cargó la fuente de notación incluida")
+        self.assertEqual((len(p.vista.notas), p.vista.clave, p.vista.nombres), (8, "sol", True))
+        p.clave.setCurrentIndex(p.clave.findData("do3"))
+        self.assertEqual(p.vista.clave, "do3")
+        p.vista.grab()                                                  # se dibuja sin errores
+        p.vista.elegida.emit(5)                                         # clic en una nota del pentagrama
+        self.assertEqual(p.tabla.currentRow(), 5)
         self.assertTrue(p.b_regenerar.isEnabled() and p.b_midi.isEnabled() and p.b_xml.isEnabled())
 
-        self.assertFalse(p.b_sube.isEnabled())            # sin nota elegida no hay nada que mover
         p.tabla.selectRow(2)
         self.assertTrue(p.b_sube.isEnabled() and p.b_baja.isEnabled() and p.b_borrar.isEnabled())
         p._mover(-1)                                    # Mi -> Mi bemol

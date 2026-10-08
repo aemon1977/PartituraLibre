@@ -92,10 +92,10 @@ def estimar_bpm(x, sr):
         return 120
 
 
-def escribir(notas, bpm, carpeta, nombre, titulo):
+def escribir(notas, bpm, carpeta, nombre, titulo, clave="", nombres=False):
     """Escribe nombre.notas.json, nombre.mid y nombre.musicxml sin pisar nada."""
     import pretty_midi
-    from music21 import converter, metadata
+    from music21 import clef, converter, metadata
 
     carpeta = Path(carpeta)
     base = rutas.ruta_unica(carpeta, nombre, ".mid", (".musicxml", ".notas.json")).with_suffix("")
@@ -112,6 +112,16 @@ def escribir(notas, bpm, carpeta, nombre, titulo):
 
     partitura = converter.parse(str(p_mid), format="midi")
     partitura.metadata = metadata.Metadata(title=titulo, composer="Transcripción automática · Partitura Libre")
+    elegida = {"sol": clef.TrebleClef, "fa": clef.BassClef, "do3": clef.AltoClef, "do4": clef.TenorClef}.get(clave)
+    for parte in partitura.parts:
+        if elegida:
+            for c in list(parte.recurse().getElementsByClass(clef.Clef)):
+                c.activeSite.remove(c)
+            (parte.getElementsByClass("Measure").first() or parte).insert(0, elegida())
+        if nombres:  # Do, Re, Mi… bajo cada nota, como letra
+            for n in parte.recurse().notes:
+                if n.tie is None or n.tie.type == "start":
+                    n.addLyric(" ".join(partituras.solfeo(p.midi) for p in n.pitches))
     partitura.write("musicxml", fp=str(p_xml))
     p_notas.write_text(json.dumps({"bpm": bpm, "notas": notas}), encoding="utf-8")
     for p, f in ((p_notas, f_notas), (p_mid, f_mid), (p_xml, f_xml)):
@@ -136,7 +146,8 @@ def main():
         else:
             d = json.loads(Path(o["notas"]).read_text(encoding="utf-8"))
             notas, bpm = d["notas"], o.get("bpm") or d.get("bpm", 120)
-        emitir("fin", **escribir(notas, bpm, o["carpeta"], o["nombre"], o.get("titulo", o["nombre"])))
+        emitir("fin", **escribir(notas, bpm, o["carpeta"], o["nombre"], o.get("titulo", o["nombre"]),
+                                 o.get("clave", ""), o.get("nombres", False)))
         return 0
     except Exception as e:
         import traceback

@@ -1,6 +1,6 @@
 # Dependencias y licencias
 
-El código propio de Partitura Libre es MIT (`LICENSE`). Nada de lo siguiente va dentro de los paquetes: se descarga en el primer arranque (o al pulsar un botón) desde su origen oficial, con versión y suma de verificación fijadas en `app/requisitos/*.txt`, los lanzadores y `app/partitura_libre/editor.py`.
+El código propio de Partitura Libre es MIT (`LICENSE`). Salvo la fuente Bravura, nada de lo siguiente va dentro de los paquetes: se descarga en el primer arranque (o al pulsar un botón) desde su origen oficial, con versión y suma de verificación fijadas en `app/requisitos/*.txt`, los lanzadores y `app/partitura_libre/editor.py`.
 
 | Componente | Para qué | Licencia | Origen |
 |---|---|---|---|
@@ -19,6 +19,7 @@ El código propio de Partitura Libre es MIT (`LICENSE`). Nada de lo siguiente va
 | librosa, resampy, scipy, scikit-learn, numba | Dependencias de Basic Pitch | ISC / BSD | PyPI |
 | pretty_midi, mido | Escritura de MIDI | MIT | PyPI |
 | music21 | MIDI a MusicXML | BSD 3 | PyPI |
+| Fuente Bravura (Steinberg) | Claves y figuras del pentagrama; **sí va incluida** en `app/partitura_libre/recursos/` | SIL Open Font License 1.1 | github.com/steinbergmedia/bravura |
 | MuseScore Studio 4.7.5 (opcional) | Edición gráfica y PDF; programa aparte | GPL v3 | github.com/musescore/MuseScore |
 
 Notas:

@@ -22,7 +22,7 @@ rutas.PROYECTOS, config.ARCHIVO = demo / "proyectos", demo / "ajustes.json"   # 
 rutas.PROYECTOS.mkdir()
 
 app, v = ventana.crear()
-v.resize(1320, 820)
+v.resize(1320, 860)
 v.show()
 print("tamaño mínimo:", v.minimumSizeHint().width(), "x", v.minimumSizeHint().height())
 
