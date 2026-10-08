@@ -1,4 +1,4 @@
-"""MuseScore Studio como editor y exportador de PDF. Nunca se instala en el sistema:
+"""MuseScore Studio como editor externo OPCIONAL (la app edita y exporta PDF por sí sola). Nunca se instala en el sistema:
 se usa una copia portable dentro de runtime/musescore o una instalación que ya exista."""
 import os
 import shutil
@@ -67,27 +67,6 @@ def abrir(archivo=None):
     subprocess.Popen([str(exe), *([str(archivo)] if archivo else [])], env=_entorno(origen),
                      stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     return True
-
-
-def exportar_pdf(partitura, pdf, espera=180):
-    """Convierte MusicXML/MIDI/MSCZ a PDF con MuseScore. Devuelve '' o el motivo del fallo."""
-    exe, origen = buscar()
-    if not exe:
-        return "No hay MuseScore disponible."
-    parcial = Path(pdf).with_name("parcial-" + Path(pdf).name)  # MuseScore decide el formato por la extensión
-    try:
-        r = subprocess.run([str(exe), "-o", str(parcial), str(partitura)], env=_entorno(origen), capture_output=True,
-                           text=True, errors="replace", timeout=espera, stdin=subprocess.DEVNULL)
-        if r.returncode != 0 or not parcial.is_file() or parcial.stat().st_size == 0:
-            return f"MuseScore no pudo crear el PDF (código {r.returncode}). {r.stderr.strip()[-300:]}"
-        os.replace(parcial, pdf)
-        return ""
-    except subprocess.TimeoutExpired:
-        return "MuseScore tardó demasiado en responder al exportar el PDF."
-    except OSError as e:
-        return f"No se pudo ejecutar MuseScore: {e}"
-    finally:
-        parcial.unlink(missing_ok=True)
 
 
 def instalar_portable(progreso=None, cancelar=None):

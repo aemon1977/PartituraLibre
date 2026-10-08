@@ -80,8 +80,9 @@ class Interfaz(Aislada):
         self.assertTrue(p.b_sube.isEnabled() and p.b_baja.isEnabled() and p.b_borrar.isEnabled())
 
         # Edición al estilo de un editor de notación: hoja con sistemas y compases, teclado y barra de figuras
-        self.assertEqual(sum(len(s) for s in p.vista.sistemas), 8)
-        self.assertEqual([c[4] for s in p.vista.sistemas for c in s], [0, 0, 0, 0, 1, 1, 1, 1])   # dos compases de 4/4
+        notas_en = lambda: [c for s in p.vista.sistemas for c in s if c["col"]]
+        self.assertEqual(len(notas_en()), 8)
+        self.assertEqual([c["compas"] for c in notas_en()], [0, 0, 0, 0, 1, 1, 1, 1])             # dos compases de 4/4
         self.assertTrue(p.b_fig["negra"].isChecked() and not p.b_fig["blanca"].isChecked())
         p._atajo("siguiente")
         self.assertEqual(p.tabla.currentRow(), 3)
@@ -97,10 +98,39 @@ class Interfaz(Aislada):
         p._atajo("anterior")
         self.assertEqual(p.tabla.currentRow(), 2)
         antes = len(p.vista.sistemas)
-        p._zoom(60); p.vista.resize(620, 400)                                                     # hoja estrecha y ampliada: más sistemas
+        p._zoom(60); p.vista.setFixedWidth(620); QApplication.processEvents()                     # hoja estrecha y ampliada: más sistemas
         self.assertGreater(len(p.vista.sistemas), antes)
-        self.assertEqual(sum(len(s) for s in p.vista.sistemas), 8)                                # sin perder ni repetir notas
-        p._zoom(-60)
+        self.assertEqual(sorted(i for c in notas_en() for i in c["col"]), list(range(8)))         # sin perder ni repetir notas
+        p._zoom(-60); p.vista.setMaximumWidth(16777215); p.vista.setMinimumWidth(560); QApplication.processEvents()
+
+        # Edición sin MuseScore: deshacer, arrastrar, mover en el tiempo, introducir con clic y PDF propio
+        original = [list(n) for n in p.notas]
+        p.tabla.selectRow(1)
+        p._atajo("arriba"); p._atajo("despues")
+        self.assertNotEqual(p.notas, original)
+        p._atajo("deshacer"); p._atajo("deshacer")
+        self.assertEqual(p.notas, original)
+        p._atajo("rehacer")
+        self.assertEqual(p.notas[1][2], original[1][2] + 1)
+        p._atajo("deshacer")
+        p.vista.arrastrada.emit(1, 72, True); p.vista.arrastrada.emit(1, 74, False)               # un arrastre = un solo paso que deshacer
+        self.assertEqual(p.notas[1][2], 74)
+        p._atajo("deshacer")
+        self.assertEqual(p.notas, original)
+        p.b_insertar.setChecked(True)
+        self.assertTrue(p.vista.insertar)
+        p.vista.insertada.emit(7, 76)                                                             # clic tras la última nota, a la altura de Mi5
+        self.assertEqual((len(p.notas), p.notas[8][2]), (9, 76))
+        self.assertAlmostEqual(p.notas[8][0], original[7][1], places=3)
+        p._atajo("deshacer")
+        p.b_insertar.setChecked(False)
+        self.assertEqual(p.notas, original)
+        pdf = self.dir / "partitura ñ.pdf"
+        self.assertEqual(p.vista.exportar_pdf(pdf), 1)
+        self.assertEqual(pdf.read_bytes()[:5], b"%PDF-")
+        self.assertGreater(pdf.stat().st_size, 3000)
+        self.assertTrue(p.b_pdf.isEnabled() and p.b_reproducir.isEnabled())
+        p.tabla.selectRow(2)
         p._mover(-1)                                    # Mi -> Mi bemol
         p.tabla.item(0, 1).setText("0,25")              # la primera nota, más corta (coma decimal española)
         self.assertEqual(p.notas[2][2], 63)
@@ -158,6 +188,45 @@ class Interfaz(Aislada):
         self.assertEqual([n[2] for n in p.notas], melodia)
         self.assertEqual(len(proyectos.leer(p.proyecto)["resultados"]), 1)
         self.assertTrue(p.b_regenerar.isEnabled())
+
+    def test_escribir_una_partitura_a_mano_guardarla_y_reabrirla_sin_musescore(self):
+        import xml.etree.ElementTree as ET
+        p = self.v.partituras
+        p.nombre.setText("escrita a mano")
+        p.nueva()
+        self.assertTrue(p.b_insertar.isChecked() and p.vista.insertar)
+        self.assertFalse(p.b_transcribir.isEnabled() or p.b_regenerar.isEnabled() or p.b_pdf.isEnabled())
+        p._figura("blanca")                                   # sin nota elegida: figura de las próximas notas
+        tras = -1
+        for tono in (60, 64, 67):
+            p.vista.insertada.emit(tras, tono)
+            tras += 1
+        p.tabla.selectRow(2)
+        p._figura("negra")
+        p.e_letra.setText("sol"); p._letra_editada()
+        self.assertEqual([n[2] for n in p.notas], [60, 64, 67])
+        self.assertEqual([round(n[1] - n[0], 2) for n in p.notas], [1.0, 1.0, 0.5])
+        self.assertEqual([round(n[0], 2) for n in p.notas], [0.0, 1.0, 2.0])          # cada una empieza donde acaba la anterior
+        self.assertEqual(p.vista.exportar_pdf(self.dir / "mano.pdf"), 1)
+
+        p.regenerar()
+        self.assertTrue(esperar(lambda: p.tarea is None))
+        self.assertEqual(self.dialogos, [])
+        xml = ET.parse(p.proyecto / p.version["musicxml"]).getroot()
+        self.assertEqual([n.findtext("pitch/step") for n in xml.iter("note") if n.find("pitch") is not None], ["C", "E", "G"])
+        self.assertEqual([l.findtext("text") for l in xml.iter("lyric") if l.get("number") == "1"], ["sol"])
+
+        # ese MusicXML se vuelve a abrir como partitura editable (lo que antes exigía MuseScore)
+        from partitura_libre import proyectos as pr
+        guardado = p.proyecto / p.version["musicxml"]
+        d2 = pr.crear("reabierta", "partitura")
+        p.abrir_proyecto(d2)
+        p._lanzar({"cmd": "importar", "partitura": str(guardado), "carpeta": str(d2), "nombre": d2.name, **p._notacion()}, "…")
+        self.assertTrue(esperar(lambda: p.tarea is None))
+        self.assertEqual(self.dialogos, [])
+        self.assertEqual([n[2] for n in p.notas], [60, 64, 67])
+        self.assertEqual([round(n[1] - n[0], 2) for n in p.notas], [1.0, 1.0, 0.5])
+        self.assertEqual(p.letra, ["", "", "sol"])
 
     def test_fallo_del_analisis_se_explica_y_conserva_el_audio(self):
         p = self.v.partituras

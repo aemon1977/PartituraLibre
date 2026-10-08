@@ -154,6 +154,16 @@ class Notacion(unittest.TestCase):
         for fig in partituras.NEGRAS:                            # ida y vuelta figura <-> segundos
             self.assertEqual(partituras.figura(partituras.segundos_de(fig, 96), 96), fig)
 
+    def test_posicion_y_nota_son_inversas_y_los_silencios_llenan_el_hueco(self):
+        for clave in partituras.CLAVES:
+            for midi in (36, 48, 60, 62, 64, 65, 67, 69, 71, 72, 84):      # notas naturales
+                self.assertEqual(partituras.midi_de(partituras.posicion(midi, clave)[0], clave), midi)
+        self.assertEqual(partituras.midi_de(2, "sol"), 67)                 # clic en la 2.ª línea en clave de Sol = Sol4
+        self.assertEqual(partituras.silencios(1.5), ["negra", "corchea"])
+        self.assertEqual(partituras.silencios(4), ["redonda"])
+        self.assertEqual(partituras.silencios(0.1), [])                    # un respiro no es un silencio
+        self.assertEqual(sum(partituras.NEGRAS[f] for f in partituras.silencios(2.75)), 2.75)
+
     def test_nombres_figuras_acordes_y_clave_automatica(self):
         self.assertEqual([partituras.solfeo(m) for m in (60, 62, 64, 65, 67, 69, 71, 73)], ["Do", "Re", "Mi", "Fa", "Sol", "La", "Si", "Do♯"])
         self.assertEqual([partituras.figura(s, 120) for s in (2.0, 1.0, 0.5, 0.25, 0.12)], ["redonda", "blanca", "negra", "corchea", "semicorchea"])

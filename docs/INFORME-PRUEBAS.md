@@ -6,7 +6,7 @@ Equipo de pruebas: Debian 13 (trixie) x86_64 real, sesión Wayland con PipeWire,
 
 Cada prueba se clasifica como **superada**, **fallida** o **no ejecutable aquí**.
 
-## 1. Pruebas automatizadas — superadas (73 de 73, ninguna omitida)
+## 1. Pruebas automatizadas — superadas (75 de 75, ninguna omitida)
 
 Se ejecutan con `./herramientas/probar.sh`, siempre con el Python del paquete. Usan los motores reales, no simulacros.
 
@@ -14,12 +14,12 @@ Se ejecutan con `./herramientas/probar.sh`, siempre con el Python del paquete. U
 |---|---|---|
 | `test_dependencias` | 7 | El intérprete en uso es el del paquete (3.11); `sounddevice` y `soundfile` se cargan desde `runtime/`; una dependencia ausente se detecta y se nombra; con el Python del sistema el programa se niega a abrir y dice cómo arrancar; el diagnóstico no filtra rutas personales |
 | `test_audio` | 11 | Señal sintética guardada idéntica muestra a muestra; pausa; cola saturada y desbordamiento notificados y toma marcada incompleta; disco lleno conserva lo grabado; WAV válido antes de cerrarse; cancelar borra; segmentos en vivo contiguos; **sesión simulada de 40 min** sin pérdidas |
-| `test_partitura_flujo` | 17 | **Pentagrama:** posición de las notas en clave de Sol, Fa y Do (3.ª y 4.ª), figuras, acordes; la clave elegida y los nombres Do-Re-Mi llegan al MusicXML. Además: WAV sintético (escala de Do) → notas exactas → MIDI → MusicXML; corrección manual crea versión nueva sin tocar la anterior; nota que cruza trozos no se parte; silencio no inventa notas; archivo ilegible da error explicado; cancelación sin restos |
+| `test_partitura_flujo` | 18 | **Pentagrama:** posición de las notas en clave de Sol, Fa y Do (3.ª y 4.ª), figuras, acordes; la clave elegida y los nombres Do-Re-Mi llegan al MusicXML. Además: WAV sintético (escala de Do) → notas exactas → MIDI → MusicXML; corrección manual crea versión nueva sin tocar la anterior; nota que cruza trozos no se parte; silencio no inventa notas; archivo ilegible da error explicado; cancelación sin restos |
 | `test_letras_flujo` | 6 | Audio libre en español: idioma detectado, palabras esperadas, tiempos crecientes, exportación y reimportación; idioma manual; error sin tumbar el motor; el modo «voz cantada» no da por bueno texto en música sin voz |
 | `test_exportar` | 10 | SRT, VTT y LRC exactos; ida y vuelta; texto editado conserva tiempos; una línea nueva no recibe un tiempo inventado |
 | `test_rutas_proyectos` | 10 | Nombres con tildes y caracteres prohibidos; nombres únicos; audio asociado a resultados; toma interrumpida marcada y conservada; solo se borran proyectos |
 | `test_limpieza` | 4 | La desinstalación borra la carpeta del programa y nada más; se niega ante cualquier otra carpeta |
-| `test_ui` | 8 | La ventana real sin pantalla: navegación, botones bloqueados según el estado, partitura y letra de principio a fin, **partitura en vivo** (una melodía conocida entra por el callback de audio y sus notas aparecen antes de detener; al detener se crea la definitiva), error explicado, cancelación, diagnóstico |
+| `test_ui` | 9 | La ventana real sin pantalla: navegación, botones bloqueados según el estado, partitura y letra de principio a fin, **partitura en vivo** (una melodía conocida entra por el callback de audio y sus notas aparecen antes de detener; al detener se crea la definitiva), error explicado, cancelación, diagnóstico |
 
 ## 2. Instalación desde cero en Debian 13 — superada
 
@@ -80,6 +80,14 @@ Rediseño al estilo de un editor de notación. Probado en la ventana real sin pa
 
 - **No ejecutable aquí:** manejo real con ratón y teclado en tu escritorio (no se abren ventanas en tu sesión).
 - La versión anterior se conserva en la etiqueta `v1.0-clasica` y en la copia `PartituraLibre-v1-clasica`, que arrancó con 12 comprobaciones correctas.
+
+### Edición y PDF sin MuseScore (añadido después) — superada sin pantalla
+
+- Partitura escrita a mano en una hoja en blanco (introducir con clic, figura, letra), guardada como MusicXML con las notas y la letra correctas, y **reabierta** desde ese MusicXML como partitura editable idéntica.
+- Deshacer y rehacer, arrastre (un arrastre = un solo paso que deshacer), desplazamiento en el tiempo.
+- **PDF propio:** una melodía con letra y silencios en 1 página A4; 260 notas en 4 páginas. Revisado a la vista convirtiendo el PDF a imagen.
+- **No ejecutable aquí:** el arrastre y los clics con un ratón real, y la reproducción (*▶ Oír*) por tus altavoces: no se hizo sonar nada en tu equipo.
+- Fallo encontrado y corregido: al reabrir un MusicXML propio, la línea de nombres Do-Re-Mi se tomaba por letra.
 
 ## 7. Comparación de modelos de voz — superada
 

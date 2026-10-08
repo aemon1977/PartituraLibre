@@ -51,7 +51,7 @@ Opcionales, solo cuando pulsas el botón correspondiente:
 | Descarga | Tamaño | Dónde |
 |---|---|---|
 | Modelo de voz `tiny` / `base` / `small` / `medium` / `large-v3` | 75 / 145 / 485 / 1530 / 3090 MB | `models/whisper/` |
-| MuseScore Studio 4.7.5 portable | 195 MB (≈ 570 MB descomprimido) | `runtime/musescore/` |
+| MuseScore Studio 4.7.5 portable (opcional; la app edita y exporta PDF sin él) | 195 MB (≈ 570 MB descomprimido) | `runtime/musescore/` |
 
 ## Uso
 
@@ -59,21 +59,38 @@ Opcionales, solo cuando pulsas el botón correspondiente:
 
 La sección está organizada como un editor de partituras:
 
-- **Arriba, dos barras.** La de archivo: *Guardar versión*, *MIDI…*, *MusicXML…*, *PDF…*, *Abrir en MuseScore*, *Abrir partitura…*, *Carpeta*, y los botones que muestran u ocultan los paneles laterales. La de notas: las cinco figuras (redonda a semicorchea), subir o bajar semitono y octava, *+ Nota*, *Borrar*, la letra de la nota elegida, la clave, los nombres Do-Re-Mi y el zoom.
-- **En el centro, la partitura** en una hoja: título, clave, compás de 4/4, barras y números de compás, figuras, nombres de nota y letra, repartida en sistemas según el ancho de la ventana.
+- **Arriba, dos barras.** La de archivo: *Nueva*, *Abrir…*, *Guardar versión*, deshacer y rehacer, *▶ Oír*, *PDF…*, *MIDI…*, *MusicXML…*, *Carpeta* y los botones que muestran u ocultan los paneles laterales. La de notas: *✎ Introducir*, las cinco figuras (redonda a semicorchea), semitono y octava arriba o abajo, mover la nota antes o después, *+ Nota*, *Borrar*, la letra de la nota elegida, la clave, los nombres Do-Re-Mi y el zoom.
+- **En el centro, la partitura** en una hoja: título, clave, compás de 4/4, barras y números de compás, figuras, silencios, nombres de nota y letra, repartida en sistemas según el ancho de la ventana.
 - **A la izquierda, el panel *Grabación*** (grabar o importar, y convertir en partitura). **A la derecha, la *Lista de notas*** con los valores exactos.
 
-Pasos:
+**Todo se hace dentro de la app; no hace falta MuseScore** para editar, oír ni sacar el PDF.
 
-1. **Grabar o importar.** Elige la entrada de audio (aparecen los micrófonos por su nombre; *Actualizar* vuelve a buscarlos), pulsa *Probar nivel* y después *Grabar*. Con *Ver las notas mientras grabo* la partitura se va dibujando **en vivo** cada 3 segundos como borrador; al detener se analiza la toma completa. También puedes importar un WAV, MP3, FLAC u OGG. La toma original se guarda siempre.
-2. **Convertir.** *Detectar notas y crear partitura* analiza el audio con Basic Pitch (se puede cancelar). El tempo se estima solo o lo fijas tú.
-3. **Partitura con letra.** Marca *Añadir la letra bajo las notas* antes de detectar: se reconoce la voz (con el modelo y el idioma elegidos en Letras, modo voz cantada) y cada palabra se coloca bajo la nota que suena en ese momento. Hace falta un modelo de voz descargado.
-4. **Corregir.** Pulsa una nota en la partitura para elegirla y usa la barra de notas o el teclado: **↑ ↓** cambian la altura (con **Ctrl**, una octava), **← →** pasan a la nota anterior o siguiente, **N** añade una nota y **Supr** la borra. Las figuras cambian su duración y el campo de letra, su palabra. En la *Lista de notas* se ajustan inicio y duración al segundo.
-5. **Guardar y exportar.** *Guardar versión* crea MIDI y MusicXML nuevos con tus cambios, sin pisar los anteriores. La clave, los nombres y la letra se escriben también en el MusicXML y el PDF. Con MuseScore: *Abrir en MuseScore* y *PDF…*.
+Tres maneras de empezar:
 
-> La partitura de la app coloca cada nota a su altura exacta, elige la figura más parecida a su duración y marca los compases según el tempo; no dibuja silencios ni ligaduras. La partitura completa es la del MusicXML (MuseScore/PDF), que se cuantiza a semicorcheas, sin tresillos.
+- **Desde un audio.** Elige la entrada de audio, *Probar nivel* y *Grabar* (con *Ver las notas mientras grabo* la partitura se dibuja en vivo como borrador), o importa un WAV, MP3, FLAC u OGG. Después, *Detectar notas y crear partitura*. Si marcas *Añadir la letra bajo las notas*, se reconoce la voz y cada palabra va bajo su nota (hace falta un modelo de voz descargado).
+- **Desde una partitura existente.** *Abrir…* convierte un MusicXML, MXL o MIDI en una partitura editable; el archivo original se guarda en el proyecto.
+- **En blanco.** *Nueva* crea una hoja vacía con el modo *Introducir* activado.
+
+Editar:
+
+| Quiero… | Cómo |
+|---|---|
+| Elegir una nota | Clic sobre ella; **← →** pasan a la anterior o la siguiente |
+| Cambiar su altura | Arrastrarla arriba o abajo, **↑ ↓** (con **Ctrl**, una octava) o los botones ♯ ♭ 8ª |
+| Cambiar su duración | Pulsar una figura |
+| Moverla en el tiempo | **Mayús + ← →** o los botones ◀ ▶ (de semicorchea en semicorchea) |
+| Escribir notas nuevas | Activar *✎ Introducir*, elegir figura y hacer clic en el pentagrama a la altura deseada; o **N** para añadir tras la nota elegida |
+| Borrar | **Supr** |
+| Poner o corregir la letra | Campo *Letra de la nota* |
+| Deshacer o rehacer | **Ctrl+Z**, **Ctrl+Y** |
+| Oír el resultado | **Espacio** o *▶ Oír* (suena desde la nota elegida, con un timbre sencillo) |
+| Ajustar al segundo | Panel *Lista de notas* |
+
+Guardar y exportar: *Guardar versión* crea MIDI y MusicXML nuevos con tus cambios, sin pisar los anteriores. *PDF…* escribe en A4 la partitura tal como la ves, con clave, nombres y letra. MuseScore es opcional: si lo tienes, aparece un botón para abrir en él el MusicXML guardado.
+
+> La hoja de la app coloca cada nota a su altura exacta, elige la figura más parecida a su duración y marca compases y silencios según el tempo. No dibuja puntillos, ligaduras, tresillos ni armaduras, y las alteraciones se escriben siempre con sostenidos. El MusicXML se cuantiza a semicorcheas.
 >
-> La detección es automática y aproximada. Va bien con una melodía o un instrumento solo. Con varios instrumentos, acordes densos o batería habrá notas falsas o ausentes: revisa siempre el resultado.
+> La detección desde audio es automática y aproximada. Va bien con una melodía o un instrumento solo. Con varios instrumentos, acordes densos o batería habrá notas falsas o ausentes: revisa siempre el resultado.
 
 ### Letras
 
@@ -96,7 +113,7 @@ Modelos de voz, MuseScore portable, **Diagnóstico** (runtime, micrófonos, moto
 
 | Sección | Archivos |
 |---|---|
-| Partituras | `.wav` (toma original), `.mid`, `.musicxml`, `.notas.json` (notas editables), `.pdf` (con MuseScore) |
+| Partituras | `.wav` (toma original), `.mid`, `.musicxml`, `.notas.json` (notas editables), `.pdf` |
 | Letras | `.wav` u original importado, `.txt`, `.letra.json` (frases con tiempos), `.srt`, `.vtt`, `.lrc` |
 
 Cada proyecto es una carpeta en `data/proyectos/` (o donde tú elijas).
@@ -116,7 +133,8 @@ Cada proyecto es una carpeta en `data/proyectos/` (o donde tú elijas).
 | «La toma está en silencio» | El micrófono está silenciado, apagado o no es la entrada elegida. Usa *Probar nivel*. |
 | «Grabación incompleta» | El equipo iba muy cargado o el disco se llenó. La toma se conserva; el aviso dice cuánto falta. |
 | La transcripción se cierra sola | Falta memoria: usa un modelo más pequeño. Detalle en `logs/motores.log`. |
-| MuseScore no arranca (Linux) | La copia portable necesita X11 o XWayland (lo normal en escritorios actuales). |
+| No suena *▶ Oír* | Usa la salida de audio predeterminada del sistema: compruébala en el control de sonido. |
+| MuseScore no arranca (Linux) | Es opcional. La copia portable necesita X11 o XWayland (lo normal en escritorios actuales). |
 | El programa se cerró mientras grababa | Al volver a abrirlo, la toma aparece como «Interrumpida» con el audio hasta el corte. |
 
 ## Versión anterior

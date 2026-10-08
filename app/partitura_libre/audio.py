@@ -87,6 +87,35 @@ def microfonos(refrescar=False):
     return sorted(lista, key=lambda d: not d["predeterminado"])
 
 
+def reproducir(notas, sr=22050):
+    """Hace sonar una lista de notas ([inicio, fin, tono, intensidad]) con un timbre sencillo, por la
+    salida predeterminada. Sirve para oír una corrección; no pretende sonar como un instrumento real."""
+    import numpy as np
+    s = sd()
+    if not notas:
+        return
+    total = max(n[1] for n in notas) + 0.3
+    x = np.zeros(int(total * sr), dtype="float32")
+    for ini, fin, tono, vel in notas:
+        t = np.arange(int(max(fin - ini, 0.05) * sr)) / sr
+        f = 440 * 2 ** ((tono - 69) / 12)
+        onda = np.sin(2 * np.pi * f * t) + 0.35 * np.sin(4 * np.pi * f * t) + 0.15 * np.sin(6 * np.pi * f * t)
+        onda *= np.minimum(1, t / 0.01) * np.exp(-2.2 * t) * np.minimum(1, (t[-1] - t) / 0.03 + 1e-3)
+        a = int(ini * sr)
+        x[a:a + len(onda)] += (0.25 + 0.3 * vel) * onda[:len(x) - a].astype("float32")
+    try:
+        s.play(x / max(1.0, float(abs(x).max())), sr)
+    except Exception as e:
+        raise ErrorAudio(f"No se pudo reproducir por la salida de audio predeterminada. Detalle: {e}") from e
+
+
+def parar_reproduccion():
+    try:
+        sd().stop()
+    except Exception:
+        pass
+
+
 class EscritorWav:
     """WAV PCM16 que es válido en todo momento: la cabecera se corrige cada segundo,
     así un cierre inesperado conserva lo grabado."""

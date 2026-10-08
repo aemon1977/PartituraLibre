@@ -30,7 +30,7 @@ class PaginaAjustes(QWidget):
         self.rejilla.setHorizontalSpacing(14)
         vm.addLayout(self.rejilla)
 
-        te, ve = tema.tarjeta("Editor de partituras (MuseScore Studio)")
+        te, ve = tema.tarjeta("MuseScore Studio (opcional)")
         self.e_editor = tema.etiqueta()
         self.b_ms_bajar = tema.boton(f"Descargar MuseScore portable ({editor.PORTABLE['mb']} MB)", self._bajar_musescore)
         self.b_ms_elegir = tema.boton("Usar un MuseScore ya instalado…", self._elegir_musescore)
@@ -90,8 +90,8 @@ class PaginaAjustes(QWidget):
         self.rejilla.setColumnStretch(1, 1)
         exe, origen = editor.buscar()
         self.e_editor.setText(
-            (f"Disponible ({origen}): {exe}" if exe else "No disponible. Sin MuseScore puedes corregir notas en la tabla de Partituras "
-             "y guardar MIDI/MusicXML, pero no editar la partitura gráficamente ni exportar PDF.")
+            (f"Disponible ({origen}): {exe}" if exe else "No instalado. No hace falta: Partitura Libre edita la partitura y exporta el PDF por sí sola. "
+             "Descárgalo solo si además quieres abrir tus MusicXML en MuseScore.")
             + f"\nLa copia portable se guarda en runtime/musescore y no se instala en el sistema. {editor.LICENCIA}")
         self.b_ms_bajar.setEnabled(origen != "portable")
         self.b_ms_quitar.setEnabled(origen == "portable")

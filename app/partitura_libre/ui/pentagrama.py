@@ -1,10 +1,10 @@
 """La partitura en papel, al estilo de un editor de notación: página con título, sistemas que
-se reparten a lo ancho, clave, compás, barras de compás, figuras, nombres de nota y letra.
-Se dibuja con la fuente Bravura (SMuFL)."""
+se reparten a lo ancho, clave, compás, barras de compás, figuras, silencios, nombres de nota y
+letra. Se edita con el ratón y el teclado y se exporta a PDF. Dibujada con la fuente Bravura (SMuFL)."""
 from pathlib import Path
 
-from PySide6.QtCore import QPointF, QRect, QRectF, Qt, Signal
-from PySide6.QtGui import QColor, QFont, QFontDatabase, QFontMetrics, QPainter, QPen
+from PySide6.QtCore import QMarginsF, QPointF, QRect, QRectF, Qt, Signal
+from PySide6.QtGui import QColor, QFont, QFontDatabase, QFontMetrics, QPageLayout, QPageSize, QPainter, QPdfWriter, QPen
 from PySide6.QtWidgets import QWidget
 
 from .. import partituras
@@ -12,12 +12,15 @@ from .. import partituras
 ESP = 10            # píxeles entre dos líneas del pentagrama con el zoom al 100 %
 TEXTO_Y = 6.0       # espacios bajo la línea inferior donde empieza el texto (deja sitio a las notas graves)
 MESA, PAPEL, TINTA, ELEGIDA, TENUE = "#2f3948", "#fdfcf7", "#1b2433", "#0f9d8f", "#7a8494"
+A4_ANCHO, A4_ALTO = 1000, 1414   # hoja A4 en unidades de dibujo para el PDF
 # Símbolos SMuFL de Bravura
 G_CLAVE = {"sol": "", "fa": "", "do3": "", "do4": ""}
 G_CABEZA = {"redonda": "", "blanca": ""}
 G_NEGRA, G_SOSTENIDO, G_CUATRO = "", "", ""
 G_CORCHETE = {("corchea", True): "", ("corchea", False): "",
               ("semicorchea", True): "", ("semicorchea", False): ""}
+G_SILENCIO = {"redonda": ("", 6), "blanca": ("", 4), "negra": ("", 4),
+              "corchea": ("", 4), "semicorchea": ("", 4)}   # (símbolo, posición en el pentagrama)
 
 _familia = None
 
@@ -32,19 +35,23 @@ def fuente_musical():
 
 
 class Pentagrama(QWidget):
-    elegida = Signal(int)   # clic en una nota
-    tecla = Signal(str)     # atajos de edición: 'arriba', 'abajo', 'octava+', 'octava-', 'anterior', 'siguiente', 'borrar', 'nueva'
+    elegida = Signal(int)                 # clic en una nota
+    arrastrada = Signal(int, int, bool)   # (nota, nuevo tono, es el primer paso del arrastre)
+    insertada = Signal(int, int)          # modo introducir: (nota tras la que va, o -1 al principio; tono)
+    tecla = Signal(str)                   # atajos de edición
 
     TECLAS = {Qt.Key_Up: "arriba", Qt.Key_Down: "abajo", Qt.Key_Left: "anterior", Qt.Key_Right: "siguiente",
-              Qt.Key_Delete: "borrar", Qt.Key_Backspace: "borrar", Qt.Key_N: "nueva"}
+              Qt.Key_Delete: "borrar", Qt.Key_Backspace: "borrar", Qt.Key_N: "nueva", Qt.Key_Space: "reproducir"}
 
     def __init__(self):
         super().__init__()
         self.notas, self.sel, self.bpm, self.clave, self.nombres, self.letra = [], -1, 120, "sol", True, []
-        self.titulo, self.zoom = "", 1.0
-        self.sistemas = []   # cada sistema: {'y': línea inferior, 'cols': [(índices, x, barra_antes)], 'compas': n.º del primero}
+        self.titulo, self.zoom, self.insertar = "", 1.0, False
+        self.sistemas = []   # cada sistema: lista de piezas {'col': índices de notas (vacío = silencio), 'x', 'barra', 'ancho', 'compas', 'silencio'}
+        self._sis_y = []     # y de la línea inferior de cada sistema
         self._cajas = []     # (rectángulo, índice de nota) para elegir con el ratón
         self._papel = QRectF()
+        self._arrastre = None
         self.setFocusPolicy(Qt.StrongFocus)
         self.setMinimumWidth(560)
 
@@ -61,67 +68,78 @@ class Pentagrama(QWidget):
         self._componer()
         self.update()
 
+    def modo_insertar(self, si):
+        self.insertar = si
+        self.setCursor(Qt.CrossCursor if si else Qt.ArrowCursor)
+
     def resizeEvent(self, _):
         self._componer()
 
     def _cantado(self, col):
         return " ".join(self.letra[i] for i in col if i < len(self.letra) and self.letra[i])
 
-    def _fuente(self, px, cursiva=False, negrita=False, serif=False):
+    def _fuente(self, px, z, cursiva=False, serif=False):
         f = QFont("serif" if serif else self.font().family())
-        f.setPixelSize(max(8, round(px * self.zoom)))
+        f.setPixelSize(max(8, round(px * z)))
         f.setItalic(cursiva)
-        f.setBold(negrita)
         return f
 
-    def _componer(self):
-        """Reparte las notas en sistemas según el ancho disponible, cortando por compases cuando se puede."""
-        e, z = ESP * self.zoom, self.zoom
-        margen = 26
-        self._papel = QRectF(margen, 22, max(self.width() - 2 * margen, 500), 0)
-        izq, der = self._papel.left() + 34 * z, self._papel.right() - 30 * z
-        hay_letra = any(self.letra)
-        alto = 15 * e + (19 * z if hay_letra else 0) + (30 * z if self.nombres else 0)
-        medir = QFontMetrics(self._fuente(14, cursiva=True))
-        columnas = [(col, max(46 * z, medir.horizontalAdvance(self._cantado(col)) + 16 * z),
-                     partituras.compas(self.notas[col[0]][0], self.bpm)) for col in partituras.columnas(self.notas)]
+    def _alto_sistema(self, z):
+        return 15 * ESP * z + (19 * z if any(self.letra) else 0) + (30 * z if self.nombres else 0)
 
-        self.sistemas, actual, x, corte = [], [], 0, 0
-        def abrir():
-            nonlocal x
-            x = izq + (92 if not self.sistemas else 58) * z   # clave (+ compás 4/4 en el primer sistema)
-        abrir()
-        previo = None
-        for col, ancho, compas in columnas:
-            barra = bool(actual) and compas != previo
-            if actual and x + (14 * z if barra else 0) + ancho > der:
+    def _repartir(self, izq, der, z):
+        """Reparte notas y silencios en sistemas entre `izq` y `der`, cortando por compases cuando se puede."""
+        medir = QFontMetrics(self._fuente(14, z, cursiva=True))
+        piezas, fin_previo = [], 0.0
+        for col in partituras.columnas(self.notas):
+            inicio = partituras.pulso(self.notas[col[0]][0], self.bpm)
+            hueco = fin_previo
+            for fig in partituras.silencios(inicio - fin_previo):       # el silencio entre dos notas
+                piezas.append({"col": [], "ancho": 34 * z, "compas": int(hueco // 4), "silencio": fig})
+                hueco += partituras.NEGRAS[fig]
+            piezas.append({"col": col, "ancho": max(46 * z, medir.horizontalAdvance(self._cantado(col)) + 16 * z),
+                           "compas": int(inicio // 4), "silencio": None})
+            fin_previo = max(fin_previo, max(partituras.pulso(self.notas[i][1], self.bpm) for i in col), inicio + 0.25)
+
+        sistemas, actual, corte, previo = [], [], 0, None
+        x = izq + 92 * z                                      # clave y compás de 4/4 en el primer sistema
+        for p in piezas:
+            barra = bool(actual) and p["compas"] != previo
+            if actual and x + (14 * z if barra else 0) + p["ancho"] > der:
                 resto = actual[corte:] if 0 < corte < len(actual) and not barra else []   # el compás a medias baja entero
-                self.sistemas.append(actual[:len(actual) - len(resto)])
-                actual, corte = [], 0
-                abrir()
-                for c, _x, _b, a, cp in resto:
-                    actual.append((c, x, False, a, cp))
-                    x += a
-                barra = bool(actual) and compas != previo
+                sistemas.append(actual[:len(actual) - len(resto)])
+                actual, corte, x = [], 0, izq + 58 * z
+                for r in resto:
+                    r["x"], r["barra"] = x, False
+                    actual.append(r)
+                    x += r["ancho"]
+                barra = bool(actual) and p["compas"] != previo
             if barra:
                 x += 14 * z
                 corte = len(actual)
-            actual.append((col, x, barra, ancho, compas))
-            x += ancho
-            previo = compas
-        if actual or not self.sistemas:
-            self.sistemas.append(actual)
-        cabecera = 96 * z
+            p["x"], p["barra"] = x, barra
+            actual.append(p)
+            x += p["ancho"]
+            previo = p["compas"]
+        if actual or not sistemas:
+            sistemas.append(actual)
+        return sistemas
+
+    def _componer(self):
+        e, z = ESP * self.zoom, self.zoom
+        self._papel = QRectF(26, 22, max(self.width() - 52, 500), 0)
+        self.sistemas = self._repartir(self._papel.left() + 34 * z, self._papel.right() - 30 * z, z)
+        cabecera, alto = 96 * z, self._alto_sistema(z)
         self._sis_y = [self._papel.top() + cabecera + 8.5 * e + s * alto for s in range(len(self.sistemas))]
         self._papel.setHeight(cabecera + len(self.sistemas) * alto + 40 * z)
         self.setMinimumHeight(int(self._papel.bottom() + 26))
 
     def rect_de(self, indice):
         """Zona de una nota (para llevar la vista hasta ella)."""
-        for s, cols in enumerate(self.sistemas):
-            for col, x, *_ in cols:
-                if indice in col:
-                    return QRect(int(x) - 40, int(self._sis_y[s] - 9 * ESP * self.zoom), 120, int(16 * ESP * self.zoom))
+        for s, piezas in enumerate(self.sistemas):
+            for p in piezas:
+                if indice in p["col"]:
+                    return QRect(int(p["x"]) - 40, int(self._sis_y[s] - 9 * ESP * self.zoom), 120, int(16 * ESP * self.zoom))
         return QRect(0, 0, 1, 1)
 
     # -- dibujo ---------------------------------------------------------------
@@ -131,34 +149,38 @@ class Pentagrama(QWidget):
         g.fillRect(self.rect(), QColor(MESA))
         g.fillRect(self._papel.translated(3, 4), QColor(0, 0, 0, 70))      # sombra de la hoja
         g.fillRect(self._papel, QColor(PAPEL))
+        self._cajas = []
+        self._pintar(g, self._papel, self.sistemas, self._sis_y, self.zoom, True, 0, len(self.sistemas), self._cajas, self.sel)
+
+    def _pintar(self, g, papel, sistemas, bases, z, cabecera, primero, total, cajas, sel):
+        """Dibuja en `papel` los `sistemas` dados (del n.º `primero` de un total de `total`)."""
         familia = fuente_musical()
         g.setPen(QColor(TINTA))
         if not familia:
-            return g.drawText(self._papel, Qt.AlignCenter, "No se pudo cargar la fuente de notación (recursos/Bravura.otf).")
-        e, z = ESP * self.zoom, self.zoom
+            return g.drawText(papel, Qt.AlignCenter, "No se pudo cargar la fuente de notación (recursos/Bravura.otf).")
+        e = ESP * z
         musica = QFont(familia)
         musica.setPixelSize(round(4 * e))                 # en SMuFL, 1 em = 4 espacios
-        f_nombre, f_letra, f_peque = self._fuente(12), self._fuente(14, cursiva=True), self._fuente(10)
+        f_nombre, f_letra, f_peque = self._fuente(12, z), self._fuente(14, z, cursiva=True), self._fuente(10, z)
         linea = QPen(QColor(TINTA), max(1.0, 1.1 * z))
-        izq, der = self._papel.left() + 34 * z, self._papel.right() - 30 * z
+        izq, der = papel.left() + 34 * z, papel.right() - 30 * z
         hay_letra = any(self.letra)
 
-        g.setFont(self._fuente(24, serif=True))
-        g.drawText(QRectF(self._papel.left(), self._papel.top() + 22 * z, self._papel.width(), 34 * z), Qt.AlignCenter,
-                   self.titulo or "Partitura sin título")
-        g.setFont(self._fuente(11, serif=True))
-        g.drawText(QRectF(izq, self._papel.top() + 60 * z, der - izq, 18 * z), Qt.AlignRight,
-                   "Transcripción automática · Partitura Libre")
-        g.drawText(QRectF(izq, self._papel.top() + 60 * z, der - izq, 18 * z), Qt.AlignLeft,
-                   f"{partituras.CLAVES[self.clave][0]}   ♩ = {self.bpm}" if self.notas else partituras.CLAVES[self.clave][0])
+        if cabecera:
+            g.setFont(self._fuente(24, z, serif=True))
+            g.drawText(QRectF(papel.left(), papel.top() + 22 * z, papel.width(), 34 * z), Qt.AlignCenter,
+                       self.titulo or "Partitura sin título")
+            g.setFont(self._fuente(11, z, serif=True))
+            g.drawText(QRectF(izq, papel.top() + 60 * z, der - izq, 18 * z), Qt.AlignRight, "Partitura Libre")
+            g.drawText(QRectF(izq, papel.top() + 60 * z, der - izq, 18 * z), Qt.AlignLeft,
+                       f"{partituras.CLAVES[self.clave][0]}   ♩ = {self.bpm}" if self.notas else partituras.CLAVES[self.clave][0])
 
-        self._cajas = []
         ancho = 1.18 * e                                  # ancho de una cabeza de nota
-        for s, cols in enumerate(self.sistemas):
-            base = self._sis_y[s]                          # y de la línea inferior
+        for n, (piezas, base) in enumerate(zip(sistemas, bases)):
+            s = primero + n
             y = lambda pos: base - pos * e / 2
-            ultimo = s == len(self.sistemas) - 1
-            fin = der if not ultimo or not cols else min(der, cols[-1][1] + cols[-1][3] + 10 * z)
+            ultimo = s == total - 1
+            fin = der if not ultimo or not piezas else min(der, piezas[-1]["x"] + piezas[-1]["ancho"] + 10 * z)
             g.setPen(linea)
             for l in range(5):
                 g.drawLine(QPointF(izq, y(2 * l)), QPointF(fin, y(2 * l)))
@@ -173,15 +195,22 @@ class Pentagrama(QWidget):
             if s == 0:                                     # compás de 4/4
                 g.drawText(QPointF(izq + 46 * z, y(6)), G_CUATRO)
                 g.drawText(QPointF(izq + 46 * z, y(2)), G_CUATRO)
-            elif cols:
+            elif piezas:
                 g.setFont(f_peque)
                 g.setPen(QColor(TENUE))
-                g.drawText(QPointF(izq + 2, y(8) - 6 * z), str(cols[0][4] + 1))   # n.º de compás
+                g.drawText(QPointF(izq + 2, y(8) - 6 * z), str(piezas[0]["compas"] + 1))   # n.º de compás
 
-            for col, x, barra, _ancho, _compas in cols:
-                if barra:
+            for p in piezas:
+                x, col = p["x"], p["col"]
+                if p["barra"]:
                     g.setPen(linea)
                     g.drawLine(QPointF(x - 14 * z, y(0)), QPointF(x - 14 * z, y(8)))
+                if p["silencio"]:
+                    simbolo, pos = G_SILENCIO[p["silencio"]]
+                    g.setFont(musica)
+                    g.setPen(QColor(TINTA))
+                    g.drawText(QPointF(x + 4 * z, y(pos)), simbolo)
+                    continue
                 cantado = self._cantado(col)
                 if cantado:   # la letra, bajo el pentagrama y empezando en su nota; los nombres bajan una línea
                     g.setFont(f_letra)
@@ -192,9 +221,9 @@ class Pentagrama(QWidget):
                     pos, sostenido = partituras.posicion(tono, self.clave)
                     pos = max(-10, min(17, pos))           # fuera de ese margen no cabría en el sistema
                     fig = partituras.figura(final - ini, self.bpm)
-                    color = QColor(ELEGIDA if i == self.sel else TINTA)
+                    color = QColor(ELEGIDA if i == sel else TINTA)
                     g.setPen(QPen(color, max(1.0, 1.1 * z)))
-                    for extra in [p for p in range(-2, pos - 1, -2)] + [p for p in range(10, pos + 1, 2)]:
+                    for extra in [q for q in range(-2, pos - 1, -2)] + [q for q in range(10, pos + 1, 2)]:
                         g.drawLine(QPointF(x - 5 * z, y(extra)), QPointF(x + ancho + 5 * z, y(extra)))   # líneas adicionales
                     g.setFont(musica)
                     g.drawText(QPointF(x, y(pos)), G_CABEZA.get(fig, G_NEGRA))
@@ -207,32 +236,106 @@ class Pentagrama(QWidget):
                         g.drawLine(QPointF(xp, y(pos)), QPointF(xp, punta))
                         if (fig, arriba) in G_CORCHETE:
                             g.drawText(QPointF(xp - 0.5, punta), G_CORCHETE[(fig, arriba)])
-                    if i == self.sel:                       # marco de selección, como en un editor
+                    if i == sel:                            # marco de selección, como en un editor
                         g.setPen(QPen(QColor(ELEGIDA), 1, Qt.DashLine))
                         g.drawRoundedRect(QRectF(x - 6 * z, y(pos) - 1.1 * e, ancho + 12 * z, 2.2 * e), 3, 3)
-                    self._cajas.append((QRectF(x - 6 * z, y(pos) - e, ancho + 12 * z, 2 * e), i))
+                    if cajas is not None:
+                        cajas.append((QRectF(x - 6 * z, y(pos) - e, ancho + 12 * z, 2 * e), i))
                     if self.nombres and k < 2:              # nombres bajo el pentagrama; en acordes, del grave al agudo
                         g.setFont(f_nombre)
                         g.setPen(color)
                         g.drawText(QRectF(x - 20 * z, base + TEXTO_Y * e + (19 * z if hay_letra else 0) + 14 * z * k, ancho + 40 * z, 16 * z),
                                    Qt.AlignCenter, partituras.solfeo(tono))
-        if not self.notas:
-            g.setFont(self._fuente(13))
+        if not self.notas and cabecera and cajas is not None:
+            g.setFont(self._fuente(13, z))
             g.setPen(QColor(TENUE))
-            g.drawText(QRectF(izq, self._sis_y[0] + 5 * e, der - izq, 40 * z), Qt.AlignCenter,
-                       "Graba o importa un audio y pulsa «Detectar notas»: la partitura aparecerá aquí.")
+            g.drawText(QRectF(izq, bases[0] + 5 * e, der - izq, 40 * z), Qt.AlignCenter,
+                       "Graba o importa un audio, o pulsa «Introducir» y haz clic en el pentagrama para escribir notas.")
+
+    # -- PDF ------------------------------------------------------------------
+    def paginas(self):
+        """Reparto para imprimir en A4: lista de páginas, cada una con sus sistemas."""
+        z, margen = 1.0, 60
+        sistemas = self._repartir(margen + 34 * z, A4_ANCHO - margen - 30 * z, z)
+        alto, paginas, y = self._alto_sistema(z), [[]], margen + 96 * z
+        for s in sistemas:
+            if paginas[-1] and y + alto > A4_ALTO - margen:
+                paginas.append([])
+                y = margen
+            paginas[-1].append(s)
+            y += alto
+        return paginas
+
+    def exportar_pdf(self, ruta):
+        """Escribe la partitura en un PDF A4 (vectorial, con la fuente incrustada). Devuelve el n.º de páginas."""
+        pdf = QPdfWriter(str(ruta))
+        pdf.setPageLayout(QPageLayout(QPageSize(QPageSize.A4), QPageLayout.Portrait, QMarginsF(0, 0, 0, 0)))
+        pdf.setTitle(self.titulo or "Partitura")
+        pdf.setCreator("Partitura Libre")
+        g = QPainter(pdf)
+        try:
+            g.setRenderHint(QPainter.Antialiasing)
+            g.setWindow(0, 0, A4_ANCHO, A4_ALTO)
+            margen, alto, e = 60, self._alto_sistema(1.0), ESP
+            papel = QRectF(margen, margen, A4_ANCHO - 2 * margen, A4_ALTO - 2 * margen)
+            paginas, hechos = self.paginas(), 0
+            total = sum(len(p) for p in paginas)
+            for n, pagina in enumerate(paginas):
+                if n:
+                    pdf.newPage()
+                arriba = papel.top() + (96 if n == 0 else 0)
+                bases = [arriba + 8.5 * e + k * alto for k in range(len(pagina))]
+                self._pintar(g, papel, pagina, bases, 1.0, n == 0, hechos, total, None, -1)
+                hechos += len(pagina)
+                g.setFont(self._fuente(10, 1.0))
+                g.setPen(QColor(TENUE))
+                g.drawText(QRectF(papel.left(), A4_ALTO - 46, papel.width(), 16), Qt.AlignCenter, f"{n + 1} / {len(paginas)}")
+        finally:
+            g.end()
+        return len(paginas)
 
     # -- interacción ----------------------------------------------------------
+    def _sistema_en(self, y):
+        """(n.º de sistema, posición en el pentagrama) más cercanos a esa altura."""
+        if not self._sis_y:
+            return 0, 0
+        e = ESP * self.zoom
+        s = min(range(len(self._sis_y)), key=lambda k: abs(self._sis_y[k] - 2 * e - y))
+        return s, round((self._sis_y[s] - y) / (e / 2))
+
     def mousePressEvent(self, ev):
         self.setFocus()
         for caja, i in self._cajas:
             if caja.contains(ev.position()):
+                self._arrastre = [i, ev.position().y(), partituras.posicion(self.notas[i][2], self.clave)[0], 0, True]
                 return self.elegida.emit(i)
+        if self.insertar:   # clic en el pentagrama: nota nueva a esa altura, tras la nota que queda a su izquierda
+            s, pos = self._sistema_en(ev.position().y())
+            if -10 <= pos <= 17:
+                antes = [p for k in range(s + 1) for p in self.sistemas[k] if p["col"] and (k < s or p["x"] <= ev.position().x())]
+                self.insertada.emit(antes[-1]["col"][-1] if antes else -1, partituras.midi_de(pos, self.clave))
+
+    def mouseMoveEvent(self, ev):
+        if self._arrastre:   # arrastrar una nota arriba o abajo cambia su altura, un paso por línea o espacio
+            i, y0, pos0, ultimo, primero = self._arrastre
+            pasos = round((y0 - ev.position().y()) / (ESP * self.zoom / 2))
+            if pasos != ultimo:
+                self._arrastre[3], self._arrastre[4] = pasos, False
+                self.arrastrada.emit(i, partituras.midi_de(pos0 + pasos, self.clave), primero)
+
+    def mouseReleaseEvent(self, _):
+        self._arrastre = None
 
     def keyPressEvent(self, ev):
-        accion = self.TECLAS.get(ev.key())
-        if accion in ("arriba", "abajo") and ev.modifiers() & Qt.ControlModifier:
+        accion, ctrl, mayus = self.TECLAS.get(ev.key()), ev.modifiers() & Qt.ControlModifier, ev.modifiers() & Qt.ShiftModifier
+        if ctrl and ev.key() == Qt.Key_Z:
+            accion = "rehacer" if mayus else "deshacer"
+        elif ctrl and ev.key() == Qt.Key_Y:
+            accion = "rehacer"
+        elif accion in ("arriba", "abajo") and ctrl:
             accion = "octava+" if accion == "arriba" else "octava-"
+        elif accion in ("anterior", "siguiente") and mayus:
+            accion = "antes" if accion == "anterior" else "despues"
         if accion:
             self.tecla.emit(accion)
         else:

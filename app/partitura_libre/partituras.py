@@ -4,7 +4,7 @@ from pathlib import Path
 
 NOMBRES = ["Do", "Do♯", "Re", "Re♯", "Mi", "Fa", "Fa♯", "Sol", "Sol♯", "La", "La♯", "Si"]
 AUDIO = "*.wav *.mp3 *.flac *.ogg"
-PARTITURAS = "*.musicxml *.mxl *.xml *.mid *.midi *.mscz"
+PARTITURAS = "*.musicxml *.mxl *.xml *.mid *.midi"
 AVISO_BREVE = "Detección automática y aproximada: va mejor con una melodía o un instrumento solo. Revisa siempre el resultado."
 LIMITACIONES = ("La detección es automática y aproximada: funciona mejor con una melodía o un instrumento "
                 "aislado. Con varios instrumentos, acordes densos o batería aparecerán notas falsas o faltarán "
@@ -86,6 +86,30 @@ NEGRAS = {"redonda": 4, "blanca": 2, "negra": 1, "corchea": 0.5, "semicorchea": 
 def segundos_de(fig, bpm):
     """Duración en segundos de una figura a ese tempo."""
     return NEGRAS[fig] * 60 / bpm
+
+
+_SEMITONO = [0, 2, 4, 5, 7, 9, 11]   # Do Re Mi Fa Sol La Si
+
+
+def midi_de(pos, clave):
+    """Nota natural que corresponde a una posición del pentagrama (inversa de `posicion`)."""
+    grado = pos + CLAVES[clave][1]
+    return max(0, min(127, (grado // 7 + 1) * 12 + _SEMITONO[grado % 7]))
+
+
+def pulso(t, bpm):
+    """Instante en negras, ajustado a la semicorchea."""
+    return round(t * bpm / 60 * 4) / 4
+
+
+def silencios(negras, maximo=3):
+    """Figuras de silencio que llenan un hueco de esa duración, de mayor a menor (como mucho `maximo`)."""
+    figs = []
+    for fig, valor in NEGRAS.items():
+        while negras >= valor - 1e-6 and len(figs) < maximo:
+            figs.append(fig)
+            negras -= valor
+    return figs
 
 
 def compas(inicio, bpm, pulsos=4):

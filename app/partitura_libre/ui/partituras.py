@@ -7,7 +7,7 @@ from PySide6.QtCore import Qt, QTimer, Signal
 from PySide6.QtWidgets import (QAbstractItemView, QCheckBox, QComboBox, QFileDialog, QFrame, QHBoxLayout, QHeaderView, QLineEdit, QProgressBar,
                                QScrollArea, QSpinBox, QTableWidget, QTableWidgetItem, QVBoxLayout, QWidget)
 
-from .. import config, editor, exportar, lanzar, letras, partituras, proyectos, rutas, tareas
+from .. import audio, config, editor, exportar, lanzar, letras, partituras, proyectos, rutas, tareas
 from . import tema
 from .captura import PanelCaptura
 from .pentagrama import Pentagrama, fuente_musical
@@ -23,7 +23,7 @@ class PaginaPartituras(QWidget):
         self.setObjectName("pagina")
         self.proyecto = None   # carpeta del proyecto abierto
         self.version = None    # resultado mostrado: {'midi', 'musicxml', 'notas', …}
-        self.externa = None    # partitura existente abierta sin proyecto
+        self._hist, self._rehechos, self._fig_nueva, self._sonando = [], [], "negra", False
         self.notas, self.bpm, self.tarea, self._cargando = [], 120, None, False
         self.letra = []        # texto cantado bajo cada nota (paralela a self.notas)
         self.vivo = None       # motor del borrador en vivo mientras se graba
@@ -81,6 +81,8 @@ class PaginaPartituras(QWidget):
         self.vista.cambiar_zoom(a.get("zoom", 100) / 100)
         self.vista.elegida.connect(lambda i: self.tabla.selectRow(i))
         self.vista.tecla.connect(self._atajo)
+        self.vista.arrastrada.connect(self._arrastrar)
+        self.vista.insertada.connect(self._insertar)
         rollo = self.rollo = QScrollArea()
         rollo.setWidget(self.vista)
         rollo.setWidgetResizable(True)
@@ -92,17 +94,22 @@ class PaginaPartituras(QWidget):
                                       "Crea MIDI y MusicXML nuevos con tus correcciones (no pisa los anteriores)")
         self.b_midi = tema.boton("MIDI…", lambda: self._copiar("midi", "MIDI (*.mid)"), ayuda="Guardar una copia del MIDI")
         self.b_xml = tema.boton("MusicXML…", lambda: self._copiar("musicxml", "MusicXML (*.musicxml)"), ayuda="Guardar una copia del MusicXML")
-        self.b_pdf = tema.boton("PDF…", self.exportar_pdf, ayuda="Exportar a PDF con MuseScore")
-        self.b_musescore = tema.boton("Abrir en MuseScore", self.abrir_musescore, ayuda="Edición gráfica completa en MuseScore Studio")
-        self.b_existente = tema.boton("Abrir partitura…", self.abrir_existente,
-                                      ayuda="MusicXML, MXL, XML, MIDI o MSCZ: se abre en MuseScore")
+        self.b_pdf = tema.boton("PDF…", self.exportar_pdf, ayuda="Exportar a PDF la partitura que se ve, con tus correcciones")
+        self.b_musescore = tema.boton("MuseScore", self.abrir_musescore, ayuda="Opcional: abrir el MusicXML guardado en MuseScore Studio")
+        self.b_nueva = tema.boton("Nueva", self.nueva, ayuda="Partitura en blanco para escribirla a mano")
+        self.b_existente = tema.boton("Abrir…", self.abrir_existente,
+                                      ayuda="Abrir un MusicXML, MXL o MIDI existente como partitura editable")
+        self.b_deshacer = tema.boton("↶", lambda: self._deshacer(), ayuda="Deshacer (Ctrl+Z)")
+        self.b_rehacer = tema.boton("↷", lambda: self._deshacer(True), ayuda="Rehacer (Ctrl+Y)")
+        self.b_reproducir = tema.boton("▶ Oír", self.reproducir, ayuda="Reproducir la partitura desde la nota elegida (Espacio)")
         self.b_carpeta = tema.boton("Carpeta", lambda: tema.abrir_en_sistema(self.proyecto), ayuda="Ver la carpeta del proyecto")
         self.b_panel_izq = tema.boton("Grabación", ayuda="Mostrar u ocultar el panel de grabación y análisis")
         self.b_panel_der = tema.boton("Lista de notas", ayuda="Mostrar u ocultar la tabla con los valores exactos de cada nota")
         for b in (self.b_panel_izq, self.b_panel_der):
             b.setCheckable(True)
-        archivo = tema.herramientas(self.b_regenerar, "|", self.b_midi, self.b_xml, self.b_pdf, "|", self.b_musescore,
-                                    self.b_existente, self.b_carpeta, None, self.b_panel_izq, self.b_panel_der)
+        archivo = tema.herramientas(self.b_nueva, self.b_existente, self.b_regenerar, "|", self.b_deshacer, self.b_rehacer, "|",
+                                    self.b_reproducir, "|", self.b_pdf, self.b_midi, self.b_xml, self.b_musescore, self.b_carpeta,
+                                    None, self.b_panel_izq, self.b_panel_der)
 
         # -- barra de introducción de notas ---------------------------------------
         self.b_fig = {}
@@ -118,6 +125,12 @@ class PaginaPartituras(QWidget):
         self.b_baja = tema.boton("♭ ↓", lambda: self._mover(-1), ayuda="Bajar un semitono (flecha abajo)")
         self.b_octava_sube = tema.boton("8ª ↑", lambda: self._mover(12), ayuda="Subir una octava (Ctrl + flecha arriba)")
         self.b_octava_baja = tema.boton("8ª ↓", lambda: self._mover(-12), ayuda="Bajar una octava (Ctrl + flecha abajo)")
+        self.b_insertar = tema.boton("✎ Introducir", ayuda="Modo de introducción: cada clic en el pentagrama escribe una nota "
+                                                           "a esa altura, con la última figura pulsada")
+        self.b_insertar.setCheckable(True)
+        self.b_insertar.toggled.connect(self.vista.modo_insertar)
+        self.b_antes = tema.boton("◀", lambda: self._desplazar(-1), ayuda="Adelantar la nota una semicorchea (Mayús + ←)")
+        self.b_despues = tema.boton("▶", lambda: self._desplazar(1), ayuda="Retrasar la nota una semicorchea (Mayús + →)")
         self.b_anadir = tema.boton("+ Nota", self._anadir, ayuda="Añadir una nota después de la elegida (N)")
         self.b_borrar = tema.boton("Borrar", self._borrar, "peligro", "Borrar la nota elegida (Supr)")
         self.e_letra = QLineEdit()
@@ -136,7 +149,8 @@ class PaginaPartituras(QWidget):
         self.clave.currentIndexChanged.connect(self._cambio_de_vista)
         self.nombres.toggled.connect(self._cambio_de_vista)
         self.e_zoom = tema.etiqueta(f"{round(self.vista.zoom * 100)} %", "tenue", False)
-        notas_barra = tema.herramientas(*self.b_fig.values(), "|", self.b_sube, self.b_baja, self.b_octava_sube, self.b_octava_baja, "|",
+        notas_barra = tema.herramientas(self.b_insertar, *self.b_fig.values(), "|", self.b_sube, self.b_baja, self.b_octava_sube,
+                                        self.b_octava_baja, self.b_antes, self.b_despues, "|",
                                         self.b_anadir, self.b_borrar, "|", self.e_letra, None, self.clave, self.nombres, "|",
                                         tema.boton("−", lambda: self._zoom(-10), ayuda="Reducir"), self.e_zoom,
                                         tema.boton("+", lambda: self._zoom(10), ayuda="Ampliar"))
@@ -198,8 +212,6 @@ class PaginaPartituras(QWidget):
         return None
 
     def _archivo(self, clave):
-        if self.externa:
-            return self.externa
         if self.proyecto and self.version and self.version.get(clave):
             return self.proyecto / self.version[clave]
         return None
@@ -222,23 +234,33 @@ class PaginaPartituras(QWidget):
             if letras.instalado(modelo) else f"Primero descarga el modelo de voz «{modelo}» en la sección Letras.")
         fila = self.tabla.currentRow()
         elegida = hay and 0 <= fila < len(self.notas)
-        for b in (self.b_sube, self.b_baja, self.b_octava_sube, self.b_octava_baja, self.b_borrar, self.e_letra, *self.b_fig.values()):
+        for b in (self.b_sube, self.b_baja, self.b_octava_sube, self.b_octava_baja, self.b_antes, self.b_despues, self.b_borrar, self.e_letra):
             b.setEnabled(elegida)
-        actual = partituras.figura(self.notas[fila][1] - self.notas[fila][0], self.tempo.value() or self.bpm) if elegida else ""
+        for b in self.b_fig.values():   # sin nota elegida, las figuras eligen la duración de la próxima nota que se introduzca
+            b.setEnabled(hay)
+        actual = partituras.figura(self.notas[fila][1] - self.notas[fila][0], self.tempo.value() or self.bpm) if elegida else self._fig_nueva
         for fig, b in self.b_fig.items():
             b.setChecked(fig == actual)
         if not self.e_letra.hasFocus():
             self.e_letra.setText(self.letra[fila] if elegida and fila < len(self.letra) else "")
+        guardada = hay and bool(self.version.get("midi"))
         self.b_anadir.setEnabled(hay)
+        self.b_insertar.setEnabled(hay)
+        if not hay and self.b_insertar.isChecked():
+            self.b_insertar.setChecked(False)
+        self.b_deshacer.setEnabled(hay and bool(self._hist))
+        self.b_rehacer.setEnabled(hay and bool(self._rehechos))
+        self.b_reproducir.setEnabled(bool(self.notas) and not grabando)
         self.b_regenerar.setEnabled(hay and bool(self.notas))
-        self.b_midi.setEnabled(hay)
-        self.b_xml.setEnabled(hay)
+        self.b_pdf.setEnabled(hay and bool(self.notas))
+        self.b_midi.setEnabled(guardada)
+        self.b_xml.setEnabled(guardada)
         self.b_carpeta.setEnabled(self.proyecto is not None)
-        self.b_musescore.setEnabled(bool(exe) and (hay or self.externa is not None))
-        self.b_pdf.setEnabled(bool(exe) and (hay or self.externa is not None))
-        self.b_existente.setEnabled(bool(exe))
-        self.e_editor.setText("↑ ↓ cambian la altura · ← → cambian de nota · N añade · Supr borra" if exe else
-                              "MuseScore no está disponible: edición gráfica y PDF desactivados. Descárgalo en Ajustes (portable).")
+        self.b_nueva.setEnabled(not analizando and not grabando)
+        self.b_existente.setEnabled(not analizando and not grabando)
+        self.b_musescore.setVisible(bool(exe))       # opcional: solo aparece si hay un MuseScore disponible
+        self.b_musescore.setEnabled(guardada)
+        self.e_editor.setText("Clic elige · arrastrar o ↑ ↓ cambia la altura · ← → cambia de nota · Mayús+← → la mueve · N añade · Supr borra · Ctrl+Z deshace · Espacio suena")
 
     def _pintar_destino(self):
         self.e_destino.setText(f"Se guardará en: {self.destino or rutas.PROYECTOS}"
@@ -279,7 +301,7 @@ class PaginaPartituras(QWidget):
         grabando = self.captura.grabando
         if grabando and not self._grababa:      # empieza una toma: lienzo en blanco y motor en marcha
             self._hubo_vivo = self.en_vivo.isChecked() and lanzar.instalado("partituras")
-            self.proyecto = self.version = self.externa = None
+            self.proyecto = self.version = None
             self._ultima, self.letra = {}, []
             self._poner_notas([], 120)
             self.e_toma.setText("Grabando una toma nueva…")
@@ -314,7 +336,8 @@ class PaginaPartituras(QWidget):
                                      self.tabla.scrollToBottom()))
 
     def abrir_proyecto(self, carpeta):
-        self.proyecto, self.externa, self.version = Path(carpeta), None, None
+        self.proyecto, self.version = Path(carpeta), None
+        self._hist, self._rehechos = [], []
         d = proyectos.leer(self.proyecto)
         versiones = [r for r in d["resultados"] if r["tipo"] == "partitura" and (self.proyecto / r["notas"]).is_file()]
         marca = "  ·  ⚠ toma incompleta" if d.get("incompleta") else ""
@@ -325,6 +348,8 @@ class PaginaPartituras(QWidget):
             self._mostrar(versiones[-1])
         else:
             self.letra = []
+            if not d.get("audio"):
+                self.version = {}             # partitura escrita a mano que aún no se ha guardado: se puede editar
             self._poner_notas([], 120)
         self._botones()
 
@@ -472,7 +497,7 @@ class PaginaPartituras(QWidget):
 
     def _dibujar(self):
         sel = self.tabla.currentRow()
-        titulo = self.proyecto.name if self.proyecto else self.externa.name if self.externa else ""
+        titulo = self.proyecto.name if self.proyecto else ""
         self.vista.poner(self.notas, sel, self.tempo.value() or self.bpm, self.clave.currentData(), self.nombres.isChecked(), self.letra, titulo)
         if sel >= 0:  # la nota elegida queda a la vista en la partitura
             r = self.vista.rect_de(sel)
@@ -492,6 +517,7 @@ class PaginaPartituras(QWidget):
         if self._cargando:
             return
         i, n = it.row(), self.notas[it.row()]
+        self._recordar()
         if it.column() == 4:  # letra de esa nota: texto libre
             self.letra[i] = it.text().strip()
             return self._poner_notas(self.notas, self.bpm, i)
@@ -516,19 +542,30 @@ class PaginaPartituras(QWidget):
         elif accion == "nueva":
             if self.b_anadir.isEnabled():
                 self._anadir()
+        elif accion == "reproducir":
+            if self.b_reproducir.isEnabled():
+                self.reproducir()
+        elif accion in ("deshacer", "rehacer"):
+            self._deshacer(accion == "rehacer")
         elif self.b_borrar.isEnabled():  # solo se edita una partitura ya creada, no un borrador ni durante un análisis
             {"arriba": lambda: self._mover(1), "abajo": lambda: self._mover(-1), "octava+": lambda: self._mover(12),
-             "octava-": lambda: self._mover(-12), "borrar": self._borrar}[accion]()
+             "octava-": lambda: self._mover(-12), "borrar": self._borrar, "antes": lambda: self._desplazar(-1),
+             "despues": lambda: self._desplazar(1)}[accion]()
 
     def _figura(self, fig):
+        self._fig_nueva = fig                 # también es la figura de la próxima nota que se introduzca
         i = self.tabla.currentRow()
+        if i < 0:
+            return self._botones()
         if i >= 0:
+            self._recordar()
             self.notas[i][1] = self.notas[i][0] + partituras.segundos_de(fig, self.tempo.value() or self.bpm)
             self._poner_notas(self.notas, self.bpm, i)
 
     def _letra_editada(self):
         i = self.tabla.currentRow()
         if 0 <= i < len(self.letra) and self.letra[i] != self.e_letra.text().strip():
+            self._recordar()
             self.letra[i] = self.e_letra.text().strip()
             self._poner_notas(self.notas, self.bpm, i)
 
@@ -547,12 +584,14 @@ class PaginaPartituras(QWidget):
     def _mover(self, semitonos):
         i = self.tabla.currentRow()
         if i >= 0:
+            self._recordar()
             self.notas[i][2] = max(0, min(127, self.notas[i][2] + semitonos))
             self._poner_notas(self.notas, self.bpm, i)
 
     def _anadir(self):
         i = self.tabla.currentRow()
         base = self.notas[i] if i >= 0 else [0.0, 0.0, 60, 0.7]
+        self._recordar()
         self.notas.insert(i + 1, [base[1], base[1] + 0.5, base[2], 0.7])
         self.letra.insert(i + 1, "")
         self._poner_notas(self.notas, self.bpm, i + 1)
@@ -560,6 +599,7 @@ class PaginaPartituras(QWidget):
     def _borrar(self):
         i = self.tabla.currentRow()
         if i >= 0:
+            self._recordar()
             del self.notas[i]
             del self.letra[i:i + 1]
             self._poner_notas(self.notas, self.bpm, min(i, len(self.notas) - 1))
@@ -578,33 +618,111 @@ class PaginaPartituras(QWidget):
         if not editor.abrir(self._archivo("musicxml")):
             tema.error(self, "MuseScore no disponible", "No se encontró MuseScore. Descárgalo en Ajustes (versión portable).")
 
+    def nueva(self):
+        """Partitura en blanco para escribirla a mano, sin audio."""
+        try:
+            d = proyectos.crear(self.nombre.text().strip() or "Partitura nueva", "partitura", self.destino or None)
+        except OSError as e:
+            return tema.error(self, "No se pudo crear la partitura", f"{e}\n\nElige otra carpeta de destino.")
+        self.nombre.clear()
+        self.abrir_proyecto(d)
+        self.version = {}                     # partitura abierta y editable, aún sin archivos guardados
+        self.b_insertar.setChecked(True)
+        self.e_estado.setText("Partitura en blanco: con «Introducir» activado, haz clic en el pentagrama para escribir notas.")
+        self._botones()
+        self.cambio.emit()
+
     def abrir_existente(self):
+        """Convierte un MusicXML, MXL o MIDI en una partitura editable dentro de un proyecto nuevo."""
         ruta, _ = QFileDialog.getOpenFileName(self, "Abrir partitura", str(rutas.DATOS), f"Partituras ({partituras.PARTITURAS})")
-        if ruta:
-            self.proyecto, self.version, self.externa = None, None, Path(ruta)
-            self.letra = []
-            self._poner_notas([], 120)
-            self.e_toma.setText(f"Partitura existente: <b>{Path(ruta).name}</b> (se edita en MuseScore)")
-            editor.abrir(ruta)
+        if not ruta:
+            return
+        try:
+            d = proyectos.crear(Path(ruta).stem, "partitura", self.destino or None)
+            copia = rutas.ruta_unica(d, "original " + Path(ruta).stem, Path(ruta).suffix.lower())
+            shutil.copy2(ruta, copia)         # el archivo original se conserva en el proyecto
+        except OSError as e:
+            return tema.error(self, "No se pudo abrir", f"{e}\n\nComprueba que el archivo existe y que hay espacio libre.")
+        self.abrir_proyecto(d)
+        self.cambio.emit()
+        self._lanzar({"cmd": "importar", "partitura": str(copia), "carpeta": str(d), "nombre": d.name, **self._notacion()},
+                     "Leyendo la partitura…")
 
     def exportar_pdf(self):
-        origen = self._archivo("musicxml")
-        ruta, _ = QFileDialog.getSaveFileName(self, "Exportar PDF", str(origen.with_suffix(".pdf")), "PDF (*.pdf)")
+        """PDF generado por la propia app a partir de la partitura que se ve (con tus correcciones)."""
+        base = (self.proyecto / self.proyecto.name) if self.proyecto else rutas.DATOS / "partitura"
+        ruta, _ = QFileDialog.getSaveFileName(self, "Exportar PDF", str(base) + ".pdf", "PDF (*.pdf)")
         if not ruta or not tema.avisar_si_externo(self, ruta):
             return
-        self.e_estado.setText("Exportando PDF con MuseScore…")
-        self.b_pdf.setEnabled(False)
+        try:
+            paginas = self.vista.exportar_pdf(ruta)
+            self.e_estado.setText(f"PDF guardado ({paginas} página{'s' if paginas != 1 else ''}) en {ruta}")
+        except OSError as e:
+            tema.error(self, "No se pudo exportar el PDF", f"{e}\n\nElige otra carpeta o libera espacio.")
 
-        def fin(fallo, e):
-            self._botones()
-            fallo = fallo or (str(e) if e else "")
-            if fallo:
-                self.e_estado.setText("No se pudo exportar el PDF.")
-                tema.error(self, "No se pudo exportar el PDF", fallo)
-            else:
-                self.e_estado.setText(f"PDF guardado en {ruta}")
-        tema.en_hilo(lambda: editor.exportar_pdf(origen, ruta), fin)
+    # -- deshacer, introducir, arrastrar, mover y reproducir --------------------
+    def _recordar(self):
+        """Guarda el estado antes de un cambio, para poder deshacerlo."""
+        self._hist.append(([list(n) for n in self.notas], list(self.letra)))
+        del self._hist[:-200]
+        self._rehechos.clear()
+
+    def _deshacer(self, rehacer=False):
+        origen, destino = (self._rehechos, self._hist) if rehacer else (self._hist, self._rehechos)
+        if origen and self.b_anadir.isEnabled():
+            destino.append(([list(n) for n in self.notas], list(self.letra)))
+            notas, self.letra = origen.pop()
+            self._poner_notas(notas, self.bpm, min(self.tabla.currentRow(), len(notas) - 1))
+
+    def _insertar(self, tras, tono):
+        """Clic en el pentagrama con «Introducir» activado."""
+        if not self.b_anadir.isEnabled():
+            return
+        self._recordar()
+        inicio = self.notas[tras][1] if 0 <= tras < len(self.notas) else 0.0
+        self.notas.insert(tras + 1, [inicio, inicio + partituras.segundos_de(self._fig_nueva, self.tempo.value() or self.bpm), tono, 0.7])
+        self.letra.insert(tras + 1, "")
+        self._poner_notas(self.notas, self.bpm, tras + 1)
+
+    def _arrastrar(self, i, tono, primero):
+        if self.b_borrar.isEnabled() and 0 <= i < len(self.notas) and self.notas[i][2] != tono:
+            if primero:
+                self._recordar()
+            self.notas[i][2] = tono
+            self._poner_notas(self.notas, self.bpm, i)
+
+    def _desplazar(self, semicorcheas):
+        """Mueve la nota elegida en el tiempo, de semicorchea en semicorchea."""
+        i = self.tabla.currentRow()
+        if i >= 0:
+            self._recordar()
+            paso = semicorcheas * 15 / (self.tempo.value() or self.bpm)
+            n = self.notas[i]
+            n[0], n[1] = max(0.0, n[0] + paso), max(0.0, n[0] + paso) + (n[1] - n[0])
+            self._poner_notas(self.notas, self.bpm, i)
+
+    def reproducir(self):
+        """Hace sonar la partitura tal como está escrita (desde la nota elegida, si hay una)."""
+        if self._sonando:
+            audio.parar_reproduccion()
+            self._sonando = False
+        elif self.notas:
+            i = self.tabla.currentRow()
+            desde = self.notas[i][0] if i > 0 else 0.0
+            try:
+                audio.reproducir([[n[0] - desde, n[1] - desde, n[2], n[3]] for n in self.notas if n[0] >= desde - 1e-6])
+            except audio.ErrorAudio as e:
+                return tema.error(self, "No se pudo reproducir", str(e))
+            self._sonando = True
+            QTimer.singleShot(int((max(n[1] for n in self.notas) - desde + 0.4) * 1000), self._fin_reproduccion)
+        self.b_reproducir.setText("■ Parar" if self._sonando else "▶ Oír")
+
+    def _fin_reproduccion(self):
+        self._sonando = False
+        self.b_reproducir.setText("▶ Oír")
 
     def cerrar(self):
         self.captura.cerrar()
         self._parar_vivo()
+        if self._sonando:
+            audio.parar_reproduccion()

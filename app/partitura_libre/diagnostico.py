@@ -56,10 +56,8 @@ def comprobar(probar_micro=True):
     r.append(("Modelos de voz", OK if puestos else AVISO,
               ", ".join(puestos) or "Ninguno descargado. Descarga uno en Letras o en Ajustes."))
     exe, origen = editor.buscar()
-    r.append(("Editor de partituras", OK if exe else AVISO,
-              f"MuseScore ({origen}): {exe}" if exe else
-              "MuseScore no está disponible: la edición externa y el PDF quedan desactivados. "
-              "Puedes descargar la versión portable desde Ajustes."))
+    r.append(("Editor de partituras", OK, "integrado en la app (edición y PDF propios)"
+              + (f"; además, MuseScore opcional ({origen}): {exe}" if exe else "; MuseScore opcional no instalado")))
 
     libre = shutil.disk_usage(rutas.RAIZ).free / 2**30
     r.append(("Espacio libre", OK if libre > 2 else AVISO, f"{libre:.1f} GB en la unidad del programa"))

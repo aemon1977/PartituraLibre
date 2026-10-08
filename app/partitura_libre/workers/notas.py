@@ -3,6 +3,8 @@
 Se ejecuta con el conjunto «partituras». Uso:
     python -m partitura_libre.workers.notas '{"cmd": "transcribir", "audio": ..., "carpeta": ..., "nombre": ...}'
     python -m partitura_libre.workers.notas '{"cmd": "regenerar", "notas": ..., "carpeta": ..., "nombre": ...}'
+    python -m partitura_libre.workers.notas '{"cmd": "importar", "partitura": ..., "carpeta": ..., "nombre": ...}'
+        convierte un MusicXML/MXL/MIDI existente en una partitura editable del proyecto
     python -m partitura_libre.workers.notas '{"cmd": "vivo"}'    borrador mientras se graba: recibe por la
         entrada estándar una línea JSON por segmento, {"audio": ..., "desfase": s}, y emite sus notas
 
@@ -21,6 +23,7 @@ from .. import partituras, rutas
 from . import emitir, reemplazar
 
 TROZO_S = 120
+NOMBRES_ID = "nombres"   # marca en el MusicXML la línea de nombres de nota, para no confundirla con la letra
 MARGEN_S = 2   # contexto que se analiza de más a cada lado de un trozo
 
 
@@ -81,6 +84,29 @@ def en_vivo():
     return 0
 
 
+def importar(ruta):
+    """Lee una partitura existente (MusicXML, MXL o MIDI) y la convierte en notas editables:
+    (notas, bpm, letra). Las notas ligadas se unen en una sola."""
+    from music21 import converter, tempo
+    s = converter.parse(str(ruta))
+    marca = s.recurse().getElementsByClass(tempo.MetronomeMark).first()
+    bpm = int(round(marca.getQuarterBPM())) if marca is not None and marca.getQuarterBPM() else 120
+    filas, abiertas = [], {}
+    for n in s.flatten().notes:
+        ini = float(n.offset) * 60 / bpm
+        fin = ini + float(n.quarterLength) * 60 / bpm
+        for k, p in enumerate(n.pitches):
+            if n.tie is not None and n.tie.type != "start" and p.midi in abiertas:
+                abiertas[p.midi][0][1] = round(fin, 4)       # continuación de una nota ligada
+                continue
+            cantado = next((l.text or "" for l in n.lyrics if l.identifier != NOMBRES_ID), "")   # no la línea Do-Re-Mi
+            fila = [[round(ini, 4), round(fin, 4), p.midi, 0.7], cantado if k == 0 else ""]
+            filas.append(fila)
+            abiertas[p.midi] = fila
+    filas.sort(key=lambda f: f[0])
+    return [f[0] for f in filas], bpm, [f[1] for f in filas]
+
+
 def estimar_bpm(x, sr):
     try:
         import librosa
@@ -135,7 +161,8 @@ def escribir(notas, bpm, carpeta, nombre, titulo, clave="", nombres=False, letra
                 if versos:
                     n.addLyric(" ".join(versos))
             if nombres:  # Do, Re, Mi… bajo cada nota (segunda línea si hay letra)
-                n.addLyric(" ".join(partituras.solfeo(p.midi) for p in n.pitches), lyricNumber=2 if any(letra) else 1)
+                n.addLyric(" ".join(partituras.solfeo(p.midi) for p in n.pitches), lyricNumber=2 if any(letra) else 1,
+                           lyricIdentifier=NOMBRES_ID)
     partitura.write("musicxml", fp=str(p_xml))
     partituras.guardar_notas(p_notas, bpm, notas, letra)
     for p, f in ((p_notas, f_notas), (p_mid, f_mid), (p_xml, f_xml)):
@@ -159,6 +186,12 @@ def main():
                                     "la grabación original se conserva.")
                 return 1
             letra = partituras.asignar_letra(notas, o.get("palabras") or [])
+        elif o["cmd"] == "importar":
+            emitir("progreso", v=0.2, msg="Leyendo la partitura")
+            notas, bpm, letra = importar(o["partitura"])
+            if not notas:
+                emitir("error", msg="Ese archivo no contiene notas que se puedan editar.")
+                return 1
         else:
             d = json.loads(Path(o["notas"]).read_text(encoding="utf-8"))
             notas, bpm, letra = d["notas"], o.get("bpm") or d.get("bpm", 120), d.get("letra") or []
