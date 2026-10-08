@@ -89,6 +89,7 @@ class PaginaPartituras(QWidget):
         rollo.setWidget(self.vista)
         rollo.setWidgetResizable(True)
         rollo.setFixedHeight(208)
+        rollo.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         self.tabla = QTableWidget(0, 4)
         self.tabla.setHorizontalHeaderLabels(["Inicio (s)", "Duración (s)", "Nota MIDI", "Nombre"])
         self.tabla.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)

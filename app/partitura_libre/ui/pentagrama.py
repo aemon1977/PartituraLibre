@@ -37,7 +37,7 @@ class Pentagrama(QWidget):
         super().__init__()
         self.notas, self.sel, self.bpm, self.clave, self.nombres = [], -1, 120, "sol", True
         self._cajas = []  # (rectángulo, índice de nota) para elegir con el ratón
-        self.setMinimumHeight(196)
+        self.setMinimumHeight(190)
 
     def poner(self, notas, sel=-1, bpm=120, clave="", nombres=True):
         self.notas, self.sel, self.bpm, self.nombres = notas, sel, bpm, nombres
