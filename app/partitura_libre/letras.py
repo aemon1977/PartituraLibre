@@ -87,6 +87,16 @@ def de_texto(texto, previos=()):
     return exportar.completar_tiempos(segs)
 
 
+MULETILLAS = ("suscríbete", "subtítulos", "gracias por ver", "amara.org", "thanks for watching", "subscribe")
+
+
+def es_relleno(texto, logprob):
+    """Texto que el modelo inventa cuando no entiende nada (modo voz cantada): casi sin probabilidad,
+    una sola sílaba, o las coletillas de vídeos con las que fue entrenado. Eso no se muestra."""
+    t = texto.strip().lower()
+    return logprob < -1.2 or len(t.strip(" .,¡!¿?…")) < 3 or any(m in t for m in MULETILLAS)
+
+
 def es_dudoso(logprob, sin_voz, compresion):
     """Criterio para pedir revisión humana de un segmento."""
     return logprob < -0.8 or sin_voz > 0.5 or compresion > 2.4

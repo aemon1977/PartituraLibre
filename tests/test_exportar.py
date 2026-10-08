@@ -67,6 +67,13 @@ class TextoEditable(unittest.TestCase):
         self.assertIsNone(segs[3]["inicio"])
         self.assertEqual(len(exportar.con_tiempos(segs)), 3)
 
+    def test_relleno_inventado_no_se_muestra_pero_un_verso_dudoso_si(self):
+        # Salidas reales del modelo ante música floja grabada por micrófono:
+        for texto, logprob in (("y", -2.01), ("¡Suscríbete!", -0.99), ("¡Suscríbete y dale like a este vídeo!", -1.38), ("Música", -1.44)):
+            self.assertTrue(letras.es_relleno(texto, logprob), texto)
+        self.assertFalse(letras.es_relleno("Y empezamos a tocar", -0.70))   # se muestra, marcado con ⚠
+        self.assertTrue(letras.es_dudoso(-0.70, 0.82, 1.2))
+
     def test_criterio_de_duda(self):
         self.assertFalse(letras.es_dudoso(-0.2, 0.05, 1.4))
         self.assertTrue(letras.es_dudoso(-1.3, 0.05, 1.4))   # el modelo no está seguro

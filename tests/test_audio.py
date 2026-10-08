@@ -180,7 +180,7 @@ class Dispositivos(unittest.TestCase):
         except audio.ErrorAudio as e:
             self.skipTest(f"sin sistema de audio: {e}")
         for m in micros:
-            self.assertEqual(set(m), {"indice", "nombre", "sr", "predeterminado", "fuente"})
+            self.assertEqual(set(m), {"indice", "nombre", "sr", "predeterminado", "fuente", "sistema"})
         self.assertLessEqual(sum(m["predeterminado"] for m in micros), 1)
 
 

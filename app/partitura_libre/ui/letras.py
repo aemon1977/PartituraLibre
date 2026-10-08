@@ -64,7 +64,8 @@ class PaginaLetras(QWidget):
         self.hablada.setChecked(True)
         self.e_cantada = tema.etiqueta(
             "Voz cantada: la música, los coros y los instrumentos confunden al modelo. Los versos poco fiables se "
-            "marcan con ⚠ para que los revises; no hay separación de voz e instrumentos. Mejor con voz sola.", "aviso")
+            "marcan con ⚠ para que los revises; no hay separación de voz e instrumentos. Mejor con voz sola. Si la canción suena "
+            "en este equipo, elige «Sonido del equipo» como entrada en vez del micrófono.", "aviso")
         self.e_toma = tema.etiqueta("Ninguna toma abierta.", "tenue")
         self.b_transcribir = tema.boton("Transcribir", self.transcribir, "primario")
         self.b_cancelar = tema.boton("Cancelar", self.cancelar)
@@ -309,6 +310,13 @@ class PaginaLetras(QWidget):
             self._poner(self._nuevos)
             if not self._nuevos:
                 self.e_estado.setText("No se reconoció ninguna palabra en el audio. No se ha inventado texto.")
+                tema.reclasificar(self.e_estado, "aviso")
+                tema.dialogo(self, "No se reconoció ninguna palabra", "El motor no encontró voz inteligible en esta toma y no se ha inventado texto.\n\n"
+                             "• Si es una canción, marca «Voz cantada (modo de prueba)» y vuelve a pulsar «Transcribir».\n"
+                             "• Si el sonido venía de este equipo (Spotify, un vídeo…), grábalo eligiendo «Sonido del equipo» en "
+                             "«Entrada de audio»: por el micrófono llega flojo y con ruido.\n"
+                             "• Comprueba el idioma elegido y, si puedes, usa un modelo más preciso (medium).\n\n"
+                             "El audio original se conserva: usa «Escuchar audio» para comprobar cómo quedó.", tipo="aviso")
             else:
                 self._guardar_en(self._carpeta_final, nueva=True)
                 dud = sum(s["dudoso"] for s in self._nuevos)

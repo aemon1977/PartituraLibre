@@ -21,13 +21,15 @@ def main():
         o = json.loads(linea)
         try:
             cantada, desfase = o.get("cantada", False), o.get("desfase", 0.0)
-            # Voz cantada: sin filtro de silencios (la música lo confunde) y sin arrastrar
-            # el texto anterior, para que no «rellene» versos que no se entienden.
+            # Voz cantada: sin filtro de silencios (la música lo confunde), sin arrastrar el texto
+            # anterior (para que no «rellene» versos) y sin descartar de antemano los tramos que el
+            # modelo cree sin voz: se muestran marcados como dudosos, salvo los que son puro relleno.
             segs, info = modelo.transcribe(o["audio"], language=o.get("idioma") or None, beam_size=5,
-                                           vad_filter=not cantada, condition_on_previous_text=not cantada)
+                                           vad_filter=not cantada, condition_on_previous_text=not cantada,
+                                           **({"no_speech_threshold": None} if cantada else {}))
             emitir("idioma", id=o["id"], idioma=info.language, prob=round(info.language_probability, 3), dur=info.duration)
             for s in segs:
-                if s.text.strip():
+                if s.text.strip() and not (cantada and letras.es_relleno(s.text, s.avg_logprob)):
                     emitir("segmento", id=o["id"], inicio=round(s.start + desfase, 2), fin=round(s.end + desfase, 2),
                            texto=s.text.strip(), v=round(min(1.0, s.end / max(info.duration, 0.01)), 3),
                            dudoso=cantada and s.avg_logprob < -0.5 or letras.es_dudoso(s.avg_logprob, s.no_speech_prob, s.compression_ratio))

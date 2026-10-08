@@ -43,7 +43,7 @@ class PanelCaptura(QWidget):
         v = QVBoxLayout(self)
         v.setContentsMargins(0, 0, 0, 0)
         v.setSpacing(10)
-        v.addWidget(tema.etiqueta("Micrófono", "tenue"))
+        v.addWidget(tema.etiqueta("Entrada de audio", "tenue"))
         v.addWidget(self.micro)
         v.addLayout(tema.fila(self.b_actualizar, self.b_probar, tema.etiqueta("Nivel", "tenue", False), self.nivel, estirar=self.nivel))
         v.addLayout(tema.fila(self.reloj, self.texto, estirar=self.texto))
@@ -93,7 +93,9 @@ class PanelCaptura(QWidget):
         else:
             guardado = self.micro.findText(config.cargar()["microfono"], Qt.MatchStartsWith) if config.cargar()["microfono"] else -1
             self.micro.setCurrentIndex(max(guardado, 0))
-            self._decir("Listo para grabar." if len(micros) == 1 else f"{len(micros)} micrófonos disponibles: elige cuál usar.")
+            n = sum(not m["sistema"] for m in micros)
+            self._decir("Listo para grabar." if len(micros) == 1 else f"{n} micrófono(s)"
+                        + (" y el sonido del equipo" if n < len(micros) else "") + " disponibles: elige la entrada.")
         self._botones()
 
     def _micro(self):
@@ -189,6 +191,12 @@ class PanelCaptura(QWidget):
             tema.dialogo(self, "La toma está en silencio", "Se ha grabado, pero el micrófono no envió ninguna señal.\n\n"
                          "Comprueba que no esté silenciado o apagado y que has elegido la entrada correcta; usa «Probar nivel» "
                          "y mira si la barra se mueve al hablar. En el control de sonido del sistema, sube el volumen de entrada.", tipo="aviso")
+        elif g.floja:
+            self._decir(f"Toma guardada, pero con un nivel muy bajo (pico del {g.pico * 100:.0f} %).", "aviso")
+            tema.dialogo(self, "Nivel de grabación muy bajo", f"La toma se ha guardado, pero el sonido llegó muy flojo (pico del {g.pico * 100:.0f} %) "
+                         "y el reconocimiento puede fallar o salir vacío.\n\n• Acerca el micrófono a la fuente o sube el volumen de entrada del sistema.\n"
+                         "• Si lo que quieres transcribir suena en este equipo (Spotify, un vídeo…), no lo grabes con el micrófono: elige en "
+                         "«Entrada de audio» una opción «Sonido del equipo» y se capturará directamente, sin ruido ambiente.", tipo="aviso")
         else:
             self._decir(f"Toma guardada ({g.segundos:.1f} s) en {carpeta.name}.")
         self.terminada.emit(carpeta)

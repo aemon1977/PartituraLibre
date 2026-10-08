@@ -35,24 +35,36 @@ def sd():
             f"Mientras tanto puedes importar archivos de audio. Detalle: {e}") from e
 
 
+SISTEMA = "Sonido del equipo · "   # prefijo de las entradas que graban lo que suena por una salida
+
+
 def fuentes_del_servidor():
-    """Micrófonos que publica el servidor de sonido de Linux (PipeWire o PulseAudio), con el nombre
-    que ve el usuario: [{'nombre', 'fuente', 'predeterminado'}]. Vacío si no hay servidor o en Windows.
-    Solo consulta con `pactl`, que ya forma parte del sistema; no cambia nada en él."""
+    """Entradas que publica el servidor de sonido de Linux (PipeWire o PulseAudio), con el nombre que ve
+    el usuario: [{'nombre', 'fuente', 'predeterminado', 'sistema'}], los micrófonos primero. Las de
+    `sistema` graban directamente lo que suena por una salida (música de otra aplicación, un vídeo…).
+    Vacío si no hay servidor o en Windows. Solo consulta con `pactl`, que ya es parte del sistema."""
     if rutas.WINDOWS or not shutil.which("pactl"):
         return []
     try:
         entorno = {**os.environ, "LC_ALL": "C.UTF-8"}
         texto = subprocess.run(["pactl", "list", "sources"], capture_output=True, text=True, timeout=5, env=entorno).stdout
         pred = subprocess.run(["pactl", "get-default-source"], capture_output=True, text=True, timeout=5, env=entorno).stdout.strip()
+        salida = subprocess.run(["pactl", "get-default-sink"], capture_output=True, text=True, timeout=5, env=entorno).stdout.strip()
     except (OSError, subprocess.SubprocessError):
         return []
     fuentes = []
     for bloque in texto.split("\n\n"):
         campos = dict(l.strip().split(": ", 1) for l in bloque.splitlines() if ": " in l and l.startswith("\t") and not l.startswith("\t\t"))
-        if campos.get("Name") and campos.get("Monitor of Sink", "n/a") == "n/a":  # los «monitor» no son micrófonos
-            fuentes.append({"nombre": campos.get("Description") or campos["Name"], "fuente": campos["Name"],
-                            "predeterminado": campos["Name"] == pred})
+        if not campos.get("Name"):
+            continue
+        de_salida = campos.get("Monitor of Sink", "n/a")
+        nombre = campos.get("Description") or campos["Name"]
+        if de_salida == "n/a":
+            fuentes.append({"nombre": nombre, "fuente": campos["Name"], "predeterminado": campos["Name"] == pred, "sistema": False})
+        else:
+            fuentes.append({"nombre": SISTEMA + nombre.removeprefix("Monitor of ") + (" (salida en uso)" if de_salida == salida else ""),
+                            "fuente": campos["Name"], "predeterminado": False, "sistema": True, "_orden": de_salida != salida})
+    fuentes.sort(key=lambda f: (f["sistema"], f.pop("_orden", False)))
     return fuentes
 
 
@@ -67,10 +79,10 @@ def microfonos(refrescar=False):
     fuentes = fuentes_del_servidor() if puente is not None else []
     if fuentes:
         sr = int(s.query_devices(puente)["default_samplerate"])
-        return sorted(({"indice": puente, "sr": sr, **f} for f in fuentes), key=lambda d: not d["predeterminado"])
+        return sorted(({"indice": puente, "sr": sr, **f} for f in fuentes), key=lambda d: (d["sistema"], not d["predeterminado"]))
     pred = s.default.device[0]
     api = s.query_devices(pred)["hostapi"] if pred is not None and pred >= 0 else 0
-    lista = [{"indice": i, "nombre": d["name"], "sr": int(d["default_samplerate"]), "predeterminado": i == pred, "fuente": None}
+    lista = [{"indice": i, "nombre": d["name"], "sr": int(d["default_samplerate"]), "predeterminado": i == pred, "fuente": None, "sistema": False}
              for i, d in enumerate(s.query_devices()) if d["max_input_channels"] > 0 and d["hostapi"] == api]
     return sorted(lista, key=lambda d: not d["predeterminado"])
 
@@ -150,6 +162,11 @@ class Grabadora:
         if self.error:
             a.append(self.error)
         return a
+
+    @property
+    def floja(self):
+        """Señal muy débil: suficiente para oír algo, mala para reconocer palabras o notas."""
+        return self.frames > self.sr and 0.001 <= self.pico < 0.1
 
     @property
     def muda(self):

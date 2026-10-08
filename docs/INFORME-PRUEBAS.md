@@ -6,7 +6,7 @@ Equipo de pruebas: Debian 13 (trixie) x86_64 real, sesión Wayland con PipeWire,
 
 Cada prueba se clasifica como **superada**, **fallida** o **no ejecutable aquí**.
 
-## 1. Pruebas automatizadas — superadas (66 de 66, ninguna omitida)
+## 1. Pruebas automatizadas — superadas (67 de 67, ninguna omitida)
 
 Se ejecutan con `./herramientas/probar.sh`, siempre con el Python del paquete. Usan los motores reales, no simulacros.
 
@@ -16,7 +16,7 @@ Se ejecutan con `./herramientas/probar.sh`, siempre con el Python del paquete. U
 | `test_audio` | 11 | Señal sintética guardada idéntica muestra a muestra; pausa; cola saturada y desbordamiento notificados y toma marcada incompleta; disco lleno conserva lo grabado; WAV válido antes de cerrarse; cancelar borra; segmentos en vivo contiguos; **sesión simulada de 40 min** sin pérdidas |
 | `test_partitura_flujo` | 12 | **Pentagrama:** posición de las notas en clave de Sol, Fa y Do (3.ª y 4.ª), figuras, acordes; la clave elegida y los nombres Do-Re-Mi llegan al MusicXML. Además: WAV sintético (escala de Do) → notas exactas → MIDI → MusicXML; corrección manual crea versión nueva sin tocar la anterior; nota que cruza trozos no se parte; silencio no inventa notas; archivo ilegible da error explicado; cancelación sin restos |
 | `test_letras_flujo` | 6 | Audio libre en español: idioma detectado, palabras esperadas, tiempos crecientes, exportación y reimportación; idioma manual; error sin tumbar el motor; el modo «voz cantada» no da por bueno texto en música sin voz |
-| `test_exportar` | 9 | SRT, VTT y LRC exactos; ida y vuelta; texto editado conserva tiempos; una línea nueva no recibe un tiempo inventado |
+| `test_exportar` | 10 | SRT, VTT y LRC exactos; ida y vuelta; texto editado conserva tiempos; una línea nueva no recibe un tiempo inventado |
 | `test_rutas_proyectos` | 10 | Nombres con tildes y caracteres prohibidos; nombres únicos; audio asociado a resultados; toma interrumpida marcada y conservada; solo se borran proyectos |
 | `test_limpieza` | 4 | La desinstalación borra la carpeta del programa y nada más; se niega ante cualquier otra carpeta |
 | `test_ui` | 7 | La ventana real sin pantalla: navegación, botones bloqueados según el estado, partitura y letra de principio a fin, **partitura en vivo** (una melodía conocida entra por el callback de audio y sus notas aparecen antes de detener; al detener se crea la definitiva), error explicado, cancelación, diagnóstico |
@@ -57,6 +57,16 @@ Descarga de 195 MB con sha256, extracción en `runtime/musescore` y exportación
 
 Revisado a la vista en las cuatro claves con una escala, figuras de redonda a semicorchea, un sostenido y un acorde; y dentro de la app con una melodía conocida (Mi Mi Fa Sol Sol Fa Mi Re Do…). Un MusicXML generado en clave de Do en 3.ª con nombres se renderizó en MuseScore con la clave y los nombres correctos.
 
+### Letra de música grabada por micrófono (caso real del usuario) — fallida por la señal, no por el programa
+
+Una toma de 54 s de música de Spotify captada por los altavoces con un micrófono (pico del 5 %, media de −44 dB) no produjo texto. Analizada a mano: el motor responde cosas distintas en cada intento («Música», «¡Suscríbete!», versos que cambian), es decir, no hay letra recuperable y lo que sale es inventado. Cambios a raíz de esto:
+
+- nueva entrada **«Sonido del equipo»** (Linux) que graba directamente lo que suena por una salida; verificado que el flujo queda conectado a la salida elegida. **No ejecutable aquí:** grabar con ella una canción real y medir la calidad de la letra (habría que reproducir música en tu equipo);
+- aviso de **nivel muy bajo** al terminar una toma, y diálogo con pasos concretos cuando la transcripción sale vacía;
+- el modo «voz cantada» ya no descarta de antemano los tramos que el modelo cree sin voz (los muestra con ⚠), pero sí el relleno inventado.
+
+Sigue sin probarse la letra de una canción con instrumentos captada con buena señal; Whisper no está hecho para canto con música y puede fallar aunque el audio sea limpio.
+
 ## 7. Comparación de modelos de voz — superada
 
 Mismo audio (25 s en español + 11 s en inglés), CPU, incluida la carga del modelo:
@@ -89,7 +99,7 @@ No hay Windows en este entorno. **No se declara validado.** Como aproximación s
 - **Debian sin `libportaudio2` o sin `libxcb-cursor0`:** este equipo los tiene; el mensaje de PortAudio ausente no se ha visto en un sistema real.
 - **Sesión larga en tiempo real** (horas con un micrófono): solo la simulada de 40 min.
 - **Dictado y partitura en vivo con un micrófono con señal:** el camino completo está probado con una melodía sintética que entra por el mismo callback, no con sonido real.
-- **Transcripción de una canción real con instrumentos:** sin audio libre adecuado; el modo cantado se probó con voz hablada y con música sin voz.
+- **Transcripción de una canción real con instrumentos y buena señal:** ver el caso real más arriba.
 
 ## 10. Fallidas
 
