@@ -1,12 +1,12 @@
 # Informe de pruebas
 
-Fecha: 8 de octubre de 2026 · Versión 1.0.0
+Fecha: 8 de octubre de 2026 · Versión 1.1.0
 Equipo de pruebas: Debian 13 (trixie) x86_64 real, sesión Wayland con PipeWire, 24 hilos, 31 GB de RAM.
 **No se ha dispuesto de un Windows 11 ni de un Ubuntu 24.04.** Lo que no se pudo ejecutar se indica como tal.
 
 Cada prueba se clasifica como **superada**, **fallida** o **no ejecutable aquí**.
 
-## 1. Pruebas automatizadas — superadas (72 de 72, ninguna omitida)
+## 1. Pruebas automatizadas — superadas (73 de 73, ninguna omitida)
 
 Se ejecutan con `./herramientas/probar.sh`, siempre con el Python del paquete. Usan los motores reales, no simulacros.
 
@@ -14,7 +14,7 @@ Se ejecutan con `./herramientas/probar.sh`, siempre con el Python del paquete. U
 |---|---|---|
 | `test_dependencias` | 7 | El intérprete en uso es el del paquete (3.11); `sounddevice` y `soundfile` se cargan desde `runtime/`; una dependencia ausente se detecta y se nombra; con el Python del sistema el programa se niega a abrir y dice cómo arrancar; el diagnóstico no filtra rutas personales |
 | `test_audio` | 11 | Señal sintética guardada idéntica muestra a muestra; pausa; cola saturada y desbordamiento notificados y toma marcada incompleta; disco lleno conserva lo grabado; WAV válido antes de cerrarse; cancelar borra; segmentos en vivo contiguos; **sesión simulada de 40 min** sin pérdidas |
-| `test_partitura_flujo` | 16 | **Pentagrama:** posición de las notas en clave de Sol, Fa y Do (3.ª y 4.ª), figuras, acordes; la clave elegida y los nombres Do-Re-Mi llegan al MusicXML. Además: WAV sintético (escala de Do) → notas exactas → MIDI → MusicXML; corrección manual crea versión nueva sin tocar la anterior; nota que cruza trozos no se parte; silencio no inventa notas; archivo ilegible da error explicado; cancelación sin restos |
+| `test_partitura_flujo` | 17 | **Pentagrama:** posición de las notas en clave de Sol, Fa y Do (3.ª y 4.ª), figuras, acordes; la clave elegida y los nombres Do-Re-Mi llegan al MusicXML. Además: WAV sintético (escala de Do) → notas exactas → MIDI → MusicXML; corrección manual crea versión nueva sin tocar la anterior; nota que cruza trozos no se parte; silencio no inventa notas; archivo ilegible da error explicado; cancelación sin restos |
 | `test_letras_flujo` | 6 | Audio libre en español: idioma detectado, palabras esperadas, tiempos crecientes, exportación y reimportación; idioma manual; error sin tumbar el motor; el modo «voz cantada» no da por bueno texto en música sin voz |
 | `test_exportar` | 10 | SRT, VTT y LRC exactos; ida y vuelta; texto editado conserva tiempos; una línea nueva no recibe un tiempo inventado |
 | `test_rutas_proyectos` | 10 | Nombres con tildes y caracteres prohibidos; nombres únicos; audio asociado a resultados; toma interrumpida marcada y conservada; solo se borran proyectos |
@@ -73,6 +73,13 @@ Voz real en español mezclada con una melodía sintética, en un solo archivo: s
 
 - **Fallo encontrado y corregido:** MuseScore 4.7.5 se cerraba (violación de segmento) al abrir esa partitura, con o sin letra. Causa: los tresillos que generaba la conversión a MusicXML. Ahora se cuantiza a semicorcheas y hay una prueba de regresión.
 - **No ejecutable aquí:** una canción real cantada con instrumentos. El audio de prueba es voz hablada, que al pasarla a notas da una partitura enrevesada; con canto real la colocación de las palabras depende de que Whisper las reconozca y dé bien sus tiempos.
+
+### Interfaz de editor de partituras (1.1) — superada sin pantalla
+
+Rediseño al estilo de un editor de notación. Probado en la ventana real sin pantalla: reparto en sistemas y compases, cambio de figura, altura por teclado, letra por nota, zoom y hoja estrecha sin perder ni repetir notas. Revisado a la vista en capturas con una melodía y con una canción con letra.
+
+- **No ejecutable aquí:** manejo real con ratón y teclado en tu escritorio (no se abren ventanas en tu sesión).
+- La versión anterior se conserva en la etiqueta `v1.0-clasica` y en la copia `PartituraLibre-v1-clasica`, que arrancó con 12 comprobaciones correctas.
 
 ## 7. Comparación de modelos de voz — superada
 

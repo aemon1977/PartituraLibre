@@ -4,13 +4,13 @@ import shutil
 from pathlib import Path
 
 from PySide6.QtCore import Qt, QTimer, Signal
-from PySide6.QtWidgets import (QAbstractItemView, QCheckBox, QComboBox, QFileDialog, QHBoxLayout, QHeaderView, QLineEdit, QProgressBar,
+from PySide6.QtWidgets import (QAbstractItemView, QCheckBox, QComboBox, QFileDialog, QFrame, QHBoxLayout, QHeaderView, QLineEdit, QProgressBar,
                                QScrollArea, QSpinBox, QTableWidget, QTableWidgetItem, QVBoxLayout, QWidget)
 
 from .. import config, editor, exportar, lanzar, letras, partituras, proyectos, rutas, tareas
 from . import tema
 from .captura import PanelCaptura
-from .pentagrama import Pentagrama
+from .pentagrama import Pentagrama, fuente_musical
 
 SEGMENTO_VIVO_S = 3  # cada cuánto se analiza lo recién grabado para el borrador en vivo
 
@@ -75,72 +75,113 @@ class PaginaPartituras(QWidget):
         v2.addWidget(self.e_estado)
 
 
-        # -- columna derecha: revisión -------------------------------------
+        # -- la partitura, en el centro ------------------------------------------
         a = config.cargar()
         self.vista = Pentagrama()
+        self.vista.cambiar_zoom(a.get("zoom", 100) / 100)
         self.vista.elegida.connect(lambda i: self.tabla.selectRow(i))
+        self.vista.tecla.connect(self._atajo)
+        rollo = self.rollo = QScrollArea()
+        rollo.setWidget(self.vista)
+        rollo.setWidgetResizable(True)
+        rollo.setFrameShape(QFrame.NoFrame)
+        rollo.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+
+        # -- barra de archivo ---------------------------------------------------
+        self.b_regenerar = tema.boton("Guardar versión", self.regenerar, "primario",
+                                      "Crea MIDI y MusicXML nuevos con tus correcciones (no pisa los anteriores)")
+        self.b_midi = tema.boton("MIDI…", lambda: self._copiar("midi", "MIDI (*.mid)"), ayuda="Guardar una copia del MIDI")
+        self.b_xml = tema.boton("MusicXML…", lambda: self._copiar("musicxml", "MusicXML (*.musicxml)"), ayuda="Guardar una copia del MusicXML")
+        self.b_pdf = tema.boton("PDF…", self.exportar_pdf, ayuda="Exportar a PDF con MuseScore")
+        self.b_musescore = tema.boton("Abrir en MuseScore", self.abrir_musescore, ayuda="Edición gráfica completa en MuseScore Studio")
+        self.b_existente = tema.boton("Abrir partitura…", self.abrir_existente,
+                                      ayuda="MusicXML, MXL, XML, MIDI o MSCZ: se abre en MuseScore")
+        self.b_carpeta = tema.boton("Carpeta", lambda: tema.abrir_en_sistema(self.proyecto), ayuda="Ver la carpeta del proyecto")
+        self.b_panel_izq = tema.boton("Grabación", ayuda="Mostrar u ocultar el panel de grabación y análisis")
+        self.b_panel_der = tema.boton("Lista de notas", ayuda="Mostrar u ocultar la tabla con los valores exactos de cada nota")
+        for b in (self.b_panel_izq, self.b_panel_der):
+            b.setCheckable(True)
+        archivo = tema.herramientas(self.b_regenerar, "|", self.b_midi, self.b_xml, self.b_pdf, "|", self.b_musescore,
+                                    self.b_existente, self.b_carpeta, None, self.b_panel_izq, self.b_panel_der)
+
+        # -- barra de introducción de notas ---------------------------------------
+        self.b_fig = {}
+        familia = fuente_musical()
+        for fig, simbolo in (("redonda", "\ue1d2"), ("blanca", "\ue1d3"), ("negra", "\ue1d5"), ("corchea", "\ue1d7"), ("semicorchea", "\ue1d9")):
+            b = tema.boton(simbolo if familia else fig[:3], lambda f=fig: self._figura(f), "figura", f"Convertir la nota elegida en {fig}")
+            b.setCheckable(True)
+            if familia:
+                b.setStyleSheet(f"font-family: '{familia}'; font-size: 22px; padding: 0px;")
+            b.setFixedSize(42, 42)
+            self.b_fig[fig] = b
+        self.b_sube = tema.boton("♯ ↑", lambda: self._mover(1), ayuda="Subir un semitono (flecha arriba)")
+        self.b_baja = tema.boton("♭ ↓", lambda: self._mover(-1), ayuda="Bajar un semitono (flecha abajo)")
+        self.b_octava_sube = tema.boton("8ª ↑", lambda: self._mover(12), ayuda="Subir una octava (Ctrl + flecha arriba)")
+        self.b_octava_baja = tema.boton("8ª ↓", lambda: self._mover(-12), ayuda="Bajar una octava (Ctrl + flecha abajo)")
+        self.b_anadir = tema.boton("+ Nota", self._anadir, ayuda="Añadir una nota después de la elegida (N)")
+        self.b_borrar = tema.boton("Borrar", self._borrar, "peligro", "Borrar la nota elegida (Supr)")
+        self.e_letra = QLineEdit()
+        self.e_letra.setPlaceholderText("Letra de la nota")
+        self.e_letra.setFixedWidth(150)
+        self.e_letra.editingFinished.connect(self._letra_editada)
         self.clave = QComboBox()
         self.clave.addItem("Clave automática", "")
         for codigo, (nombre, _, _) in partituras.CLAVES.items():
             self.clave.addItem(nombre, codigo)
         self.clave.setCurrentIndex(max(0, self.clave.findData(a["clave"])))
         self.clave.setToolTip("Clave del pentagrama. También se usa en el MusicXML de la próxima partitura o versión que crees.")
-        self.nombres = QCheckBox("Nombres de las notas")
+        self.nombres = QCheckBox("Do Re Mi")
         self.nombres.setChecked(a["nombres"])
-        self.nombres.setToolTip("Escribe Do, Re, Mi… bajo cada nota, aquí y en el MusicXML/PDF")
+        self.nombres.setToolTip("Escribe el nombre de cada nota bajo el pentagrama, aquí y en el MusicXML/PDF")
         self.clave.currentIndexChanged.connect(self._cambio_de_vista)
         self.nombres.toggled.connect(self._cambio_de_vista)
-        rollo = self.rollo = QScrollArea()
-        rollo.setWidget(self.vista)
-        rollo.setWidgetResizable(True)
-        rollo.setFixedHeight(208)
-        rollo.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.e_zoom = tema.etiqueta(f"{round(self.vista.zoom * 100)} %", "tenue", False)
+        notas_barra = tema.herramientas(*self.b_fig.values(), "|", self.b_sube, self.b_baja, self.b_octava_sube, self.b_octava_baja, "|",
+                                        self.b_anadir, self.b_borrar, "|", self.e_letra, None, self.clave, self.nombres, "|",
+                                        tema.boton("−", lambda: self._zoom(-10), ayuda="Reducir"), self.e_zoom,
+                                        tema.boton("+", lambda: self._zoom(10), ayuda="Ampliar"))
+
+        # -- panel derecho: lista de notas ----------------------------------------
         self.tabla = QTableWidget(0, 5)
-        self.tabla.setHorizontalHeaderLabels(["Inicio (s)", "Duración (s)", "Nota MIDI", "Nombre", "Letra"])
+        self.tabla.setHorizontalHeaderLabels(["Inicio", "Dur.", "MIDI", "Nota", "Letra"])
         self.tabla.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
         self.tabla.verticalHeader().setDefaultSectionSize(26)
-        self.tabla.setMinimumHeight(88)
         self.tabla.setSelectionBehavior(QAbstractItemView.SelectRows)
         self.tabla.setAlternatingRowColors(True)
         self.tabla.itemChanged.connect(self._celda_editada)
         self.tabla.itemSelectionChanged.connect(lambda: (self._dibujar(), self._botones()))
-        self.b_sube = tema.boton("+ semitono", lambda: self._mover(1))
-        self.b_baja = tema.boton("− semitono", lambda: self._mover(-1))
-        self.b_anadir = tema.boton("Añadir nota", self._anadir)
-        self.b_borrar = tema.boton("Borrar nota", self._borrar, "peligro")
-        self.b_regenerar = tema.boton("Guardar cambios como nueva versión", self.regenerar, "primario",
-                                      "Crea MIDI y MusicXML nuevos con tus correcciones (no pisa los anteriores)")
-        self.b_musescore = tema.boton("Abrir en MuseScore", self.abrir_musescore)
-        self.b_pdf = tema.boton("Exportar PDF…", self.exportar_pdf)
-        self.b_midi = tema.boton("Guardar MIDI…", lambda: self._copiar("midi", "MIDI (*.mid)"))
-        self.b_xml = tema.boton("Guardar MusicXML…", lambda: self._copiar("musicxml", "MusicXML (*.musicxml)"))
-        self.b_existente = tema.boton("Abrir otra partitura…", self.abrir_existente,
-                                      ayuda="MusicXML, MXL, XML, MIDI o MSCZ: se abre en MuseScore")
-        self.b_carpeta = tema.boton("Ver carpeta", lambda: tema.abrir_en_sistema(self.proyecto))
-        self.e_editor = tema.etiqueta("", "tenue")
-        t3, v3 = tema.tarjeta("3 · Revisar, corregir y exportar")
-        aviso = tema.etiqueta(partituras.AVISO_BREVE, "aviso")
-        aviso.setToolTip(partituras.LIMITACIONES)
-        v3.addWidget(aviso)
-        v3.addLayout(tema.fila(self.clave, self.nombres, None))
-        v3.addWidget(rollo)
+        t3, v3 = tema.tarjeta("Lista de notas")
+        v3.addWidget(tema.etiqueta("Inicio y duración en segundos. Doble clic en una celda para cambiarla.", "tenue"))
         v3.addWidget(self.tabla, 1)
-        v3.addLayout(tema.fila(self.b_sube, self.b_baja, self.b_anadir, self.b_borrar, None))
-        v3.addWidget(self.b_regenerar)
-        v3.addLayout(tema.fila(self.b_midi, self.b_xml, self.b_carpeta, None))
-        v3.addLayout(tema.fila(self.b_musescore, self.b_pdf, self.b_existente, None))
-        v3.addWidget(self.e_editor)
+        t3.setMinimumWidth(350)
+        t3.setMaximumWidth(420)
+
+        izquierda = tema.columna(t1, t2)
+        izquierda.setMaximumWidth(izquierda.minimumWidth() + 30)
+        self.b_panel_izq.toggled.connect(izquierda.setVisible)
+        self.b_panel_der.toggled.connect(lambda si: (t3.setVisible(si), self._guardar_panel(si)))
+        self.b_panel_izq.setChecked(True)
+        self.b_panel_der.setChecked(a.get("panel_notas", False))
+        t3.setVisible(self.b_panel_der.isChecked())
+
+        aviso = tema.etiqueta(partituras.AVISO_BREVE, "aviso", False)
+        aviso.setToolTip(partituras.LIMITACIONES)
+        self.e_editor = tema.etiqueta("", "tenue", False)
+        pie = tema.herramientas(aviso, None, self.e_editor)
 
         cuerpo = QHBoxLayout()
-        cuerpo.setSpacing(14)
-        cuerpo.addWidget(tema.columna(t1, t2), 4)
-        cuerpo.addWidget(t3, 6)
+        cuerpo.setContentsMargins(12, 12, 12, 8)
+        cuerpo.setSpacing(12)
+        cuerpo.addWidget(izquierda)
+        cuerpo.addWidget(rollo, 1)
+        cuerpo.addWidget(t3)
         v = QVBoxLayout(self)
-        v.setContentsMargins(22, 18, 22, 18)
-        v.setSpacing(12)
-        v.addWidget(tema.etiqueta("Partituras", "titulo"))
-        v.addWidget(tema.etiqueta("De audio a partitura editable: graba o importa una melodía, detecta las notas y corrígelas.", "tenue"))
+        v.setContentsMargins(0, 0, 0, 0)
+        v.setSpacing(0)
+        v.addWidget(archivo)
+        v.addWidget(notas_barra)
         v.addLayout(cuerpo, 1)
+        v.addWidget(pie)
         self._pintar_destino()
         self._botones()
 
@@ -179,8 +220,15 @@ class PaginaPartituras(QWidget):
         self.con_letra.setToolTip(
             f"Reconoce la voz con el modelo «{modelo}» y el idioma elegidos en Letras (modo voz cantada) y escribe cada palabra bajo su nota."
             if letras.instalado(modelo) else f"Primero descarga el modelo de voz «{modelo}» en la sección Letras.")
-        for b in (self.b_sube, self.b_baja, self.b_borrar):
-            b.setEnabled(hay and self.tabla.currentRow() >= 0)
+        fila = self.tabla.currentRow()
+        elegida = hay and 0 <= fila < len(self.notas)
+        for b in (self.b_sube, self.b_baja, self.b_octava_sube, self.b_octava_baja, self.b_borrar, self.e_letra, *self.b_fig.values()):
+            b.setEnabled(elegida)
+        actual = partituras.figura(self.notas[fila][1] - self.notas[fila][0], self.tempo.value() or self.bpm) if elegida else ""
+        for fig, b in self.b_fig.items():
+            b.setChecked(fig == actual)
+        if not self.e_letra.hasFocus():
+            self.e_letra.setText(self.letra[fila] if elegida and fila < len(self.letra) else "")
         self.b_anadir.setEnabled(hay)
         self.b_regenerar.setEnabled(hay and bool(self.notas))
         self.b_midi.setEnabled(hay)
@@ -189,8 +237,7 @@ class PaginaPartituras(QWidget):
         self.b_musescore.setEnabled(bool(exe) and (hay or self.externa is not None))
         self.b_pdf.setEnabled(bool(exe) and (hay or self.externa is not None))
         self.b_existente.setEnabled(bool(exe))
-        self.e_editor.setVisible(not exe)
-        self.e_editor.setText("" if exe else
+        self.e_editor.setText("↑ ↓ cambian la altura · ← → cambian de nota · N añade · Supr borra" if exe else
                               "MuseScore no está disponible: edición gráfica y PDF desactivados. Descárgalo en Ajustes (portable).")
 
     def _pintar_destino(self):
@@ -263,7 +310,7 @@ class PaginaPartituras(QWidget):
         self._poner_notas(self.notas, 120)
         self._ultima = {n[2]: n for n in self.notas}
         self.e_estado.setText(f"Borrador en vivo: {len(self.notas)} notas. Al detener se creará la partitura definitiva.")
-        QTimer.singleShot(0, lambda: (self.rollo.horizontalScrollBar().setValue(self.rollo.horizontalScrollBar().maximum()),
+        QTimer.singleShot(0, lambda: (self.rollo.verticalScrollBar().setValue(self.rollo.verticalScrollBar().maximum()),
                                      self.tabla.scrollToBottom()))
 
     def abrir_proyecto(self, carpeta):
@@ -425,9 +472,11 @@ class PaginaPartituras(QWidget):
 
     def _dibujar(self):
         sel = self.tabla.currentRow()
-        self.vista.poner(self.notas, sel, self.tempo.value() or self.bpm, self.clave.currentData(), self.nombres.isChecked(), self.letra)
-        if sel >= 0:  # la nota elegida en la tabla queda a la vista en el pentagrama
-            self.rollo.ensureVisible(self.vista.x_de(sel), self.vista.height() // 2, 120, 0)
+        titulo = self.proyecto.name if self.proyecto else self.externa.name if self.externa else ""
+        self.vista.poner(self.notas, sel, self.tempo.value() or self.bpm, self.clave.currentData(), self.nombres.isChecked(), self.letra, titulo)
+        if sel >= 0:  # la nota elegida queda a la vista en la partitura
+            r = self.vista.rect_de(sel)
+            self.rollo.ensureVisible(r.center().x(), r.center().y(), 40, r.height() // 2 + 10)
 
     def _cambio_de_vista(self):
         a = config.cargar()
@@ -457,6 +506,43 @@ class PaginaPartituras(QWidget):
         except ValueError:
             pass  # texto no numérico: se restaura el valor anterior
         self._poner_notas(self.notas, self.bpm, i)
+
+    def _atajo(self, accion):
+        """Teclas sobre la partitura, como en un editor de notación."""
+        i = self.tabla.currentRow()
+        if accion in ("anterior", "siguiente"):
+            if self.notas:
+                self.tabla.selectRow(max(0, min(len(self.notas) - 1, i + (1 if accion == "siguiente" else -1))))
+        elif accion == "nueva":
+            if self.b_anadir.isEnabled():
+                self._anadir()
+        elif self.b_borrar.isEnabled():  # solo se edita una partitura ya creada, no un borrador ni durante un análisis
+            {"arriba": lambda: self._mover(1), "abajo": lambda: self._mover(-1), "octava+": lambda: self._mover(12),
+             "octava-": lambda: self._mover(-12), "borrar": self._borrar}[accion]()
+
+    def _figura(self, fig):
+        i = self.tabla.currentRow()
+        if i >= 0:
+            self.notas[i][1] = self.notas[i][0] + partituras.segundos_de(fig, self.tempo.value() or self.bpm)
+            self._poner_notas(self.notas, self.bpm, i)
+
+    def _letra_editada(self):
+        i = self.tabla.currentRow()
+        if 0 <= i < len(self.letra) and self.letra[i] != self.e_letra.text().strip():
+            self.letra[i] = self.e_letra.text().strip()
+            self._poner_notas(self.notas, self.bpm, i)
+
+    def _zoom(self, paso):
+        self.vista.cambiar_zoom((round(self.vista.zoom * 100) + paso) / 100)
+        self.e_zoom.setText(f"{round(self.vista.zoom * 100)} %")
+        a = config.cargar()
+        a["zoom"] = round(self.vista.zoom * 100)
+        config.guardar(a)
+
+    def _guardar_panel(self, si):
+        a = config.cargar()
+        a["panel_notas"] = si
+        config.guardar(a)
 
     def _mover(self, semitonos):
         i = self.tabla.currentRow()

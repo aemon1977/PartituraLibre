@@ -14,7 +14,11 @@ TEXTO, TENUE, ACENTO, PELIGRO, AVISO = "#e6edf5", "#93a7bd", "#2dd4bf", "#f87171
 QSS = f"""
 * {{ font-size: 14px; color: {TEXTO}; }}
 QMainWindow, QDialog, QWidget#pagina, QScrollArea, QScrollArea > QWidget > QWidget {{ background: {FONDO}; }}
-QWidget#barra {{ background: {PANEL}; border-right: 1px solid {BORDE}; }}
+QWidget#barra {{ background: {PANEL}; border-bottom: 1px solid {BORDE}; }}
+QFrame#herramientas {{ background: {PANEL}; border-bottom: 1px solid {BORDE}; }}
+QFrame#herramientas QPushButton {{ padding: 6px 11px; }}
+QPushButton[clase="figura"]:checked {{ background: #17413f; border-color: {ACENTO}; color: {ACENTO}; }}
+QPushButton:checked {{ background: #17304b; border-color: {ACENTO}; color: {ACENTO}; }}
 QFrame#tarjeta {{ background: {TARJETA}; border: 1px solid {BORDE}; border-radius: 10px; }}
 QLabel {{ background: transparent; }}
 QLabel[clase="titulo"] {{ font-size: 22px; font-weight: 700; }}
@@ -34,9 +38,9 @@ QPushButton[clase="primario"]:disabled {{ background: #17413f; color: #5b8a85; }
 QPushButton[clase="peligro"] {{ background: #3a1c24; border-color: #7f2f3a; color: #fecaca; }}
 QPushButton[clase="peligro"]:hover {{ background: #55232e; border-color: {PELIGRO}; }}
 QPushButton[clase="peligro"]:disabled {{ background: #1a1820; color: #6b5560; border-color: #2a2029; }}
-QPushButton[clase="nav"] {{ background: transparent; border: none; border-radius: 8px; padding: 11px 14px; text-align: left; font-size: 15px; color: {TENUE}; }}
+QPushButton[clase="nav"] {{ background: transparent; border: none; border-bottom: 3px solid transparent; border-radius: 0; padding: 14px 18px 11px 18px; font-size: 15px; color: {TENUE}; }}
 QPushButton[clase="nav"]:hover {{ background: #152841; color: {TEXTO}; }}
-QPushButton[clase="nav"]:checked {{ background: #17304b; color: {ACENTO}; font-weight: 600; }}
+QPushButton[clase="nav"]:checked {{ background: transparent; color: {ACENTO}; font-weight: 600; border-bottom: 3px solid {ACENTO}; }}
 QLineEdit, QComboBox, QSpinBox, QPlainTextEdit, QTableWidget {{ background: #0c1929; border: 1px solid {BORDE}; border-radius: 7px; padding: 6px 8px; selection-background-color: #1f6f69; selection-color: white; }}
 QLineEdit:focus, QComboBox:focus, QPlainTextEdit:focus, QSpinBox:focus {{ border-color: {ACENTO}; }}
 QLineEdit:disabled, QComboBox:disabled, QSpinBox:disabled {{ color: #55677c; }}
@@ -178,6 +182,28 @@ def columna(*widgets):
     area.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
     area.setMinimumWidth(dentro.minimumSizeHint().width() + 14)
     return area
+
+
+def herramientas(*piezas):
+    """Barra de herramientas horizontal. "|" es un separador y None un hueco elástico."""
+    f = QFrame()
+    f.setObjectName("herramientas")
+    h = QHBoxLayout(f)
+    h.setContentsMargins(12, 6, 12, 6)
+    h.setSpacing(6)
+    for p in piezas:
+        if p is None:
+            h.addStretch(1)
+        elif isinstance(p, str):
+            raya = QFrame()
+            raya.setFixedSize(1, 24)
+            raya.setStyleSheet(f"background: {BORDE};")
+            h.addSpacing(4)
+            h.addWidget(raya)
+            h.addSpacing(4)
+        else:
+            h.addWidget(p)
+    return f
 
 
 def dialogo(padre, titulo, mensaje, botones=("Aceptar",), tipo="info"):

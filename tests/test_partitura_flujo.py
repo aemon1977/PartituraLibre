@@ -147,6 +147,13 @@ class Notacion(unittest.TestCase):
         self.assertEqual(partituras.posicion(66, "sol"), (1, True))     # Fa♯4: primer espacio, con sostenido
         self.assertEqual(partituras.posicion(59, "sol")[0], partituras.posicion(60, "sol")[0] - 1)  # Si-Do: un solo paso
 
+    def test_compases_y_duracion_de_las_figuras(self):
+        self.assertEqual([partituras.compas(t, 120) for t in (0.0, 1.8, 2.0, 3.8, 4.0)], [0, 0, 1, 1, 2])   # 4/4 a 120: un compás = 2 s
+        self.assertEqual(partituras.compas(1.99, 120), 1)        # un inicio casi en la barra pertenece al compás siguiente
+        self.assertEqual(partituras.compas(4.0, 60), 1)
+        for fig in partituras.NEGRAS:                            # ida y vuelta figura <-> segundos
+            self.assertEqual(partituras.figura(partituras.segundos_de(fig, 96), 96), fig)
+
     def test_nombres_figuras_acordes_y_clave_automatica(self):
         self.assertEqual([partituras.solfeo(m) for m in (60, 62, 64, 65, 67, 69, 71, 73)], ["Do", "Re", "Mi", "Fa", "Sol", "La", "Si", "Do♯"])
         self.assertEqual([partituras.figura(s, 120) for s in (2.0, 1.0, 0.5, 0.25, 0.12)], ["redonda", "blanca", "negra", "corchea", "semicorchea"])

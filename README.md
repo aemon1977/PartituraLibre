@@ -23,14 +23,14 @@ Necesitas conexión a Internet solo la primera vez y unos **1,6 GB libres** (má
 ### Debian 13 / Ubuntu 24.04 (64 bits)
 
 ```sh
-tar -xzf PartituraLibre-1.0.0-linux-x64.tar.gz
+tar -xzf PartituraLibre-1.1.0-linux-x64.tar.gz
 cd PartituraLibre
 ./iniciar-linux.sh
 ```
 
 ### Windows 11 (64 bits)
 
-1. Descomprime `PartituraLibre-1.0.0-windows11-x64.zip` en una carpeta tuya (por ejemplo, Documentos).
+1. Descomprime `PartituraLibre-1.1.0-windows11-x64.zip` en una carpeta tuya (por ejemplo, Documentos).
 2. Doble clic en `iniciar-windows.bat`.
 
 ### Qué pasa en el primer arranque
@@ -57,15 +57,21 @@ Opcionales, solo cuando pulsas el botón correspondiente:
 
 ### Partituras
 
-1. **Grabar o importar.** Si hay más de un micrófono, elígelo en la lista (aparecen con su nombre real; *Actualizar* vuelve a buscarlos), pulsa *Probar nivel* para ver si la barra se mueve y después *Grabar*. Con *Ver las notas mientras grabo* la partitura se va dibujando **en vivo** cada 3 segundos como borrador; al detener se analiza la toma completa y se crea la definitiva. Puedes pausar, detener o descartar. O importa un WAV, MP3, FLAC u OGG. La toma original se guarda siempre en WAV dentro del proyecto, aunque falle lo demás.
-2. **Convertir.** *Detectar notas y crear partitura* analiza el audio con Basic Pitch (se puede cancelar). El tempo se estima solo o lo fijas tú.
-3. **Revisar.** Las notas se dibujan en un **pentagrama** con su clave, sus figuras y el nombre de cada nota debajo (Do, Re, Mi…), y también en una tabla. Elige la clave —de Sol, de Fa en 4.ª, de Do en 3.ª o de Do en 4.ª; «automática» escoge entre Sol y Fa según la altura— y si quieres ver los nombres. Corrige inicio, duración o altura en la tabla, añade o borra notas y pulsa *Guardar cambios como nueva versión*: se crean archivos nuevos, nunca se pisa lo anterior. La clave y los nombres elegidos se escriben también en el MusicXML y, por tanto, en el PDF.
-4. **Partitura con letra.** Marca *Añadir la letra bajo las notas* antes de *Detectar notas*: primero se reconoce la voz (con el modelo y el idioma elegidos en Letras, en modo voz cantada) y después cada palabra se coloca bajo la nota que suena en ese momento. La letra se ve en el pentagrama, se corrige nota a nota en la columna **Letra** de la tabla y se escribe en el MusicXML y el PDF. El texto completo queda guardado en el mismo proyecto y se puede abrir en la sección Letras. Hace falta tener descargado un modelo de voz.
-5. **Exportar.** *Guardar MIDI…*, *Guardar MusicXML…*, y con MuseScore: *Abrir en MuseScore* (edición gráfica completa) y *Exportar PDF…*.
+La sección está organizada como un editor de partituras:
 
-> El pentagrama de la app coloca cada nota a su altura exacta y elige la figura más parecida a su duración, sin compases; la partitura con compases y ritmo cuantizado es la del MusicXML (MuseScore/PDF).
->
-> La partitura exportada se cuantiza a semicorcheas, sin tresillos.
+- **Arriba, dos barras.** La de archivo: *Guardar versión*, *MIDI…*, *MusicXML…*, *PDF…*, *Abrir en MuseScore*, *Abrir partitura…*, *Carpeta*, y los botones que muestran u ocultan los paneles laterales. La de notas: las cinco figuras (redonda a semicorchea), subir o bajar semitono y octava, *+ Nota*, *Borrar*, la letra de la nota elegida, la clave, los nombres Do-Re-Mi y el zoom.
+- **En el centro, la partitura** en una hoja: título, clave, compás de 4/4, barras y números de compás, figuras, nombres de nota y letra, repartida en sistemas según el ancho de la ventana.
+- **A la izquierda, el panel *Grabación*** (grabar o importar, y convertir en partitura). **A la derecha, la *Lista de notas*** con los valores exactos.
+
+Pasos:
+
+1. **Grabar o importar.** Elige la entrada de audio (aparecen los micrófonos por su nombre; *Actualizar* vuelve a buscarlos), pulsa *Probar nivel* y después *Grabar*. Con *Ver las notas mientras grabo* la partitura se va dibujando **en vivo** cada 3 segundos como borrador; al detener se analiza la toma completa. También puedes importar un WAV, MP3, FLAC u OGG. La toma original se guarda siempre.
+2. **Convertir.** *Detectar notas y crear partitura* analiza el audio con Basic Pitch (se puede cancelar). El tempo se estima solo o lo fijas tú.
+3. **Partitura con letra.** Marca *Añadir la letra bajo las notas* antes de detectar: se reconoce la voz (con el modelo y el idioma elegidos en Letras, modo voz cantada) y cada palabra se coloca bajo la nota que suena en ese momento. Hace falta un modelo de voz descargado.
+4. **Corregir.** Pulsa una nota en la partitura para elegirla y usa la barra de notas o el teclado: **↑ ↓** cambian la altura (con **Ctrl**, una octava), **← →** pasan a la nota anterior o siguiente, **N** añade una nota y **Supr** la borra. Las figuras cambian su duración y el campo de letra, su palabra. En la *Lista de notas* se ajustan inicio y duración al segundo.
+5. **Guardar y exportar.** *Guardar versión* crea MIDI y MusicXML nuevos con tus cambios, sin pisar los anteriores. La clave, los nombres y la letra se escriben también en el MusicXML y el PDF. Con MuseScore: *Abrir en MuseScore* y *PDF…*.
+
+> La partitura de la app coloca cada nota a su altura exacta, elige la figura más parecida a su duración y marca los compases según el tempo; no dibuja silencios ni ligaduras. La partitura completa es la del MusicXML (MuseScore/PDF), que se cuantiza a semicorcheas, sin tresillos.
 >
 > La detección es automática y aproximada. Va bien con una melodía o un instrumento solo. Con varios instrumentos, acordes densos o batería habrá notas falsas o ausentes: revisa siempre el resultado.
 
@@ -112,6 +118,10 @@ Cada proyecto es una carpeta en `data/proyectos/` (o donde tú elijas).
 | La transcripción se cierra sola | Falta memoria: usa un modelo más pequeño. Detalle en `logs/motores.log`. |
 | MuseScore no arranca (Linux) | La copia portable necesita X11 o XWayland (lo normal en escritorios actuales). |
 | El programa se cerró mientras grababa | Al volver a abrirlo, la toma aparece como «Interrumpida» con el audio hasta el corte. |
+
+## Versión anterior
+
+La interfaz clásica (1.0, con tarjetas en dos columnas) se conserva en la etiqueta `v1.0-clasica` del repositorio y, en el equipo de desarrollo, como copia ejecutable en la carpeta hermana `PartituraLibre-v1-clasica`.
 
 ## Para desarrollo
 

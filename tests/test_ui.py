@@ -78,6 +78,29 @@ class Interfaz(Aislada):
 
         p.tabla.selectRow(2)
         self.assertTrue(p.b_sube.isEnabled() and p.b_baja.isEnabled() and p.b_borrar.isEnabled())
+
+        # Edición al estilo de un editor de notación: hoja con sistemas y compases, teclado y barra de figuras
+        self.assertEqual(sum(len(s) for s in p.vista.sistemas), 8)
+        self.assertEqual([c[4] for s in p.vista.sistemas for c in s], [0, 0, 0, 0, 1, 1, 1, 1])   # dos compases de 4/4
+        self.assertTrue(p.b_fig["negra"].isChecked() and not p.b_fig["blanca"].isChecked())
+        p._atajo("siguiente")
+        self.assertEqual(p.tabla.currentRow(), 3)
+        p._atajo("arriba"); p._atajo("octava+"); p._atajo("octava-"); p._atajo("abajo")
+        self.assertEqual(p.notas[3][2], ESCALA[3])
+        p._figura("blanca")
+        self.assertAlmostEqual(p.notas[3][1] - p.notas[3][0], 1.0, places=3)                      # una blanca a 120 dura 1 s
+        self.assertTrue(p.b_fig["blanca"].isChecked())
+        p._figura("negra")
+        p.e_letra.setText("la"); p._letra_editada()
+        self.assertEqual(p.letra[3], "la")
+        p.e_letra.setText(""); p._letra_editada()
+        p._atajo("anterior")
+        self.assertEqual(p.tabla.currentRow(), 2)
+        antes = len(p.vista.sistemas)
+        p._zoom(60); p.vista.resize(620, 400)                                                     # hoja estrecha y ampliada: más sistemas
+        self.assertGreater(len(p.vista.sistemas), antes)
+        self.assertEqual(sum(len(s) for s in p.vista.sistemas), 8)                                # sin perder ni repetir notas
+        p._zoom(-60)
         p._mover(-1)                                    # Mi -> Mi bemol
         p.tabla.item(0, 1).setText("0,25")              # la primera nota, más corta (coma decimal española)
         self.assertEqual(p.notas[2][2], 63)

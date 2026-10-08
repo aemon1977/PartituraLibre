@@ -80,6 +80,19 @@ def figura(segundos, bpm):
             else "corchea" if negras >= 0.354 else "semicorchea")
 
 
+NEGRAS = {"redonda": 4, "blanca": 2, "negra": 1, "corchea": 0.5, "semicorchea": 0.25}
+
+
+def segundos_de(fig, bpm):
+    """Duración en segundos de una figura a ese tempo."""
+    return NEGRAS[fig] * 60 / bpm
+
+
+def compas(inicio, bpm, pulsos=4):
+    """Número de compás (desde 0) en el que cae un instante, con el inicio ajustado a la semicorchea."""
+    return int(round(inicio * bpm / 60 * 4) / 4 // pulsos)
+
+
 def columnas(notas):
     """Agrupa las notas que suenan a la vez (acordes): [[índice, …], …] en orden de inicio."""
     cols = []
