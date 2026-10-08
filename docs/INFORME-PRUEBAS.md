@@ -6,7 +6,7 @@ Equipo de pruebas: Debian 13 (trixie) x86_64 real, sesión Wayland con PipeWire,
 
 Cada prueba se clasifica como **superada**, **fallida** o **no ejecutable aquí**.
 
-## 1. Pruebas automatizadas — superadas (67 de 67, ninguna omitida)
+## 1. Pruebas automatizadas — superadas (72 de 72, ninguna omitida)
 
 Se ejecutan con `./herramientas/probar.sh`, siempre con el Python del paquete. Usan los motores reales, no simulacros.
 
@@ -14,12 +14,12 @@ Se ejecutan con `./herramientas/probar.sh`, siempre con el Python del paquete. U
 |---|---|---|
 | `test_dependencias` | 7 | El intérprete en uso es el del paquete (3.11); `sounddevice` y `soundfile` se cargan desde `runtime/`; una dependencia ausente se detecta y se nombra; con el Python del sistema el programa se niega a abrir y dice cómo arrancar; el diagnóstico no filtra rutas personales |
 | `test_audio` | 11 | Señal sintética guardada idéntica muestra a muestra; pausa; cola saturada y desbordamiento notificados y toma marcada incompleta; disco lleno conserva lo grabado; WAV válido antes de cerrarse; cancelar borra; segmentos en vivo contiguos; **sesión simulada de 40 min** sin pérdidas |
-| `test_partitura_flujo` | 12 | **Pentagrama:** posición de las notas en clave de Sol, Fa y Do (3.ª y 4.ª), figuras, acordes; la clave elegida y los nombres Do-Re-Mi llegan al MusicXML. Además: WAV sintético (escala de Do) → notas exactas → MIDI → MusicXML; corrección manual crea versión nueva sin tocar la anterior; nota que cruza trozos no se parte; silencio no inventa notas; archivo ilegible da error explicado; cancelación sin restos |
+| `test_partitura_flujo` | 16 | **Pentagrama:** posición de las notas en clave de Sol, Fa y Do (3.ª y 4.ª), figuras, acordes; la clave elegida y los nombres Do-Re-Mi llegan al MusicXML. Además: WAV sintético (escala de Do) → notas exactas → MIDI → MusicXML; corrección manual crea versión nueva sin tocar la anterior; nota que cruza trozos no se parte; silencio no inventa notas; archivo ilegible da error explicado; cancelación sin restos |
 | `test_letras_flujo` | 6 | Audio libre en español: idioma detectado, palabras esperadas, tiempos crecientes, exportación y reimportación; idioma manual; error sin tumbar el motor; el modo «voz cantada» no da por bueno texto en música sin voz |
 | `test_exportar` | 10 | SRT, VTT y LRC exactos; ida y vuelta; texto editado conserva tiempos; una línea nueva no recibe un tiempo inventado |
 | `test_rutas_proyectos` | 10 | Nombres con tildes y caracteres prohibidos; nombres únicos; audio asociado a resultados; toma interrumpida marcada y conservada; solo se borran proyectos |
 | `test_limpieza` | 4 | La desinstalación borra la carpeta del programa y nada más; se niega ante cualquier otra carpeta |
-| `test_ui` | 7 | La ventana real sin pantalla: navegación, botones bloqueados según el estado, partitura y letra de principio a fin, **partitura en vivo** (una melodía conocida entra por el callback de audio y sus notas aparecen antes de detener; al detener se crea la definitiva), error explicado, cancelación, diagnóstico |
+| `test_ui` | 8 | La ventana real sin pantalla: navegación, botones bloqueados según el estado, partitura y letra de principio a fin, **partitura en vivo** (una melodía conocida entra por el callback de audio y sus notas aparecen antes de detener; al detener se crea la definitiva), error explicado, cancelación, diagnóstico |
 
 ## 2. Instalación desde cero en Debian 13 — superada
 
@@ -67,6 +67,13 @@ Una toma de 54 s de música de Spotify captada por los altavoces con un micrófo
 
 Sigue sin probarse la letra de una canción con instrumentos captada con buena señal; Whisper no está hecho para canto con música y puede fallar aunque el audio sea limpio.
 
+### Partitura con letra (añadido después) — superada con audio de prueba
+
+Voz real en español mezclada con una melodía sintética, en un solo archivo: salieron 82 notas, 19 de ellas con su palabra («corto», «desambiguación», «en», «wikipedia»…), visibles en el pentagrama y la tabla; una palabra corregida a mano llegó al MusicXML de la nueva versión; el texto completo se abrió en Letras. MuseScore renderizó la partitura con la letra bajo las notas.
+
+- **Fallo encontrado y corregido:** MuseScore 4.7.5 se cerraba (violación de segmento) al abrir esa partitura, con o sin letra. Causa: los tresillos que generaba la conversión a MusicXML. Ahora se cuantiza a semicorcheas y hay una prueba de regresión.
+- **No ejecutable aquí:** una canción real cantada con instrumentos. El audio de prueba es voz hablada, que al pasarla a notas da una partitura enrevesada; con canto real la colocación de las palabras depende de que Whisper las reconozca y dé bien sus tiempos.
+
 ## 7. Comparación de modelos de voz — superada
 
 Mismo audio (25 s en español + 11 s en inglés), CPU, incluida la carga del modelo:
@@ -112,6 +119,7 @@ Ninguna en el estado entregado. Fallos encontrados por las pruebas y corregidos 
 5. MuseScore portable creaba `~/Documents/MuseScore4` y solo arranca con X11 → `HOME`/`XDG` propios y `xcb`.
 6. Botones de semitono inactivos al seleccionar una nota.
 8. En Linux no se podía elegir entre los micrófonos reales (solo nombres ALSA) → lista del servidor de sonido.
+11. Los tresillos del MusicXML hacían que MuseScore se cerrase → cuantización a semicorcheas.
 10. El pentagrama dibujaba como corchea una negra detectada algo corta → se elige la figura más cercana.
 9. El borrador en vivo perdía la nota que empezaba justo en el corte entre segmentos → regla de integración corregida.
 7. Lanzador de Linux: la búsqueda de Python abortaba con `set -e`.

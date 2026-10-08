@@ -99,12 +99,41 @@ def nombre_nota(midi):
     return f"{NOMBRES[midi % 12]}{midi // 12 - 1}"
 
 
+LEJOS_S = 1.0   # una palabra a más de esto de cualquier nota no se canta: se queda fuera de la partitura
+
+
+def asignar_letra(notas, palabras):
+    """Coloca cada palabra ([inicio, fin, texto]) en la nota que suena cuando empieza, o en la más
+    cercana. Devuelve una lista paralela a `notas` con el texto de cada una ('' si no lleva).
+    Si varias notas suenan a la vez, la palabra va a la más aguda (la melodía)."""
+    letra = [""] * len(notas)
+    for ini, _fin, texto in sorted(palabras):
+        def distancia(i):
+            n = notas[i]
+            return 0.0 if n[0] - UNION_S <= ini <= n[1] else min(abs(ini - n[0]), abs(ini - n[1]))
+        if not notas or not texto.strip():
+            continue
+        i = min(range(len(notas)), key=lambda i: (round(distancia(i), 3), -notas[i][2]))
+        if distancia(i) <= LEJOS_S:
+            letra[i] = (letra[i] + " " + texto.strip()).strip()
+    return letra
+
+
 def leer_notas(ruta):
     """(bpm, [[inicio, fin, tono, intensidad], …])"""
     d = json.loads(Path(ruta).read_text(encoding="utf-8"))
     return d.get("bpm", 120), d["notas"]
 
 
-def guardar_notas(ruta, bpm, notas):
-    notas = sorted(([round(float(a), 4), round(float(b), 4), int(t), float(v)] for a, b, t, v in notas))
-    Path(ruta).write_text(json.dumps({"bpm": bpm, "notas": notas}), encoding="utf-8")
+def leer_letra(ruta):
+    """Texto bajo cada nota (lista paralela a las notas), o lista vacía si la partitura no lleva letra."""
+    return json.loads(Path(ruta).read_text(encoding="utf-8")).get("letra") or []
+
+
+def guardar_notas(ruta, bpm, notas, letra=()):
+    letra = list(letra) + [""] * (len(notas) - len(letra))
+    filas = sorted(([round(float(a), 4), round(float(b), 4), int(t), float(v)], letra[i]) for i, (a, b, t, v) in enumerate(notas))
+    datos = {"bpm": bpm, "notas": [f[0] for f in filas]}
+    if any(letra):
+        datos["letra"] = [f[1] for f in filas]
+    Path(ruta).write_text(json.dumps(datos, ensure_ascii=False), encoding="utf-8")

@@ -61,6 +61,7 @@ class Ventana(QMainWindow):
         self.ajustes.cambio.connect(self.letras.recargar_modelos)
         self.ajustes.cambio.connect(self.partituras._botones)
         self.letras.cambio.connect(self.ajustes.recargar)
+        self.letras.cambio.connect(self.partituras._botones)
         self.proyectos.abrir.connect(self._abrir_proyecto)
 
     def ir(self, i):

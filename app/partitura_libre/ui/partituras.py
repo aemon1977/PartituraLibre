@@ -7,7 +7,7 @@ from PySide6.QtCore import Qt, QTimer, Signal
 from PySide6.QtWidgets import (QAbstractItemView, QCheckBox, QComboBox, QFileDialog, QHBoxLayout, QHeaderView, QLineEdit, QProgressBar,
                                QScrollArea, QSpinBox, QTableWidget, QTableWidgetItem, QVBoxLayout, QWidget)
 
-from .. import config, editor, lanzar, partituras, proyectos, rutas, tareas
+from .. import config, editor, exportar, lanzar, letras, partituras, proyectos, rutas, tareas
 from . import tema
 from .captura import PanelCaptura
 from .pentagrama import Pentagrama
@@ -25,6 +25,7 @@ class PaginaPartituras(QWidget):
         self.version = None    # resultado mostrado: {'midi', 'musicxml', 'notas', …}
         self.externa = None    # partitura existente abierta sin proyecto
         self.notas, self.bpm, self.tarea, self._cargando = [], 120, None, False
+        self.letra = []        # texto cantado bajo cada nota (paralela a self.notas)
         self.vivo = None       # motor del borrador en vivo mientras se graba
         self._ultima, self._grababa, self._hubo_vivo, self._auto = {}, False, False, False
 
@@ -55,6 +56,9 @@ class PaginaPartituras(QWidget):
         self.tempo.setSpecialValueText("Automático")
         self.tempo.setSuffix(" pulsos/min")
         self.tempo.setToolTip("Tempo con el que se escribe la partitura. «Automático» lo estima del audio.")
+        self.con_letra = QCheckBox("Añadir la letra bajo las notas (voz a texto)")
+        self.con_letra.setChecked(config.cargar().get("con_letra", False))
+        self.con_letra.toggled.connect(self._guardar_con_letra)
         self.b_transcribir = tema.boton("Detectar notas y crear partitura", self.transcribir, "primario")
         self.b_cancelar = tema.boton("Cancelar análisis", self.cancelar)
         self.b_oir = tema.boton("Escuchar audio", lambda: tema.abrir_en_sistema(self._audio()), ayuda="Abre el audio original en tu reproductor")
@@ -65,6 +69,7 @@ class PaginaPartituras(QWidget):
         t2, v2 = tema.tarjeta("2 · Convertir en partitura")
         v2.addWidget(self.e_toma)
         v2.addLayout(tema.fila(tema.etiqueta("Tempo", "tenue", False), self.tempo, None, self.b_oir))
+        v2.addWidget(self.con_letra)
         v2.addLayout(tema.fila(self.b_transcribir, self.b_cancelar, estirar=self.b_transcribir))
         v2.addWidget(self.barra)
         v2.addWidget(self.e_estado)
@@ -90,8 +95,8 @@ class PaginaPartituras(QWidget):
         rollo.setWidgetResizable(True)
         rollo.setFixedHeight(208)
         rollo.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-        self.tabla = QTableWidget(0, 4)
-        self.tabla.setHorizontalHeaderLabels(["Inicio (s)", "Duración (s)", "Nota MIDI", "Nombre"])
+        self.tabla = QTableWidget(0, 5)
+        self.tabla.setHorizontalHeaderLabels(["Inicio (s)", "Duración (s)", "Nota MIDI", "Nombre", "Letra"])
         self.tabla.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
         self.tabla.verticalHeader().setDefaultSectionSize(26)
         self.tabla.setMinimumHeight(88)
@@ -169,6 +174,11 @@ class PaginaPartituras(QWidget):
         self.b_cancelar.setEnabled(analizando)
         self.b_oir.setEnabled(audio)
         self.tempo.setEnabled(not analizando)
+        modelo = config.cargar()["modelo"]
+        self.con_letra.setEnabled(not analizando and letras.instalado(modelo))
+        self.con_letra.setToolTip(
+            f"Reconoce la voz con el modelo «{modelo}» y el idioma elegidos en Letras (modo voz cantada) y escribe cada palabra bajo su nota."
+            if letras.instalado(modelo) else f"Primero descarga el modelo de voz «{modelo}» en la sección Letras.")
         for b in (self.b_sube, self.b_baja, self.b_borrar):
             b.setEnabled(hay and self.tabla.currentRow() >= 0)
         self.b_anadir.setEnabled(hay)
@@ -223,7 +233,7 @@ class PaginaPartituras(QWidget):
         if grabando and not self._grababa:      # empieza una toma: lienzo en blanco y motor en marcha
             self._hubo_vivo = self.en_vivo.isChecked() and lanzar.instalado("partituras")
             self.proyecto = self.version = self.externa = None
-            self._ultima = {}
+            self._ultima, self.letra = {}, []
             self._poner_notas([], 120)
             self.e_toma.setText("Grabando una toma nueva…")
             self.e_estado.setText("Preparando el borrador en vivo: las primeras notas tardan unos segundos." if self._hubo_vivo else "")
@@ -267,6 +277,7 @@ class PaginaPartituras(QWidget):
         if versiones:
             self._mostrar(versiones[-1])
         else:
+            self.letra = []
             self._poner_notas([], 120)
         self._botones()
 
@@ -282,14 +293,70 @@ class PaginaPartituras(QWidget):
         self._resultado = None
         self._botones()
 
+    def _guardar_con_letra(self, si):
+        a = config.cargar()
+        a["con_letra"] = si
+        config.guardar(a)
+
     def transcribir(self):
-        self._lanzar({"cmd": "transcribir", "audio": str(self._audio()), "carpeta": str(self.proyecto),
-                      "nombre": self.proyecto.name, "bpm": self.tempo.value() or None, **self._notacion()}, "Preparando el análisis…")
+        orden = {"cmd": "transcribir", "audio": str(self._audio()), "carpeta": str(self.proyecto),
+                 "nombre": self.proyecto.name, "bpm": self.tempo.value() or None, **self._notacion()}
+        if self.con_letra.isChecked() and self.con_letra.isEnabled():
+            return self._reconocer_letra(orden)
+        self._lanzar(orden, "Preparando el análisis…")
+
+    def _reconocer_letra(self, orden):
+        """Primer paso de «partitura con letra»: voz a texto con el tiempo de cada palabra. Después se
+        detectan las notas y el motor coloca cada palabra en la suya."""
+        a, carpeta, frases, fallo = config.cargar(), self.proyecto, [], []
+        self.barra.setValue(0)
+        self.e_estado.setText("Paso 1 de 2 · Reconociendo la letra (voz a texto)…")
+        tema.reclasificar(self.e_estado, "tenue")
+
+        def evento(ev):
+            if self.tarea is not t:
+                return
+            if ev["t"] == "segmento":
+                frases.append(ev)
+                self.barra.setValue(int(ev["v"] * 400))
+                self.e_estado.setText(f"Paso 1 de 2 · Letra: «{ev['texto'][:60]}»")
+            elif ev["t"] == "error":
+                fallo.append(ev["msg"])
+            if ev["t"] in ("fin", "error"):
+                self.tarea = None
+                t.cancelar()
+                if frases:
+                    orden["palabras"] = [p for f in frases for p in f["palabras"]]
+                    segs = [{k: f[k] for k in ("inicio", "fin", "texto", "dudoso")} for f in frases]
+                    f_json = rutas.ruta_unica(carpeta, carpeta.name, ".letra.json", (".txt",))
+                    f_txt = f_json.with_name(f_json.name.replace(".letra.json", ".txt"))
+                    config.escribir_json(f_json, {"idioma": a["idioma"], "modelo": a["modelo"], "cantada": True, "segmentos": segs})
+                    f_txt.write_text(exportar.txt(segs), encoding="utf-8")
+                    proyectos.anotar_resultado(carpeta, "letra", segmentos=f_json.name, texto=f_txt.name)
+                self._sin_letra = (fallo[0] if fallo else "" if frases else
+                                   "No se reconoció ninguna palabra, así que la partitura se crea sin letra.")
+                self._lanzar(orden, "Paso 2 de 2 · Detectando las notas…")
+
+        def cerrado(codigo, cancelada):
+            if self.tarea is not t:
+                return  # terminó bien y ya se pasó al segundo paso
+            self.tarea = None
+            self.e_estado.setText("Análisis cancelado. El audio original se conserva." if cancelada else
+                                  f"El motor de voz se cerró inesperadamente (código {codigo}); suele ser falta de memoria. "
+                                  "Prueba un modelo más pequeño en Letras o desmarca «Añadir la letra».")
+            tema.reclasificar(self.e_estado, "tenue" if cancelada else "error")
+            self._botones()
+
+        t = tareas.Tarea("partitura_libre.workers.voz", [str(letras.carpeta_modelo(a["modelo"]))], "app",
+                         lambda ev: tema.en_ui(lambda: evento(ev)), lambda c, cancelada: tema.en_ui(lambda: cerrado(c, cancelada)))
+        t.enviar(id=1, audio=str(self._audio()), idioma=a["idioma"], cantada=True, palabras=True)
+        self.tarea = t
+        self._botones()
 
     def regenerar(self):
         edicion = rutas.TEMP / "edicion.notas.json"
         rutas.TEMP.mkdir(exist_ok=True)
-        partituras.guardar_notas(edicion, self.tempo.value() or self.bpm, self.notas)
+        partituras.guardar_notas(edicion, self.tempo.value() or self.bpm, self.notas, self.letra)
         self._lanzar({"cmd": "regenerar", "notas": str(edicion), "carpeta": str(self.proyecto),
                       "nombre": self.proyecto.name, "bpm": self.tempo.value() or None, **self._notacion()}, "Creando la nueva versión…")
 
@@ -319,7 +386,10 @@ class PaginaPartituras(QWidget):
             self.barra.setValue(1000)
             if carpeta == self.proyecto:
                 self.abrir_proyecto(carpeta)
-                self.e_estado.setText(f"Partitura creada: {r['n']} notas a {r['bpm']} pulsos/min → {r['musicxml']} y {r['midi']}. Revísala a la derecha.")
+                aviso, self._sin_letra = getattr(self, "_sin_letra", ""), ""
+                self.e_estado.setText(f"Partitura creada: {r['n']} notas a {r['bpm']} pulsos/min"
+                                      + (f", {r['con_letra']} con letra" if r.get("con_letra") else "")
+                                      + f" → {r['musicxml']} y {r['midi']}. Revísala a la derecha. " + aviso)
             self.cambio.emit()
         else:
             motivo = r["msg"] if r else (f"El motor de partituras se cerró inesperadamente (código {codigo}). "
@@ -333,13 +403,15 @@ class PaginaPartituras(QWidget):
     def _mostrar(self, version):
         self.version = version
         bpm, notas = partituras.leer_notas(self.proyecto / version["notas"])
+        self.letra = partituras.leer_letra(self.proyecto / version["notas"])
         self._poner_notas(notas, bpm)
 
     def _poner_notas(self, notas, bpm, sel=-1):
         self.notas, self.bpm, self._cargando = [list(n) for n in notas], bpm, True
+        self.letra = (self.letra + [""] * len(self.notas))[:len(self.notas)]
         self.tabla.setRowCount(len(self.notas))
         for i, (ini, fin, tono, _v) in enumerate(self.notas):
-            for c, texto in enumerate((f"{ini:.2f}", f"{fin - ini:.2f}", str(tono), partituras.nombre_nota(tono))):
+            for c, texto in enumerate((f"{ini:.2f}", f"{fin - ini:.2f}", str(tono), partituras.nombre_nota(tono), self.letra[i])):
                 it = QTableWidgetItem(texto)
                 it.setTextAlignment(Qt.AlignCenter)
                 if c == 3:
@@ -353,7 +425,7 @@ class PaginaPartituras(QWidget):
 
     def _dibujar(self):
         sel = self.tabla.currentRow()
-        self.vista.poner(self.notas, sel, self.tempo.value() or self.bpm, self.clave.currentData(), self.nombres.isChecked())
+        self.vista.poner(self.notas, sel, self.tempo.value() or self.bpm, self.clave.currentData(), self.nombres.isChecked(), self.letra)
         if sel >= 0:  # la nota elegida en la tabla queda a la vista en el pentagrama
             self.rollo.ensureVisible(self.vista.x_de(sel), self.vista.height() // 2, 120, 0)
 
@@ -371,6 +443,9 @@ class PaginaPartituras(QWidget):
         if self._cargando:
             return
         i, n = it.row(), self.notas[it.row()]
+        if it.column() == 4:  # letra de esa nota: texto libre
+            self.letra[i] = it.text().strip()
+            return self._poner_notas(self.notas, self.bpm, i)
         try:
             v = float(it.text().replace(",", "."))
             if it.column() == 0:
@@ -393,12 +468,14 @@ class PaginaPartituras(QWidget):
         i = self.tabla.currentRow()
         base = self.notas[i] if i >= 0 else [0.0, 0.0, 60, 0.7]
         self.notas.insert(i + 1, [base[1], base[1] + 0.5, base[2], 0.7])
+        self.letra.insert(i + 1, "")
         self._poner_notas(self.notas, self.bpm, i + 1)
 
     def _borrar(self):
         i = self.tabla.currentRow()
         if i >= 0:
             del self.notas[i]
+            del self.letra[i:i + 1]
             self._poner_notas(self.notas, self.bpm, min(i, len(self.notas) - 1))
 
     # -- salida -----------------------------------------------------------------
@@ -419,6 +496,7 @@ class PaginaPartituras(QWidget):
         ruta, _ = QFileDialog.getOpenFileName(self, "Abrir partitura", str(rutas.DATOS), f"Partituras ({partituras.PARTITURAS})")
         if ruta:
             self.proyecto, self.version, self.externa = None, None, Path(ruta)
+            self.letra = []
             self._poner_notas([], 120)
             self.e_toma.setText(f"Partitura existente: <b>{Path(ruta).name}</b> (se edita en MuseScore)")
             editor.abrir(ruta)

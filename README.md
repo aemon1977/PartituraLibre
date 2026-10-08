@@ -60,9 +60,12 @@ Opcionales, solo cuando pulsas el botón correspondiente:
 1. **Grabar o importar.** Si hay más de un micrófono, elígelo en la lista (aparecen con su nombre real; *Actualizar* vuelve a buscarlos), pulsa *Probar nivel* para ver si la barra se mueve y después *Grabar*. Con *Ver las notas mientras grabo* la partitura se va dibujando **en vivo** cada 3 segundos como borrador; al detener se analiza la toma completa y se crea la definitiva. Puedes pausar, detener o descartar. O importa un WAV, MP3, FLAC u OGG. La toma original se guarda siempre en WAV dentro del proyecto, aunque falle lo demás.
 2. **Convertir.** *Detectar notas y crear partitura* analiza el audio con Basic Pitch (se puede cancelar). El tempo se estima solo o lo fijas tú.
 3. **Revisar.** Las notas se dibujan en un **pentagrama** con su clave, sus figuras y el nombre de cada nota debajo (Do, Re, Mi…), y también en una tabla. Elige la clave —de Sol, de Fa en 4.ª, de Do en 3.ª o de Do en 4.ª; «automática» escoge entre Sol y Fa según la altura— y si quieres ver los nombres. Corrige inicio, duración o altura en la tabla, añade o borra notas y pulsa *Guardar cambios como nueva versión*: se crean archivos nuevos, nunca se pisa lo anterior. La clave y los nombres elegidos se escriben también en el MusicXML y, por tanto, en el PDF.
-4. **Exportar.** *Guardar MIDI…*, *Guardar MusicXML…*, y con MuseScore: *Abrir en MuseScore* (edición gráfica completa) y *Exportar PDF…*.
+4. **Partitura con letra.** Marca *Añadir la letra bajo las notas* antes de *Detectar notas*: primero se reconoce la voz (con el modelo y el idioma elegidos en Letras, en modo voz cantada) y después cada palabra se coloca bajo la nota que suena en ese momento. La letra se ve en el pentagrama, se corrige nota a nota en la columna **Letra** de la tabla y se escribe en el MusicXML y el PDF. El texto completo queda guardado en el mismo proyecto y se puede abrir en la sección Letras. Hace falta tener descargado un modelo de voz.
+5. **Exportar.** *Guardar MIDI…*, *Guardar MusicXML…*, y con MuseScore: *Abrir en MuseScore* (edición gráfica completa) y *Exportar PDF…*.
 
 > El pentagrama de la app coloca cada nota a su altura exacta y elige la figura más parecida a su duración, sin compases; la partitura con compases y ritmo cuantizado es la del MusicXML (MuseScore/PDF).
+>
+> La partitura exportada se cuantiza a semicorcheas, sin tresillos.
 >
 > La detección es automática y aproximada. Va bien con una melodía o un instrumento solo. Con varios instrumentos, acordes densos o batería habrá notas falsas o ausentes: revisa siempre el resultado.
 

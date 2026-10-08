@@ -63,6 +63,8 @@ Lo cubre `tests/test_dependencias.py`, incluido el caso de dependencia ausente y
 
 **7 quater. Pentagrama propio.** La revisión se hace sobre un pentagrama dibujado por la app (`ui/pentagrama.py`) con la fuente de notación Bravura (SIL OFL, incluida en `app/partitura_libre/recursos/` para que se vea igual en Linux y Windows). La posición de cada nota en cada clave se calcula en `partituras.posicion` y está cubierta por pruebas. Las notas se colocan en columnas regulares (los acordes, apilados) y la figura es la más cercana a la duración; no hay compases: eso lo hace music21 al generar el MusicXML, que recibe la misma clave y, si se pide, los nombres como letra.
 
+**7 quinquies. Partitura con letra.** De un mismo audio: primero el motor de voz devuelve las frases con el tiempo de cada palabra; después el motor de notas coloca cada palabra en la nota que suena cuando empieza (`partituras.asignar_letra`; con varias notas a la vez, en la más aguda; una palabra a más de 1 s de toda nota se queda solo en el texto). La letra se guarda junto a las notas (`letra` en `.notas.json`), se edita por nota y se escribe como letra en el MusicXML. Las partituras se cuantizan a semicorcheas (`quarterLengthDivisors=(4,)`): los tresillos que deducía music21 hacían que MuseScore 4.7.5 se cerrase al abrir el archivo.
+
 **8. Audio largo por trozos con solape.** `workers/notas.py` lee 120 s cada vez (nunca el archivo entero) con 2 s de contexto a cada lado. Solo cuentan las notas que empiezan dentro del trozo; una nota que sigue sonando en el siguiente se alarga en vez de partirse (`partituras.integrar`). Se descartan notas «fantasma» que son armónicos débiles de otra simultánea (`quitar_armonicos`).
 
 **9. Análisis en procesos aparte.** Interfaz siempre libre; cancelar es terminar el proceso. Los resultados se escriben como `.parcial` y solo se renombran al acabar; al cancelar se borran. El motor de voz es un proceso persistente (carga el modelo una vez) que recibe órdenes por la entrada estándar.
@@ -91,6 +93,7 @@ Lo cubre `tests/test_dependencias.py`, incluido el caso de dependencia ausente y
 | Partitura en vivo | Las notas de una melodía conocida aparecen antes de detener; al detener queda la definitiva | `test_ui` |
 | Elección de micrófono | Cada opción graba del micrófono pedido | Informe, apartado 5 |
 | Pentagrama y claves | Cada nota en su línea o espacio en las cuatro claves; clave y nombres llegan al MusicXML | `test_partitura_flujo` |
+| Partitura con letra | De un único audio salen notas y palabras bajo ellas; la corrección de una palabra llega al MusicXML | `test_ui`, `test_partitura_flujo` |
 | Interfaz | Botones bloqueados según el estado; errores explicados; cancelación limpia | `test_ui` |
 | PDF | MuseScore portable convierte MusicXML y MIDI sin escribir fuera | Informe, apartado 6 |
 | Desinstalación | Borra la carpeta y solo la carpeta | `test_limpieza`, informe apartado 4 |

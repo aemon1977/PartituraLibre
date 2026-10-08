@@ -92,7 +92,7 @@ def estimar_bpm(x, sr):
         return 120
 
 
-def escribir(notas, bpm, carpeta, nombre, titulo, clave="", nombres=False):
+def escribir(notas, bpm, carpeta, nombre, titulo, clave="", nombres=False, letra=()):
     """Escribe nombre.notas.json, nombre.mid y nombre.musicxml sin pisar nada."""
     import pretty_midi
     from music21 import clef, converter, metadata
@@ -110,7 +110,9 @@ def escribir(notas, bpm, carpeta, nombre, titulo, clave="", nombres=False):
     pm.write(str(p_mid))
     emitir("progreso", v=0.93, msg="Creando MusicXML")
 
-    partitura = converter.parse(str(p_mid), format="midi")
+    # Se cuantiza a semicorcheas, sin tresillos: los grupos irregulares que deduce music21 de una
+    # interpretación real son casi siempre ruido y además hacen que MuseScore 4.7 se cierre al abrirlos.
+    partitura = converter.parse(str(p_mid), format="midi", quarterLengthDivisors=(4,))
     partitura.metadata = metadata.Metadata(title=titulo, composer="Transcripción automática · Partitura Libre")
     elegida = {"sol": clef.TrebleClef, "fa": clef.BassClef, "do3": clef.AltoClef, "do4": clef.TenorClef}.get(clave)
     for parte in partitura.parts:
@@ -118,15 +120,28 @@ def escribir(notas, bpm, carpeta, nombre, titulo, clave="", nombres=False):
             for c in list(parte.recurse().getElementsByClass(clef.Clef)):
                 c.activeSite.remove(c)
             (parte.getElementsByClass("Measure").first() or parte).insert(0, elegida())
-        if nombres:  # Do, Re, Mi… bajo cada nota, como letra
-            for n in parte.recurse().notes:
-                if n.tie is None or n.tie.type == "start":
-                    n.addLyric(" ".join(partituras.solfeo(p.midi) for p in n.pitches))
+        libres = {i for i, texto in enumerate(letra) if texto}
+        for n in parte.recurse().notes:
+            if n.tie is not None and n.tie.type != "start":
+                continue
+            if libres:  # la letra: cada figura recibe el texto de la nota detectada de ese tono más cercana en el tiempo
+                t = float(n.getOffsetInHierarchy(partitura)) * 60 / bpm
+                versos = []
+                for p in n.pitches:
+                    i = min((i for i in libres if notas[i][2] == p.midi), key=lambda i: abs(notas[i][0] - t), default=None)
+                    if i is not None and abs(notas[i][0] - t) <= 0.5:
+                        libres.discard(i)
+                        versos.append(letra[i])
+                if versos:
+                    n.addLyric(" ".join(versos))
+            if nombres:  # Do, Re, Mi… bajo cada nota (segunda línea si hay letra)
+                n.addLyric(" ".join(partituras.solfeo(p.midi) for p in n.pitches), lyricNumber=2 if any(letra) else 1)
     partitura.write("musicxml", fp=str(p_xml))
-    p_notas.write_text(json.dumps({"bpm": bpm, "notas": notas}), encoding="utf-8")
+    partituras.guardar_notas(p_notas, bpm, notas, letra)
     for p, f in ((p_notas, f_notas), (p_mid, f_mid), (p_xml, f_xml)):
         reemplazar(p, f)
-    return {"midi": f_mid.name, "musicxml": f_xml.name, "notas": f_notas.name, "bpm": bpm, "n": len(notas)}
+    return {"midi": f_mid.name, "musicxml": f_xml.name, "notas": f_notas.name, "bpm": bpm, "n": len(notas),
+            "con_letra": sum(bool(t) for t in letra)}
 
 
 def main():
@@ -143,11 +158,12 @@ def main():
                 emitir("error", msg="No se detectó ninguna nota. Comprueba que el audio tiene una melodía audible; "
                                     "la grabación original se conserva.")
                 return 1
+            letra = partituras.asignar_letra(notas, o.get("palabras") or [])
         else:
             d = json.loads(Path(o["notas"]).read_text(encoding="utf-8"))
-            notas, bpm = d["notas"], o.get("bpm") or d.get("bpm", 120)
+            notas, bpm, letra = d["notas"], o.get("bpm") or d.get("bpm", 120), d.get("letra") or []
         emitir("fin", **escribir(notas, bpm, o["carpeta"], o["nombre"], o.get("titulo", o["nombre"]),
-                                 o.get("clave", ""), o.get("nombres", False)))
+                                 o.get("clave", ""), o.get("nombres", False), letra))
         return 0
     except Exception as e:
         import traceback

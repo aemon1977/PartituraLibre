@@ -2,7 +2,8 @@
 
 Uso: python -m partitura_libre.workers.voz <carpeta_del_modelo>
 Recibe órdenes JSON por la entrada estándar, una por línea:
-    {"id": 1, "audio": "...", "idioma": "es" | "", "cantada": false, "desfase": 0.0, "borrar": false}
+    {"id": 1, "audio": "...", "idioma": "es" | "", "cantada": false, "desfase": 0.0, "borrar": false, "palabras": false}
+`palabras` añade a cada frase el tiempo de cada palabra (para poner la letra bajo las notas).
 `borrar` elimina el audio al terminar (segmentos temporales del dictado en vivo).
 """
 import json
@@ -26,11 +27,13 @@ def main():
             # modelo cree sin voz: se muestran marcados como dudosos, salvo los que son puro relleno.
             segs, info = modelo.transcribe(o["audio"], language=o.get("idioma") or None, beam_size=5,
                                            vad_filter=not cantada, condition_on_previous_text=not cantada,
+                                           word_timestamps=bool(o.get("palabras")),
                                            **({"no_speech_threshold": None} if cantada else {}))
             emitir("idioma", id=o["id"], idioma=info.language, prob=round(info.language_probability, 3), dur=info.duration)
             for s in segs:
                 if s.text.strip() and not (cantada and letras.es_relleno(s.text, s.avg_logprob)):
                     emitir("segmento", id=o["id"], inicio=round(s.start + desfase, 2), fin=round(s.end + desfase, 2),
+                           palabras=[[round(p.start + desfase, 2), round(p.end + desfase, 2), p.word.strip()] for p in (s.words or [])],
                            texto=s.text.strip(), v=round(min(1.0, s.end / max(info.duration, 0.01)), 3),
                            dudoso=cantada and s.avg_logprob < -0.5 or letras.es_dudoso(s.avg_logprob, s.no_speech_prob, s.compression_ratio))
             emitir("fin", id=o["id"])

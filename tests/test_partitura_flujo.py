@@ -75,6 +75,17 @@ class Flujo(Aislada):
         sin, _ = ejecutar({"cmd": "regenerar", "notas": str(self.dir / eventos[-1]["notas"]), "carpeta": str(self.dir), "nombre": "sin nombres"})
         self.assertEqual(list(ET.parse(self.dir / sin[-1]["musicxml"]).getroot().iter("lyric")), [])
 
+    def test_ritmos_irregulares_no_generan_tresillos(self):
+        """Regresión: los tresillos que deducía la conversión hacían que MuseScore se cerrase al abrir el archivo."""
+        notas = [[i / 3 * 0.5, (i + 1) / 3 * 0.5, 60 + i % 5, 0.7] for i in range(24)] + [[4.1, 4.37, 72, 0.7], [4.43, 5.0, 74, 0.7]]
+        partituras.guardar_notas(self.dir / "irregular.json", 120, notas)
+        eventos, codigo = ejecutar({"cmd": "regenerar", "notas": str(self.dir / "irregular.json"), "carpeta": str(self.dir), "nombre": "irregular"})
+        self.assertEqual(codigo, 0, eventos)
+        xml = (self.dir / eventos[-1]["musicxml"]).read_text(encoding="utf-8")
+        self.assertNotIn("<tuplet", xml)
+        self.assertNotIn("<time-modification", xml)
+        self.assertGreater(xml.count("<note"), 10)
+
     def test_audio_troceado_conserva_la_continuidad_temporal(self):
         """Con trozos de 2 s, una nota de 3 s cruza un corte: debe salir una sola nota y los tiempos reales."""
         wav = escribir_wav(self.dir / "larga.wav", [(60, 1.0), (67, 3.0), (72, 1.5)])
@@ -145,6 +156,32 @@ class Notacion(unittest.TestCase):
         self.assertEqual(partituras.columnas(notas), [[1], [3, 0, 2]])  # un acorde Do-Mi-Sol tras un Do suelto
         self.assertEqual(partituras.clave_adecuada([[0, 1, m, .7] for m in (60, 64, 67)]), "sol")
         self.assertEqual(partituras.clave_adecuada([[0, 1, m, .7] for m in (40, 43, 48)]), "fa")
+
+
+class LetraBajoLasNotas(unittest.TestCase):
+    NOTAS = [[0.0, 0.5, 60, .7], [0.5, 1.0, 62, .7], [1.0, 2.0, 64, .7], [1.0, 2.0, 52, .7], [3.0, 3.5, 65, .7]]
+
+    def test_cada_palabra_va_a_la_nota_que_suena(self):
+        palabras = [[0.05, 0.4, "Ho"], [0.55, 0.9, "la"], [1.1, 1.4, "mun"], [1.6, 1.9, "do"], [2.9, 3.3, "sí"]]
+        self.assertEqual(partituras.asignar_letra(self.NOTAS, palabras), ["Ho", "la", "mun do", "", "sí"])
+        # con dos notas a la vez la palabra va a la aguda (melodía), no al bajo; dos palabras en una nota larga se juntan
+
+    def test_palabra_lejos_de_toda_nota_no_se_fuerza(self):
+        self.assertEqual(partituras.asignar_letra(self.NOTAS, [[2.4, 2.6, "cerca"], [8.0, 8.5, "hablado"]]), ["", "", "cerca", "", ""])
+        self.assertEqual(partituras.asignar_letra([], [[0, 1, "nada"]]), [])
+
+    def test_guardar_y_leer_conserva_la_letra_junto_a_su_nota_aunque_se_reordene(self):
+        import tempfile
+        from pathlib import Path
+        from partitura_libre import rutas
+        rutas.TEMP.mkdir(exist_ok=True)
+        with tempfile.TemporaryDirectory(dir=rutas.TEMP) as d:
+            ruta = Path(d) / "n.json"
+            partituras.guardar_notas(ruta, 100, [[2.0, 2.5, 64, .7], [0.0, 0.5, 60, .7], [1.0, 1.5, 62, .7]], ["tres", "uno"])
+            self.assertEqual([n[2] for n in partituras.leer_notas(ruta)[1]], [60, 62, 64])
+            self.assertEqual(partituras.leer_letra(ruta), ["uno", "", "tres"])
+            partituras.guardar_notas(ruta, 100, [[0.0, 0.5, 60, .7]])
+            self.assertEqual(partituras.leer_letra(ruta), [])
 
 
 class Integracion(unittest.TestCase):

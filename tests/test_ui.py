@@ -200,6 +200,59 @@ class Interfaz(Aislada):
         self.assertEqual(self.v.pila.currentIndex(), 1)
         self.assertIn("✎", l.texto.toPlainText())
 
+    @unittest.skipUnless(any(letras.instalado(m) for m in letras.MODELOS), "sin modelo de voz descargado")
+    def test_partitura_con_letra_de_una_sola_toma(self):
+        """Una voz real (lectura libre en español) mezclada con una melodía: de un único audio deben salir
+        las notas y, bajo ellas, las palabras; y la letra se puede corregir y vuelve a escribirse."""
+        import xml.etree.ElementTree as ET
+        import numpy as np
+        import soundfile as sf
+        from partitura_libre import config
+        from tests.comun import tono
+        from tests.test_letras_flujo import DATOS
+        voz, sr = sf.read(DATOS / "voz-es.flac", dtype="float32")
+        melodia = np.concatenate([tono(m, 0.5, sr) for m in (ESCALA * 7)])[:len(voz)] * 0.12
+        mezcla = self.dir / "canción.wav"
+        sf.write(mezcla, voz[:len(melodia)] + melodia.astype("float32"), sr, subtype="PCM_16")
+        a = config.cargar()
+        a["modelo"], a["idioma"] = next(m for m in ("small", "base", "tiny") if letras.instalado(m)), "es"
+        config.guardar(a)
+
+        p = self.v.partituras
+        d = proyectos.crear("canción con letra", "partitura")
+        proyectos.importar_audio(d, mezcla)
+        p.abrir_proyecto(d)
+        self.assertTrue(p.con_letra.isEnabled())
+        p.con_letra.setChecked(True)
+        p.transcribir()
+        self.assertIn("Paso 1 de 2", p.e_estado.text())
+        self.assertTrue(p.b_cancelar.isEnabled() and not p.b_transcribir.isEnabled())
+        self.assertTrue(esperar(lambda: p.tarea is None and p.version is not None, 300), p.e_estado.text())
+        self.assertEqual(self.dialogos, [])
+
+        cantado = " ".join(t for t in p.letra if t).lower()
+        self.assertGreater(len(p.notas), 10)
+        self.assertEqual(len(p.letra), len(p.notas))
+        self.assertIn("wikipedia", cantado)                                   # las palabras están bajo las notas
+        self.assertIn("con letra", p.e_estado.text())
+        con_texto = [i for i, t in enumerate(p.letra) if t]
+        self.assertEqual(p.tabla.item(con_texto[0], 4).text(), p.letra[con_texto[0]])
+        tipos = [r["tipo"] for r in proyectos.leer(d)["resultados"]]
+        self.assertEqual(sorted(tipos), ["letra", "partitura"])               # un proyecto, los dos resultados
+        letra_xml = lambda v: " ".join(l.findtext("text") or "" for l in ET.parse(d / v["musicxml"]).getroot().iter("lyric")).lower()
+        self.assertIn("wikipedia", letra_xml(p.version))                      # y llegan al MusicXML
+        p.vista.grab()
+
+        i = con_texto[0]
+        p.tabla.item(i, 4).setText("corregida")                               # corrección manual de una palabra
+        self.assertEqual(p.letra[i], "corregida")
+        p.regenerar()
+        self.assertTrue(esperar(lambda: p.tarea is None))
+        self.assertEqual(p.letra[i], "corregida")
+        self.assertIn("corregida", letra_xml(p.version))
+        self.v._abrir_proyecto(d, "letra")                                    # el texto completo se abre en Letras
+        self.assertIn("wikipedia", self.v.letras.texto.toPlainText().lower())
+
     def test_ajustes_diagnostico_y_contenido(self):
         a = self.v.ajustes
         a._diagnosticar()

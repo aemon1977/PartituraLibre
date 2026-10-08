@@ -2,7 +2,7 @@
 from pathlib import Path
 
 from PySide6.QtCore import QPointF, QRectF, Qt, Signal
-from PySide6.QtGui import QColor, QFont, QFontDatabase, QPainter, QPen
+from PySide6.QtGui import QColor, QFont, QFontDatabase, QFontMetrics, QPainter, QPen
 from PySide6.QtWidgets import QWidget
 
 from .. import partituras
@@ -35,19 +35,34 @@ class Pentagrama(QWidget):
 
     def __init__(self):
         super().__init__()
-        self.notas, self.sel, self.bpm, self.clave, self.nombres = [], -1, 120, "sol", True
+        self.notas, self.sel, self.bpm, self.clave, self.nombres, self.letra = [], -1, 120, "sol", True, []
         self._cajas = []  # (rectángulo, índice de nota) para elegir con el ratón
+        self._x = []      # posición horizontal de cada columna de notas
         self.setMinimumHeight(190)
 
-    def poner(self, notas, sel=-1, bpm=120, clave="", nombres=True):
-        self.notas, self.sel, self.bpm, self.nombres = notas, sel, bpm, nombres
+    def poner(self, notas, sel=-1, bpm=120, clave="", nombres=True, letra=()):
+        """`letra` es el texto bajo cada nota (paralela a `notas`); con letra, las columnas se ensanchan."""
+        self.notas, self.sel, self.bpm, self.nombres, self.letra = notas, sel, bpm, nombres, list(letra)
         self.clave = clave or partituras.clave_adecuada(notas)
-        self.setMinimumWidth(MARGEN + PASO * len(partituras.columnas(notas)) + 30)
+        medir, x, self._x = QFontMetrics(self._fuente_letra()), MARGEN, []
+        for col in partituras.columnas(notas):  # cada columna es tan ancha como pida su palabra
+            self._x.append(x)
+            x += max(PASO, medir.horizontalAdvance(self._cantado(col)) + 18)
+        self.setMinimumWidth(x + 30)
         self.update()
 
     def x_de(self, indice):
         """Posición horizontal de una nota (para llevar la vista hasta ella)."""
-        return next((MARGEN + PASO * c for c, col in enumerate(partituras.columnas(self.notas)) if indice in col), 0)
+        return next((self._x[c] for c, col in enumerate(partituras.columnas(self.notas)) if indice in col), 0)
+
+    def _cantado(self, col):
+        return " ".join(self.letra[i] for i in col if i < len(self.letra) and self.letra[i])
+
+    def _fuente_letra(self):
+        f = QFont(self.font())
+        f.setPixelSize(14)
+        f.setItalic(True)
+        return f
 
     def paintEvent(self, _):
         g = QPainter(self)
@@ -75,9 +90,16 @@ class Pentagrama(QWidget):
         g.drawText(QPointF(10, 18), partituras.CLAVES[self.clave][0])
 
         self._cajas = []
+        hay_letra = any(self.letra)
+        texto_letra = self._fuente_letra()
         ancho = 1.18 * ESP                               # ancho de una cabeza de nota
         for c, col in enumerate(partituras.columnas(self.notas)):
-            x = MARGEN + PASO * c
+            x = self._x[c]
+            cantado = self._cantado(col)
+            if cantado:  # la letra, justo bajo el pentagrama y empezando en su nota; los nombres bajan una línea
+                g.setFont(texto_letra)
+                g.setPen(QColor(TINTA))
+                g.drawText(QPointF(x - 2, base + 4.4 * ESP + 13), cantado)
             for k, i in enumerate(col):
                 ini, fin, tono, _v = self.notas[i]
                 pos, sostenido = partituras.posicion(tono, self.clave)
@@ -99,10 +121,10 @@ class Pentagrama(QWidget):
                     if (fig, arriba) in G_CORCHETE:
                         g.drawText(QPointF(xp - 0.5, punta), G_CORCHETE[(fig, arriba)])
                 self._cajas.append((QRectF(x - 6, y(pos) - ESP, ancho + 12, 2 * ESP), i))
-                if self.nombres and k < 3:               # nombres bajo el pentagrama; en acordes, del grave al agudo
+                if self.nombres and k < (2 if hay_letra else 3):               # nombres bajo el pentagrama; en acordes, del grave al agudo
                     g.setFont(texto)
                     g.setPen(color)
-                    g.drawText(QRectF(x - 20, base + 4.4 * ESP + 14 * k, ancho + 40, 16), Qt.AlignCenter, partituras.solfeo(tono))
+                    g.drawText(QRectF(x - 20, base + 4.4 * ESP + (17 if hay_letra else 0) + 14 * k, ancho + 40, 16), Qt.AlignCenter, partituras.solfeo(tono))
 
 
     def mousePressEvent(self, ev):
