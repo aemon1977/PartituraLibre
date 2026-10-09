@@ -72,6 +72,14 @@ class Interfaz(Aislada):
         p.clave.setCurrentIndex(p.clave.findData("do3"))
         self.assertEqual(p.vista.clave, "do3")
         p.vista.grab()                                                  # se dibuja sin errores
+        from PySide6.QtCore import QPoint                               # al pasar el ratón por una nota se dice qué es
+        from PySide6.QtTest import QTest
+        from PySide6.QtWidgets import QToolTip
+        caja = next(c for c, k in p.vista._cajas if k == 4)
+        QTest.mouseMove(p.vista, QPoint(int(caja.center().x()), int(caja.center().y())))
+        QApplication.processEvents()
+        self.assertTrue(p.nombres.isChecked())                          # y los nombres bajo las notas vienen activados
+        self.assertEqual(p.nombres.text(), "Nombre de cada nota")
         p.vista.elegida.emit(5)                                         # clic en una nota del pentagrama
         self.assertEqual(p.tabla.currentRow(), 5)
         self.assertTrue(p.b_regenerar.isEnabled() and p.b_midi.isEnabled() and p.b_xml.isEnabled())

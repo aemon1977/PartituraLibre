@@ -157,15 +157,16 @@ class PaginaPartituras(QWidget):
             self.clave.addItem(nombre, codigo)
         self.clave.setCurrentIndex(max(0, self.clave.findData(a["clave"])))
         self.clave.setToolTip("Clave del pentagrama. También se usa en el MusicXML de la próxima partitura o versión que crees.")
-        self.nombres = QCheckBox("Do Re Mi")
+        self.nombres = QCheckBox("Nombre de cada nota")
         self.nombres.setChecked(a["nombres"])
-        self.nombres.setToolTip("Escribe el nombre de cada nota bajo el pentagrama, aquí y en el MusicXML/PDF")
+        self.nombres.setToolTip("Escribe bajo cada nota lo que es (Do, Re, Mi, Fa♯…), aquí y en el MusicXML/PDF. "
+                                "Al pasar el ratón sobre una nota se ve además su octava, su figura y su duración.")
         self.clave.currentIndexChanged.connect(self._cambio_de_vista)
         self.nombres.toggled.connect(self._cambio_de_vista)
         self.e_zoom = tema.etiqueta(f"{round(self.vista.zoom * 100)} %", "tenue", False)
         notas_barra = tema.herramientas(self.b_insertar, *self.b_fig.values(), self.b_puntillo, "|", self.b_sube, self.b_baja, self.b_octava_sube,
                                         self.b_octava_baja, self.b_antes, self.b_despues, "|",
-                                        self.b_anadir, self.b_borrar, "|", self.e_letra, None)
+                                        self.b_anadir, self.b_borrar, "|", self.e_letra, "|", self.nombres, None)
 
         # -- panel derecho: lista de notas ----------------------------------------
         self.tabla = QTableWidget(0, 5)
@@ -196,7 +197,7 @@ class PaginaPartituras(QWidget):
         self.b_atajos = tema.boton("Atajos de teclado", lambda: tema.dialogo(self, "Atajos de teclado", ATAJOS),
                                    ayuda="N introducir · 3-7 figura · A-G nota · 0 silencio · . puntillo · Ctrl+L letra…")
         # clave, nombres y zoom van abajo, como en la barra de estado de un editor de partituras
-        pie = tema.herramientas(aviso, None, self.b_atajos, "|", self.clave, self.nombres, "|",
+        pie = tema.herramientas(aviso, None, self.b_atajos, "|", self.clave, "|",
                                 tema.boton("−", lambda: self._zoom(-10), ayuda="Reducir"), self.e_zoom,
                                 tema.boton("+", lambda: self._zoom(10), ayuda="Ampliar"))
 

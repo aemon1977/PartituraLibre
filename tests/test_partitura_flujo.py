@@ -164,6 +164,10 @@ class Notacion(unittest.TestCase):
         self.assertEqual(partituras.silencios(0.1), [])                    # un respiro no es un silencio
         self.assertEqual(sum(partituras.NEGRAS[f] for f in partituras.silencios(2.75)), 2.75)
 
+    def test_descripcion_de_una_nota(self):
+        self.assertEqual(partituras.descripcion([1.2, 1.7, 67, 0.7], 120), "Sol4 · negra · empieza en 1,20 s · dura 0,50 s")
+        self.assertEqual(partituras.descripcion([0.0, 0.75, 66, 0.7], 120, "sol"), "Fa♯4 · negra con puntillo · empieza en 0,00 s · dura 0,75 s · «sol»")
+
     def test_puntillo_y_teclas_de_nota(self):
         self.assertEqual(partituras.figura_y_puntillo(0.75, 120), ("negra", True))      # negra con puntillo a 120 = 0,75 s
         self.assertEqual(partituras.figura_y_puntillo(0.5, 120), ("negra", False))

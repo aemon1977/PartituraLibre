@@ -153,6 +153,15 @@ def solfeo(midi):
     return NOMBRES[midi % 12]
 
 
+def descripcion(nota, bpm, letra=""):
+    """Todo lo que es una nota, en una línea: «Sol4 · negra con puntillo · empieza en 1,20 s · dura 0,75 s · "sol"»."""
+    ini, fin, tono, _v = nota
+    fig, puntillo = figura_y_puntillo(fin - ini, bpm)
+    partes = [nombre_nota(tono), fig + (" con puntillo" if puntillo else ""),
+              f"empieza en {ini:.2f} s".replace(".", ","), f"dura {fin - ini:.2f} s".replace(".", ",")]
+    return " · ".join(partes + ([f"«{letra}»"] if letra else []))
+
+
 def nombre_nota(midi):
     return f"{NOMBRES[midi % 12]}{midi // 12 - 1}"
 

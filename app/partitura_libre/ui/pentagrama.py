@@ -5,7 +5,7 @@ from pathlib import Path
 
 from PySide6.QtCore import QMarginsF, QPointF, QRect, QRectF, Qt, Signal
 from PySide6.QtGui import QColor, QFont, QFontDatabase, QFontMetrics, QPageLayout, QPageSize, QPainter, QPdfWriter, QPen
-from PySide6.QtWidgets import QWidget
+from PySide6.QtWidgets import QToolTip, QWidget
 
 from .. import partituras
 
@@ -55,6 +55,7 @@ class Pentagrama(QWidget):
         self._papel = QRectF()
         self._arrastre = None
         self.setFocusPolicy(Qt.StrongFocus)
+        self.setMouseTracking(True)   # para decir qué es cada nota al pasar el ratón por encima
         self.setMinimumWidth(560)
 
     # -- contenido ----------------------------------------------------------
@@ -339,6 +340,10 @@ class Pentagrama(QWidget):
                 self.insertada.emit(antes[-1]["col"][-1] if antes else -1, partituras.midi_de(pos, self.clave))
 
     def mouseMoveEvent(self, ev):
+        if not self._arrastre:   # ficha de la nota bajo el cursor
+            i = next((i for caja, i in self._cajas if caja.contains(ev.position())), -1)
+            texto = partituras.descripcion(self.notas[i], self.bpm, self.letra[i] if i < len(self.letra) else "") if i >= 0 else ""
+            return QToolTip.showText(ev.globalPosition().toPoint(), texto, self) if texto else QToolTip.hideText()
         if self._arrastre:   # arrastrar una nota arriba o abajo cambia su altura, un paso por línea o espacio
             i, y0, pos0, ultimo, primero = self._arrastre
             pasos = round((y0 - ev.position().y()) / (ESP * self.zoom / 2))
