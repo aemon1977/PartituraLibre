@@ -35,6 +35,7 @@ def esperar(condicion, segundos=240):
 
 
 def capturar(i, nombre):
+    v.partituras.e_destino.setText("Se guardará en: PartituraLibre/data/proyectos")   # sin rutas del equipo de desarrollo
     v.ir(i)
     esperar(lambda: False, 0.4)
     v.grab().save(str(rutas.RAIZ / "docs" / f"vista-previa-{nombre}.png"))

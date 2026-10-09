@@ -198,7 +198,7 @@ Ninguna en el estado entregado. Fallos encontrados por las pruebas y corregidos 
 Una sola comprobación que solo puede hacerse con tu micrófono encendido:
 
 ```sh
-cd /media/aemon77/dockerjuegos/Partituras/PartituraLibre && ./iniciar-linux.sh
+cd PartituraLibre && ./iniciar-linux.sh
 ```
 
 En **Partituras**: elige el micrófono, *Probar nivel* (la barra debe moverse al hablar) y *Grabar* 10 s tarareando: las notas deben ir apareciendo a los pocos segundos. Al *Detener* se crea sola la partitura definitiva. Si algo falla, envíame el resultado de:
