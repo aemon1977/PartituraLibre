@@ -6,7 +6,7 @@ Equipo de pruebas: Debian 13 (trixie) x86_64 real, sesión Wayland con PipeWire,
 
 Cada prueba se clasifica como **superada**, **fallida** o **no ejecutable aquí**.
 
-## 1. Pruebas automatizadas — superadas (82 de 82, ninguna omitida)
+## 1. Pruebas automatizadas — superadas (83 de 83, ninguna omitida)
 
 Se ejecutan con `./herramientas/probar.sh`, siempre con el Python del paquete. Usan los motores reales, no simulacros.
 
@@ -19,7 +19,7 @@ Se ejecutan con `./herramientas/probar.sh`, siempre con el Python del paquete. U
 | `test_exportar` | 10 | SRT, VTT y LRC exactos; ida y vuelta; texto editado conserva tiempos; una línea nueva no recibe un tiempo inventado |
 | `test_rutas_proyectos` | 10 | Nombres con tildes y caracteres prohibidos; nombres únicos; audio asociado a resultados; toma interrumpida marcada y conservada; solo se borran proyectos |
 | `test_limpieza` | 4 | La desinstalación borra la carpeta del programa y nada más; se niega ante cualquier otra carpeta |
-| `test_ui` | 12 | La ventana real sin pantalla: navegación, botones bloqueados según el estado, partitura y letra de principio a fin, **partitura en vivo** (una melodía conocida entra por el callback de audio y sus notas aparecen antes de detener; al detener se crea la definitiva), error explicado, cancelación, diagnóstico |
+| `test_ui` | 13 | La ventana real sin pantalla: navegación, botones bloqueados según el estado, partitura y letra de principio a fin, **partitura en vivo** (una melodía conocida entra por el callback de audio y sus notas aparecen antes de detener; al detener se crea la definitiva), error explicado, cancelación, diagnóstico |
 
 ## 2. Instalación desde cero en Debian 13 — superada
 
@@ -116,6 +116,12 @@ Con la última toma de letra (pico del 13 %, señal apenas 3 dB sobre el ruido d
 ### «Sonido del equipo» elegía la salida equivocada (caso real) — corregido
 
 La lista ofrecía una entrada por cada salida de audio, y la del micrófono inalámbrico (que también tiene salida de auriculares) se confundía con el propio micrófono: al elegirla el nivel era 0 %. Ahora hay una única entrada que, al empezar, localiza la salida por la que está sonando algo (o la predeterminada si no suena nada), avisa antes de grabar si nada se está reproduciendo y da mensajes propios en vez de «acerca el micrófono». Verificado que se conecta a la salida correcta; **no ejecutable aquí** con música real, porque no sonaba nada durante la prueba.
+
+### Grabar con el micrófono lo que suena en el equipo (caso real, repetido) — la app ahora lo detecta
+
+El usuario grabó tres veces Spotify a través de altavoces y micrófono (pico del 3–5 %), convencido de que «el sonido estaba bien» porque él lo oía bien. Ahora, si al pulsar «Grabar» hay audio sonando en el equipo y la entrada elegida es un micrófono, la app pregunta si se quiere grabar directamente el sonido del equipo y cambia la entrada sola; si durante una toma con micrófono el nivel es bajo y hay audio sonando, lo dice en directo. **No ejecutable aquí:** el resultado con música real por la vía directa (en cada intento el audio estaba en pausa).
+
+También se corrigió que la ventana exigía 1478 px de ancho y se recortaba en una de 1418: clave, nombres y zoom pasan a la barra inferior y el mínimo queda en 1150 px.
 
 ### Micrófono con señal floja (caso real del usuario)
 

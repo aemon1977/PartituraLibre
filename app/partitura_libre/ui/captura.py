@@ -1,6 +1,7 @@
 """Panel de captura compartido por Partituras y Letras: micrófono, nivel y controles de grabación."""
 import math
 import shutil
+import time
 from datetime import datetime
 
 from PySide6.QtCore import Qt, QTimer, Signal
@@ -14,6 +15,7 @@ ESPACIO_MINIMO_MB = 200
 
 class PanelCaptura(QWidget):
     _avisado_flojo = False           # el diálogo de nivel bajo ya se mostró en esta sesión
+    _prefiere_micro = False          # el usuario ya dijo que quiere el micrófono aunque suene audio en el equipo
     terminada = Signal(object)       # carpeta del proyecto con la toma guardada
     segmento = Signal(object, float)  # (wav temporal, segundo de inicio) para transcripción en vivo
     estado = Signal()                 # cambió grabando/parado: las páginas ajustan sus botones
@@ -25,6 +27,7 @@ class PanelCaptura(QWidget):
         self.g = None           # Grabadora activa (toma real o prueba de nivel)
         self.proyecto = None    # carpeta del proyecto que se está grabando
         self._fin_prueba = 0
+        self._visto = (0.0, False)
 
         self.micro = QComboBox()
         self.micro.setSizeAdjustPolicy(QComboBox.AdjustToMinimumContentsLengthWithIcon)
@@ -118,8 +121,34 @@ class PanelCaptura(QWidget):
             self._decir("Se grabará lo que suene en este equipo, directamente y sin micrófono. Pon la música y pulsa «Grabar».")
             self._botones()
 
+    def _ofrecer_sistema(self):
+        """Si se va a grabar con un micrófono mientras suena audio en el equipo (un vídeo, Spotify…),
+        propone capturarlo directamente: por altavoces y micrófono llega flojo y con eco, y las voces
+        no se entienden. Devuelve False si el usuario cancela la grabación."""
+        if self._es_sistema() or self._indice_sistema() < 0 or PanelCaptura._prefiere_micro or not audio.suena_algo():
+            return True
+        r = tema.dialogo(self, "Está sonando audio en este equipo",
+                         "Ahora mismo hay una aplicación reproduciendo sonido y tienes elegido un micrófono.\n\n"
+                         "Si lo que quieres transcribir es eso que suena (un vídeo, una canción…), grábalo directamente: "
+                         "a través de los altavoces y el micrófono llega muy flojo y con el eco de la habitación, y las voces "
+                         "no se entienden aunque tú lo oigas bien.\n\n"
+                         "Si vas a hablar, cantar o tocar tú, sigue con el micrófono.",
+                         ("Cancelar", "Seguir con el micrófono", "Grabar el sonido del equipo"), "pregunta")
+        if r == "Grabar el sonido del equipo":
+            self.micro.setCurrentIndex(self._indice_sistema())
+        elif r == "Seguir con el micrófono":
+            PanelCaptura._prefiere_micro = True   # no volver a preguntar en esta sesión
+        return r in ("Grabar el sonido del equipo", "Seguir con el micrófono")
+
     def _es_sistema(self):
         return bool((self.micro.currentData() or {}).get("sistema"))
+
+    def _suena_en_equipo(self):
+        """¿Hay audio sonando en el equipo? Se consulta como mucho cada 2 s (pregunta al servidor de sonido)."""
+        ahora = time.monotonic()
+        if ahora - self._visto[0] > 2:
+            self._visto = (ahora, self._indice_sistema() >= 0 and audio.suena_algo())
+        return self._visto[1]
 
     def _micro(self):
         """(índice de dispositivo, fuente del servidor de sonido) del micrófono elegido."""
@@ -155,6 +184,8 @@ class PanelCaptura(QWidget):
     # -- grabación ------------------------------------------------------------
     def grabar(self):
         self._parar_prueba()
+        if not self._ofrecer_sistema():
+            return
         if self._es_sistema() and not audio.suena_algo() and not tema.confirmar(
                 self, "Ahora mismo no suena nada", "Has elegido grabar el sonido del equipo, pero ninguna aplicación está reproduciendo "
                 "audio en este momento.\n\nPon en marcha la música o el vídeo y vuelve a pulsar «Grabar». También puedes empezar ya "
@@ -232,9 +263,10 @@ class PanelCaptura(QWidget):
             if not PanelCaptura._avisado_flojo:   # el diálogo, solo la primera vez; después basta la línea de estado
                 PanelCaptura._avisado_flojo = True
                 tema.dialogo(self, "Nivel de grabación muy bajo", f"La toma se ha guardado, pero el sonido llegó muy flojo (pico del {g.pico * 100:.0f} %) "
-                         "y el reconocimiento puede fallar o salir vacío.\n\n• Acerca el micrófono a la fuente o sube el volumen de entrada del sistema.\n"
-                         "• Si lo que quieres transcribir suena en este equipo (Spotify, un vídeo…), no lo grabes con el micrófono: elige en "
-                             "«Entrada de audio» una opción «Sonido del equipo» y se capturará directamente, sin ruido ambiente.\n\n"
+                         "y el reconocimiento puede fallar o salir vacío, aunque tú lo oyeras bien.\n\n"
+                         "• Si lo que quieres transcribir suena en este equipo (un vídeo, Spotify…), no lo grabes con el micrófono: pulsa "
+                             "«Sonido del equipo» y se capturará directamente, sin altavoces, eco ni ruido ambiente.\n"
+                         "• Si eres tú quien habla, canta o toca, acerca el micrófono o sube su ganancia.\n\n"
                              "A partir de ahora lo verás mientras grabas: la barra de nivel se pone ámbar y aparece un aviso bajo el reloj. "
                              "Este mensaje no volverá a interrumpirte en esta sesión.", tipo="aviso")
         else:
@@ -270,6 +302,9 @@ class PanelCaptura(QWidget):
             if self._es_sistema():   # no hay micrófono que acercar: o no suena nada, o suena muy bajo
                 self._decir("No llega sonido del equipo: pon en marcha la música o el vídeo (y que no esté silenciado)." if g.pico < 0.001
                             else f"El equipo suena muy bajo (pico del {g.pico * 100:.0f} %): sube el volumen de la aplicación que reproduce.", "aviso")
+            elif self._suena_en_equipo():
+                self._decir("Al micrófono le llega muy poco y está sonando audio en este equipo: para grabarlo bien, "
+                            "detén y pulsa «Sonido del equipo».", "aviso")
             else:
                 self._decir(f"Nivel muy bajo (pico del {g.pico * 100:.0f} %): acerca el micrófono o sube su ganancia"
                             + (". No se guarda nada." if not self.grabando else "; así el reconocimiento puede fallar."), "aviso")

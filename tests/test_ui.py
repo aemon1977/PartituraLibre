@@ -365,6 +365,41 @@ class Interfaz(Aislada):
         self.assertEqual(inicios, [0.0, 0.5, 1.0, 1.5, 2.5, 2.5])
         self.assertEqual(p.letra[2:4], ["ta", "re"])        # cada palabra sigue con su nota
 
+    def test_con_audio_sonando_se_ofrece_grabar_el_sonido_del_equipo_en_vez_del_microfono(self):
+        from partitura_libre import audio
+        from partitura_libre.ui.captura import PanelCaptura
+        panel = self.v.letras.captura
+        if panel._indice_sistema() < 0 or panel.micro.count() < 2:
+            self.skipTest("este equipo no ofrece la entrada «Sonido del equipo» junto a un micrófono")
+        original = audio.suena_algo
+        self.addCleanup(setattr, audio, "suena_algo", original)
+        PanelCaptura._prefiere_micro = False
+        respuesta = [""]
+        tema.dialogo = lambda padre, titulo, mensaje, botones=("Aceptar",), tipo="info": (self.dialogos.append((titulo, botones)), respuesta[0])[1]
+
+        panel.micro.setCurrentIndex(0)                  # un micrófono
+        audio.suena_algo = lambda: False
+        self.assertTrue(panel._ofrecer_sistema())       # no suena nada: no se pregunta
+        self.assertEqual(self.dialogos, [])
+
+        audio.suena_algo = lambda: True                 # suena un vídeo y se va a grabar con el micrófono
+        respuesta[0] = "Grabar el sonido del equipo"
+        self.assertTrue(panel._ofrecer_sistema())
+        self.assertEqual(self.dialogos[-1][0], "Está sonando audio en este equipo")
+        self.assertTrue(panel._es_sistema())            # la entrada cambia sola
+        self.assertTrue(panel._ofrecer_sistema())       # ya es la correcta: no vuelve a preguntar
+        self.assertEqual(len(self.dialogos), 1)
+
+        panel.micro.setCurrentIndex(0)
+        respuesta[0] = ""                               # cerrar el diálogo cancela la grabación
+        self.assertFalse(panel._ofrecer_sistema())
+        respuesta[0] = "Seguir con el micrófono"        # decisión respetada y recordada en la sesión
+        self.assertTrue(panel._ofrecer_sistema())
+        self.assertFalse(panel._es_sistema())
+        self.assertTrue(panel._ofrecer_sistema())
+        self.assertEqual(len(self.dialogos), 3)
+        PanelCaptura._prefiere_micro = False
+
     def test_fallo_del_analisis_se_explica_y_conserva_el_audio(self):
         p = self.v.partituras
         d = proyectos.crear("rota", "partitura")

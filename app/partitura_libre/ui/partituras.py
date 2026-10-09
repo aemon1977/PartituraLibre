@@ -165,9 +165,7 @@ class PaginaPartituras(QWidget):
         self.e_zoom = tema.etiqueta(f"{round(self.vista.zoom * 100)} %", "tenue", False)
         notas_barra = tema.herramientas(self.b_insertar, *self.b_fig.values(), self.b_puntillo, "|", self.b_sube, self.b_baja, self.b_octava_sube,
                                         self.b_octava_baja, self.b_antes, self.b_despues, "|",
-                                        self.b_anadir, self.b_borrar, "|", self.e_letra, None, self.clave, self.nombres, "|",
-                                        tema.boton("−", lambda: self._zoom(-10), ayuda="Reducir"), self.e_zoom,
-                                        tema.boton("+", lambda: self._zoom(10), ayuda="Ampliar"))
+                                        self.b_anadir, self.b_borrar, "|", self.e_letra, None)
 
         # -- panel derecho: lista de notas ----------------------------------------
         self.tabla = QTableWidget(0, 5)
@@ -194,8 +192,13 @@ class PaginaPartituras(QWidget):
 
         aviso = tema.etiqueta(partituras.AVISO_BREVE, "aviso", False)
         aviso.setToolTip(partituras.LIMITACIONES)
-        self.e_editor = tema.etiqueta("", "tenue", False)
-        pie = tema.herramientas(aviso, None, self.e_editor)
+        aviso.setMinimumWidth(120)            # puede recortarse en ventanas estrechas; el texto completo está en la ayuda
+        self.b_atajos = tema.boton("Atajos de teclado", lambda: tema.dialogo(self, "Atajos de teclado", ATAJOS),
+                                   ayuda="N introducir · 3-7 figura · A-G nota · 0 silencio · . puntillo · Ctrl+L letra…")
+        # clave, nombres y zoom van abajo, como en la barra de estado de un editor de partituras
+        pie = tema.herramientas(aviso, None, self.b_atajos, "|", self.clave, self.nombres, "|",
+                                tema.boton("−", lambda: self._zoom(-10), ayuda="Reducir"), self.e_zoom,
+                                tema.boton("+", lambda: self._zoom(10), ayuda="Ampliar"))
 
         cuerpo = QHBoxLayout()
         cuerpo.setContentsMargins(12, 12, 12, 8)
@@ -278,8 +281,6 @@ class PaginaPartituras(QWidget):
         self.b_existente.setEnabled(not analizando and not grabando)
         self.b_musescore.setVisible(bool(exe))       # opcional: solo aparece si hay un MuseScore disponible
         self.b_musescore.setEnabled(guardada)
-        self.e_editor.setText("N introducir · 3-7 figura · A-G nota · 0 silencio · . puntillo · ↑ ↓ altura · ← → nota · Ctrl+L letra · Supr · Ctrl+Z · Espacio")
-        self.e_editor.setToolTip(ATAJOS)
 
     def _pintar_destino(self):
         self.e_destino.setText(f"Se guardará en: {self.destino or rutas.PROYECTOS}"

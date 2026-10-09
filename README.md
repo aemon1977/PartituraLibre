@@ -59,7 +59,7 @@ Opcionales, solo cuando pulsas el botón correspondiente:
 
 La sección está organizada como un editor de partituras:
 
-- **Arriba, dos barras.** La de archivo: *Nueva*, *Abrir…*, *Guardar versión*, deshacer y rehacer, *▶ Oír*, *PDF…*, *MIDI…*, *MusicXML…*, *Carpeta* y los botones que muestran u ocultan los paneles laterales. La de notas: *✎ Introducir*, las cinco figuras (redonda a semicorchea), semitono y octava arriba o abajo, mover la nota antes o después, *+ Nota*, *Borrar*, la letra de la nota elegida, la clave, los nombres Do-Re-Mi y el zoom.
+- **Arriba, dos barras.** La de archivo: *Nueva*, *Abrir…*, *Guardar versión*, deshacer y rehacer, *▶ Oír*, *PDF…*, *MIDI…*, *MusicXML…*, *Carpeta* y los botones que muestran u ocultan los paneles laterales. La de notas: *✎ Introducir*, las cinco figuras (redonda a semicorchea) y el puntillo, semitono y octava arriba o abajo, mover la nota antes o después, *+ Nota*, *Borrar* y la letra de la nota elegida. Abajo, en la barra de estado: *Atajos de teclado*, la clave, los nombres Do-Re-Mi y el zoom.
 - **En el centro, la partitura** en una hoja: título, clave, compás de 4/4, barras y números de compás, figuras, silencios, nombres de nota y letra, repartida en sistemas según el ancho de la ventana.
 - **A la izquierda, el panel *Grabación*** (grabar o importar, y convertir en partitura). **A la derecha, la *Lista de notas*** con los valores exactos.
 
