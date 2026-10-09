@@ -60,8 +60,6 @@ if modelo:
     esperar(lambda: v.letras._final is None)
 capturar(1, "letras")
 capturar(2, "proyectos")
-v.ajustes._diagnosticar()
-esperar(lambda: v.ajustes.b_diag.isEnabled(), 60)
-capturar(3, "ajustes")
+# Ajustes no se captura: muestra rutas del equipo donde se ejecuta.
 v._cerrar_motores()
 shutil.rmtree(demo, ignore_errors=True)
