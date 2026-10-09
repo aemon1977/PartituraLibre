@@ -15,6 +15,7 @@ El código propio de Partitura Libre es MIT (`LICENSE`). Salvo la fuente Bravura
 | PyAV (FFmpeg incluido en el wheel) | Decodificar audio y vídeo importados | BSD 3 / LGPL | PyPI |
 | ONNX Runtime | Ejecutar los modelos | MIT | PyPI |
 | Modelos Whisper (conversión de Systran) | Voz a texto; descarga a petición | MIT | huggingface.co/Systran |
+| Modelo UVR-MDX-NET-Voc_FT, de Ultimate Vocal Remover (Anjok07, aufr33 y colaboradores) | Separar la voz de los instrumentos; descarga a petición | MIT (con mención a UVR y sus autores) | github.com/TRvlvr/model_repo |
 | Basic Pitch 0.4.0 (Spotify) y su modelo | Audio a notas | Apache 2.0 | PyPI |
 | librosa, resampy, scipy, scikit-learn, numba | Dependencias de Basic Pitch | ISC / BSD | PyPI |
 | pretty_midi, mido | Escritura de MIDI | MIT | PyPI |

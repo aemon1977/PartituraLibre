@@ -6,7 +6,7 @@ Equipo de pruebas: Debian 13 (trixie) x86_64 real, sesión Wayland con PipeWire,
 
 Cada prueba se clasifica como **superada**, **fallida** o **no ejecutable aquí**.
 
-## 1. Pruebas automatizadas — superadas (83 de 83, ninguna omitida)
+## 1. Pruebas automatizadas — superadas (85 de 85, ninguna omitida)
 
 Se ejecutan con `./herramientas/probar.sh`, siempre con el Python del paquete. Usan los motores reales, no simulacros.
 
@@ -15,7 +15,7 @@ Se ejecutan con `./herramientas/probar.sh`, siempre con el Python del paquete. U
 | `test_dependencias` | 7 | El intérprete en uso es el del paquete (3.11); `sounddevice` y `soundfile` se cargan desde `runtime/`; una dependencia ausente se detecta y se nombra; con el Python del sistema el programa se niega a abrir y dice cómo arrancar; el diagnóstico no filtra rutas personales |
 | `test_audio` | 14 | Señal sintética guardada idéntica muestra a muestra; pausa; cola saturada y desbordamiento notificados y toma marcada incompleta; disco lleno conserva lo grabado; WAV válido antes de cerrarse; cancelar borra; segmentos en vivo contiguos; **sesión simulada de 40 min** sin pérdidas |
 | `test_partitura_flujo` | 19 | **Pentagrama:** posición de las notas en clave de Sol, Fa y Do (3.ª y 4.ª), figuras, acordes; la clave elegida y los nombres Do-Re-Mi llegan al MusicXML. Además: WAV sintético (escala de Do) → notas exactas → MIDI → MusicXML; corrección manual crea versión nueva sin tocar la anterior; nota que cruza trozos no se parte; silencio no inventa notas; archivo ilegible da error explicado; cancelación sin restos |
-| `test_letras_flujo` | 6 | Audio libre en español: idioma detectado, palabras esperadas, tiempos crecientes, exportación y reimportación; idioma manual; error sin tumbar el motor; el modo «voz cantada» no da por bueno texto en música sin voz |
+| `test_letras_flujo` | 8 | Audio libre en español: idioma detectado, palabras esperadas, tiempos crecientes, exportación y reimportación; idioma manual; error sin tumbar el motor; el modo «voz cantada» no da por bueno texto en música sin voz |
 | `test_exportar` | 10 | SRT, VTT y LRC exactos; ida y vuelta; texto editado conserva tiempos; una línea nueva no recibe un tiempo inventado |
 | `test_rutas_proyectos` | 10 | Nombres con tildes y caracteres prohibidos; nombres únicos; audio asociado a resultados; toma interrumpida marcada y conservada; solo se borran proyectos |
 | `test_limpieza` | 4 | La desinstalación borra la carpeta del programa y nada más; se niega ante cualquier otra carpeta |
@@ -116,6 +116,21 @@ Con la última toma de letra (pico del 13 %, señal apenas 3 dB sobre el ruido d
 ### «Sonido del equipo» elegía la salida equivocada (caso real) — corregido
 
 La lista ofrecía una entrada por cada salida de audio, y la del micrófono inalámbrico (que también tiene salida de auriculares) se confundía con el propio micrófono: al elegirla el nivel era 0 %. Ahora hay una única entrada que, al empezar, localiza la salida por la que está sonando algo (o la predeterminada si no suena nada), avisa antes de grabar si nada se está reproduciendo y da mensajes propios en vez de «acerca el micrófono». Verificado que se conecta a la salida correcta; **no ejecutable aquí** con música real, porque no sonaba nada durante la prueba.
+
+### Mejora de la voz cantada (medida con tomas reales) — superada
+
+Dos tomas del usuario de una canción con instrumentos, capturadas por «Sonido del equipo» (pico de −7 dB), con la letra real como referencia:
+
+| Modelo | Sin separar la voz | Con la voz separada | Tiempo (38 s de audio) |
+|---|---|---|---|
+| `small` | varios versos mal («con el dios», «hasta bien escribidos») | esos versos, bien | 2,5 s (+13 s de separación) |
+| `medium` | mejor, con errores | casi todo bien | 8 s (+13 s) |
+| `large-v3` | casi exacta | la mejor de todas | 13 s (+13 s) |
+
+Se integró la separación de voz (modelo ONNX, sin PyTorch) como opción del modo cantado y la recomendación de `large-v3` para canciones. La prueba automatizada mezcla voz real con una melodía y exige que la separación mejore la relación voz/música en más de 6 dB y que el motor transcriba la voz separada.
+
+- Límites observados: ningún modelo acertó un nombre propio de la letra («la cabaña del Turmo»), y a veces varias frases salen juntas en una sola línea. La letra de una canción sigue necesitando revisión.
+- De paso se vio que por «Sonido del equipo» un vídeo hablado se transcribe prácticamente perfecto.
 
 ### Grabar con el micrófono lo que suena en el equipo (caso real, repetido) — la app ahora lo detecta
 

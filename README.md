@@ -51,6 +51,7 @@ Opcionales, solo cuando pulsas el botón correspondiente:
 | Descarga | Tamaño | Dónde |
 |---|---|---|
 | Modelo de voz `tiny` / `base` / `small` / `medium` / `large-v3` | 75 / 145 / 485 / 1530 / 3090 MB | `models/whisper/` |
+| Separador de voz para canciones | 64 MB | `models/separacion/` |
 | MuseScore Studio 4.7.5 portable (opcional; la app edita y exporta PDF sin él) | 195 MB (≈ 570 MB descomprimido) | `runtime/musescore/` |
 
 ## Uso
@@ -103,7 +104,7 @@ Guardar y exportar: *Guardar versión* crea MIDI y MusicXML nuevos con tus cambi
 2. **Elige la entrada de audio.** El botón *Sonido del equipo* selecciona con un clic la captura directa de lo que suena en el ordenador. Además de los micrófonos, en Linux aparece al final de la lista la entrada **«Sonido del equipo (lo que suena en este ordenador)»**, que graba directamente lo que reproduce otra aplicación (Spotify, un vídeo, una videollamada); ella sola localiza la salida por la que está sonando, sean altavoces o auriculares. Para transcribir algo que suena en el ordenador usa siempre esa opción y no el micrófono: por los altavoces llega flojo y con ruido, y el reconocimiento sale vacío.
 3. **Graba, dicta o importa** audio o vídeo (WAV, MP3, FLAC, OGG, M4A, MP4, MKV…). Con *Transcribir mientras hablo* aparece un borrador cada pocos segundos; al detener, la toma completa se transcribe de nuevo con más precisión.
 4. **Idioma:** español, detección automática u otro de la lista.
-5. **Voz hablada o voz cantada (modo de prueba).** Con canto, la música y los coros confunden al modelo: los versos poco fiables se marcan con **⚠** para que los escuches y corrijas. El programa no inventa texto donde no entiende.
+5. **Voz hablada o voz cantada (modo de prueba).** Para canciones con instrumentos hay dos ayudas, y se suman: **separar la voz de la música** antes de transcribir (pulsa *Descargar separador*, 64 MB, una sola vez; tarda en torno a un tercio de la duración del audio) y usar el modelo **large-v3** (3 GB), que con canto acierta claramente más que `small`. Los versos poco fiables se marcan con **⚠** para que los escuches y corrijas; el programa no inventa texto donde no entiende. Aun así, la letra de una canción rara vez sale perfecta: revísala.
 6. **Revisa y exporta.** El texto es editable (una línea por frase, marcas `[mm:ss.cc]` opcionales), se puede buscar y copiar, y se exporta a **TXT, SRT, VTT o LRC**.
 
 ### Grabaciones / Proyectos

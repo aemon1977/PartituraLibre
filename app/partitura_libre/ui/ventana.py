@@ -58,6 +58,7 @@ class Ventana(QMainWindow):
         for p in (self.partituras, self.letras):
             p.cambio.connect(self.proyectos.recargar)
         self.ajustes.cambio.connect(self.letras.recargar_modelos)
+        self.ajustes.cambio.connect(self.letras._botones)
         self.ajustes.cambio.connect(self.partituras._botones)
         self.letras.cambio.connect(self.ajustes.recargar)
         self.letras.cambio.connect(self.partituras._botones)

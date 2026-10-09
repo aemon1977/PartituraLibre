@@ -3,7 +3,7 @@ from PySide6.QtCore import Signal
 from PySide6.QtWidgets import (QApplication, QFileDialog, QGridLayout, QInputDialog, QPlainTextEdit, QVBoxLayout,
                                QWidget)
 
-from .. import __version__, config, diagnostico, editor, letras, limpieza, rutas, tareas
+from .. import __version__, config, diagnostico, editor, letras, limpieza, rutas, separacion, tareas
 from . import tema
 
 LICENCIAS = ("Partitura Libre usa software libre que se descarga dentro de su carpeta: Python (PSF), Qt/PySide6 (LGPL v3), "
@@ -87,6 +87,13 @@ class PaginaAjustes(QWidget):
             b = (tema.boton("Borrar", lambda n=n: self._borrar_modelo(n), "peligro") if puesto
                  else tema.boton("Descargar", lambda n=n: self._bajar_modelo(n)))
             self.rejilla.addWidget(b, f, 4)
+        f, puesto = len(letras.MODELOS), separacion.instalado()   # y el separador de voz para canciones
+        self.rejilla.addWidget(tema.etiqueta("<b>separador</b>", ajustar=False), f, 0)
+        self.rejilla.addWidget(tema.etiqueta("Aísla la voz de los instrumentos (modo voz cantada)", "tenue", False), f, 1)
+        self.rejilla.addWidget(tema.etiqueta(f"{separacion.MB} MB", "tenue", False), f, 2)
+        self.rejilla.addWidget(tema.etiqueta("Descargado" if puesto else "No descargado", "" if puesto else "tenue", False), f, 3)
+        self.rejilla.addWidget(tema.boton("Borrar", self._borrar_separador, "peligro") if puesto
+                               else tema.boton("Descargar", self._bajar_separador), f, 4)
         self.rejilla.setColumnStretch(1, 1)
         exe, origen = editor.buscar()
         self.e_editor.setText(
@@ -104,6 +111,20 @@ class PaginaAjustes(QWidget):
                                   f"{desc}.\n\n• Tamaño: {mb} MB\n• Memoria al transcribir: ≈ {ram / 1000:.1f} GB\n"
                                   f"• Se guarda en: {letras.carpeta_modelo(n)}",
                                   lambda p, c: letras.descargar_modelo(n, p, c), lambda ok: (self.recargar(), self.cambio.emit()))
+
+    def _bajar_separador(self):
+        tema.descarga_con_dialogo(self, "Descargar el separador de voz",
+                                  f"Aísla la voz de los instrumentos antes de transcribir una canción.\n\n• Tamaño: {separacion.MB} MB\n"
+                                  f"• Se guarda en: {separacion.CARPETA}\n\n{separacion.CREDITO}",
+                                  separacion.descargar, lambda ok: (self.recargar(), self.cambio.emit()))
+
+    def _borrar_separador(self):
+        if self._ocupada():
+            return tema.dialogo(self, "Ahora no", "Espera a que termine la grabación o el análisis en curso.", tipo="aviso")
+        if tema.confirmar(self, "Borrar el separador de voz", f"Se borrará el separador ({separacion.MB} MB). Podrás volver a descargarlo.", "Borrar separador"):
+            separacion.borrar()
+            self.recargar()
+            self.cambio.emit()
 
     def _borrar_modelo(self, n):
         if self._ocupada():

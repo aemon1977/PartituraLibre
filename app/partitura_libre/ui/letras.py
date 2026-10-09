@@ -7,7 +7,7 @@ from PySide6.QtWidgets import (QCheckBox, QComboBox, QFileDialog, QHBoxLayout, Q
                                QProgressBar, QRadioButton, QVBoxLayout, QWidget)
 from PySide6.QtCore import Signal
 
-from .. import config, exportar, letras, proyectos, rutas, tareas
+from .. import config, exportar, letras, proyectos, rutas, separacion, tareas
 from . import tema
 from .captura import PanelCaptura
 
@@ -66,6 +66,13 @@ class PaginaLetras(QWidget):
             "Voz cantada: la música, los coros y los instrumentos confunden al modelo. Los versos poco fiables se "
             "marcan con ⚠ para que los revises; no hay separación de voz e instrumentos. Mejor con voz sola. Si la canción suena "
             "en este equipo, elige «Sonido del equipo» como entrada en vez del micrófono.", "aviso")
+        self.separar = QCheckBox("Separar la voz de la música antes de transcribir")
+        self.separar.setChecked(a.get("separar", True))
+        self.separar.setToolTip("Recomendado para canciones con instrumentos: primero se aísla la voz y después se transcribe. "
+                                "Tarda algo más (aproximadamente un tercio de la duración del audio).")
+        self.separar.toggled.connect(self._guardar_separar)
+        self.b_separador = tema.boton(f"Descargar separador ({separacion.MB} MB)", self.descargar_separador)
+        self.e_consejo = tema.etiqueta("", "tenue")
         self.e_toma = tema.etiqueta("Ninguna toma abierta.", "tenue")
         self.b_transcribir = tema.boton("Transcribir", self.transcribir, "primario")
         self.b_cancelar = tema.boton("Cancelar", self.cancelar)
@@ -80,11 +87,13 @@ class PaginaLetras(QWidget):
         v2.addLayout(tema.fila(tema.etiqueta("Idioma", "tenue", False), self.idioma, estirar=self.idioma))
         v2.addLayout(tema.fila(self.hablada, self.cantada, None))
         v2.addWidget(self.e_cantada)
+        v2.addLayout(tema.fila(self.separar, None, self.b_separador))
+        v2.addWidget(self.e_consejo)
         v2.addWidget(self.e_toma)
         v2.addLayout(tema.fila(self.b_transcribir, self.b_cancelar, self.b_oir, estirar=self.b_transcribir))
         v2.addWidget(self.barra)
         v2.addWidget(self.e_estado)
-        self.cantada.toggled.connect(lambda si: self.e_cantada.setVisible(si))
+        self.cantada.toggled.connect(lambda _: self._botones())
         self.e_cantada.setVisible(False)
 
 
@@ -174,6 +183,17 @@ class PaginaLetras(QWidget):
         listo = self._modelo_listo()
         hay_texto = bool(self.texto.toPlainText().strip())
         self.b_descargar.setEnabled(not listo and not trabajando)
+        canto, separador = self.cantada.isChecked(), separacion.instalado()
+        for w in (self.e_cantada, self.separar, self.e_consejo):
+            w.setVisible(canto)
+        self.b_separador.setVisible(canto and not separador)
+        self.b_separador.setEnabled(not trabajando)
+        self.separar.setEnabled(separador and not trabajando)
+        modelo = self.modelo.currentData() or ""
+        self.e_consejo.setText(
+            ("" if separador else "Con el separador, la letra de una canción con instrumentos se entiende bastante mejor. ")
+            + ("" if modelo == "large-v3" else "Para canciones, el modelo «large-v3» acierta claramente más que "
+               f"«{modelo}» (ocupa 3 GB y tarda unas cinco veces más)."))
         self.b_importar.setEnabled(not trabajando and not grabando)
         self.b_transcribir.setEnabled(listo and self._audio() is not None and not trabajando and not grabando)
         self.b_transcribir.setToolTip("" if listo else "Primero descarga el modelo elegido")
@@ -185,6 +205,18 @@ class PaginaLetras(QWidget):
             b.setEnabled(hay_texto)
         self.b_guardar.setEnabled(hay_texto and self.proyecto is not None and not trabajando)
         self.texto.setReadOnly(trabajando)
+
+    def _guardar_separar(self, si):
+        a = config.cargar()
+        a["separar"] = si
+        config.guardar(a)
+
+    def descargar_separador(self):
+        tema.descarga_con_dialogo(
+            self, "Descargar el separador de voz",
+            f"Aísla la voz de los instrumentos antes de transcribir una canción.\n\n• Tamaño de la descarga: {separacion.MB} MB\n"
+            f"• Se guarda en: {separacion.CARPETA}\n• Funciona en CPU, sin conexión.\n\n{separacion.CREDITO} Se descarga de GitHub.",
+            separacion.descargar, lambda ok: (self._botones(), self.cambio.emit()))
 
     def descargar(self):
         n = self.modelo.currentData()
@@ -260,7 +292,8 @@ class PaginaLetras(QWidget):
         self._asegurar_motor()
         self._id += 1
         self.voz.enviar(id=self._id, audio=str(audio), idioma=self.idioma.currentData(),
-                        cantada=self.cantada.isChecked(), desfase=desfase, borrar=borrar)
+                        cantada=self.cantada.isChecked(), desfase=desfase, borrar=borrar,
+                        separar=self.cantada.isChecked() and self.separar.isChecked() and not borrar)   # el borrador en vivo no separa
         return self._id
 
     def transcribir(self):
@@ -271,6 +304,7 @@ class PaginaLetras(QWidget):
         self.barra.setValue(0)
         self.e_estado.setText("Cargando el modelo y analizando el audio…")
         tema.reclasificar(self.e_estado, "tenue")
+        self._separando = self.cantada.isChecked() and self.separar.isChecked() and separacion.instalado()
         self._final = self._pedir(self._audio())
         self._carpeta_final = self.proyecto
         self._botones()
@@ -296,13 +330,17 @@ class PaginaLetras(QWidget):
             self._vivos.discard(i)  # los WAV temporales se limpian al empezar otra grabación
         elif i != self._final:
             return
+        elif ev["t"] == "progreso":
+            self.barra.setValue(int(ev["v"] * 500))        # la separación ocupa la primera mitad de la barra
+            self.e_estado.setText(ev["msg"])
         elif ev["t"] == "idioma":
             self._idioma = ev["idioma"]
             self.e_estado.setText(f"Idioma: {letras.IDIOMAS.get(ev['idioma'], ev['idioma'])} "
                                   f"({ev['prob'] * 100:.0f} % de confianza). Transcribiendo {ev['dur']:.0f} s de audio…")
         elif ev["t"] == "segmento":
             self._nuevos.append({k: ev[k] for k in ("inicio", "fin", "texto", "dudoso")})
-            self.barra.setValue(int(ev["v"] * 1000))
+            mitad = 500 if self._separando else 0
+            self.barra.setValue(mitad + int(ev["v"] * (1000 - mitad)))
             self._poner(self._nuevos)
         elif ev["t"] == "fin":
             self._final = None

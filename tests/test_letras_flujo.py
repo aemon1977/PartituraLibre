@@ -72,6 +72,56 @@ class Voz(unittest.TestCase):
         self.assertTrue(all(e["dudoso"] for e in ev if e["t"] == "segmento"), ev)
 
 
+@unittest.skipUnless(MODELO, "no hay ningún modelo de voz descargado")
+class SeparacionDeVoz(unittest.TestCase):
+    """Voz real mezclada con una melodía fuerte, como una canción: el separador debe quitar la música."""
+
+    @classmethod
+    def setUpClass(cls):
+        from partitura_libre import separacion
+        if not separacion.instalado():
+            raise unittest.SkipTest("el separador de voz no está descargado (se descarga desde la app)")
+        import numpy as np
+        from faster_whisper.audio import decode_audio
+        from tests.comun import ESCALA, tono
+        cls.voz = decode_audio(str(DATOS / "voz-es.flac"), sampling_rate=separacion.SR)[:separacion.SR * 12]
+        musica = np.concatenate([tono(m, 0.5, separacion.SR) + tono(m - 12, 0.5, separacion.SR) for m in ESCALA * 3])[:len(cls.voz)]
+        cls.musica = (musica * 0.25).astype("float32")
+        cls.mezcla = cls.voz + cls.musica
+
+    def test_la_voz_separada_tiene_mucha_menos_musica(self):
+        import numpy as np
+        from partitura_libre import separacion
+        pasos = []
+        estereo = np.stack([self.mezcla, self.mezcla], axis=1)
+        voz = separacion.separar(estereo, pasos.append).mean(axis=1)
+        self.assertEqual(len(voz), len(self.mezcla))
+        self.assertEqual(pasos[-1], 1.0)
+        self.assertEqual(pasos, sorted(pasos))
+        db = lambda senal, ruido: 10 * np.log10(float((senal ** 2).sum()) / float((ruido ** 2).sum()))
+        antes, despues = db(self.voz, self.musica), db(self.voz, voz - self.voz)
+        self.assertGreater(despues, antes + 6, f"la separación apenas mejora: de {antes:.1f} a {despues:.1f} dB")
+
+    def test_el_motor_transcribe_la_voz_separada_y_avisa_del_progreso(self):
+        import tempfile
+        import soundfile as sf
+        from partitura_libre import rutas, separacion, tareas
+        eventos, fin = [], threading.Event()
+        rutas.TEMP.mkdir(exist_ok=True)
+        with tempfile.TemporaryDirectory(dir=rutas.TEMP) as d:
+            wav = Path(d) / "canción.wav"
+            sf.write(wav, self.mezcla, separacion.SR, subtype="PCM_16")
+            motor = tareas.Tarea("partitura_libre.workers.voz", [str(letras.carpeta_modelo(MODELO))], "app",
+                                 lambda ev: (eventos.append(ev), fin.set() if ev["t"] in ("fin", "error") else None))
+            motor.enviar(id=1, audio=str(wav), idioma="es", cantada=True, separar=True)
+            self.assertTrue(fin.wait(300))
+            motor.cancelar()
+            self.assertEqual(list(rutas.TEMP.glob("voz-separada-*.wav")), [])      # el temporal se borra
+        self.assertEqual(eventos[-1]["t"], "fin", eventos[-1])
+        self.assertTrue(any(e["t"] == "progreso" and "Separando" in e["msg"] for e in eventos))
+        self.assertIn("wikipedia", " ".join(e["texto"] for e in eventos if e["t"] == "segmento").lower())
+
+
 class Modelos(unittest.TestCase):
     def test_catalogo_explica_tamaño_y_memoria(self):
         for nombre, (repo, mb, ram, descripcion) in letras.MODELOS.items():

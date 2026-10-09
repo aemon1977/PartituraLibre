@@ -7,7 +7,7 @@ from PySide6.QtCore import QEvent, Qt, QTimer, Signal
 from PySide6.QtWidgets import (QAbstractItemView, QCheckBox, QComboBox, QFileDialog, QFrame, QHBoxLayout, QHeaderView, QLineEdit, QProgressBar,
                                QScrollArea, QSpinBox, QTableWidget, QTableWidgetItem, QVBoxLayout, QWidget)
 
-from .. import audio, config, editor, exportar, lanzar, letras, partituras, proyectos, rutas, tareas
+from .. import audio, config, editor, exportar, lanzar, letras, partituras, proyectos, rutas, separacion, tareas
 from . import tema
 from .captura import PanelCaptura
 from .pentagrama import Pentagrama, fuente_musical
@@ -408,7 +408,10 @@ class PaginaPartituras(QWidget):
         def evento(ev):
             if self.tarea is not t:
                 return
-            if ev["t"] == "segmento":
+            if ev["t"] == "progreso":
+                self.barra.setValue(int(ev["v"] * 200))
+                self.e_estado.setText("Paso 1 de 2 · " + ev["msg"])
+            elif ev["t"] == "segmento":
                 frases.append(ev)
                 self.barra.setValue(int(ev["v"] * 400))
                 self.e_estado.setText(f"Paso 1 de 2 · Letra: «{ev['texto'][:60]}»")
@@ -441,7 +444,8 @@ class PaginaPartituras(QWidget):
 
         t = tareas.Tarea("partitura_libre.workers.voz", [str(letras.carpeta_modelo(a["modelo"]))], "app",
                          lambda ev: tema.en_ui(lambda: evento(ev)), lambda c, cancelada: tema.en_ui(lambda: cerrado(c, cancelada)))
-        t.enviar(id=1, audio=str(self._audio()), idioma=a["idioma"], cantada=True, palabras=True)
+        t.enviar(id=1, audio=str(self._audio()), idioma=a["idioma"], cantada=True, palabras=True,
+                 separar=a.get("separar", True) and separacion.instalado())
         self.tarea = t
         self._botones()
 
