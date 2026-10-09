@@ -7,6 +7,8 @@ Aplicación de escritorio gratuita para **Windows 11** y **Debian 13** (preparad
 
 Todo se procesa en tu equipo: sin cuentas, sin nube, sin cuotas de minutos ni de exportaciones.
 
+Creado por **aemon1977** · [github.com/aemon1977/PartituraLibre](https://github.com/aemon1977/PartituraLibre) · software libre (MIT). Las versiones para descargar están en [Releases](https://github.com/aemon1977/PartituraLibre/releases/latest).
+
 ![Partituras](docs/vista-previa-partituras.png)
 ![Letras](docs/vista-previa-letras.png)
 
@@ -23,14 +25,14 @@ Necesitas conexión a Internet solo la primera vez y unos **1,6 GB libres** (má
 ### Debian 13 / Ubuntu 24.04 (64 bits)
 
 ```sh
-tar -xzf PartituraLibre-1.1.0-linux-x64.tar.gz
+tar -xzf PartituraLibre-1.2.0-linux-x64.tar.gz
 cd PartituraLibre
 ./iniciar-linux.sh
 ```
 
 ### Windows 11 (64 bits)
 
-1. Descomprime `PartituraLibre-1.1.0-windows11-x64.zip` en una carpeta tuya (por ejemplo, Documentos).
+1. Descomprime `PartituraLibre-1.2.0-windows11-x64.zip` en una carpeta tuya (por ejemplo, Documentos).
 2. Doble clic en `iniciar-windows.bat`.
 
 ### Qué pasa en el primer arranque
@@ -115,6 +117,14 @@ Historial de todas las tomas con su audio y sus resultados. Desde aquí puedes r
 
 Modelos de voz, MuseScore portable, **Diagnóstico** (runtime, micrófonos, motores, modelos, editor, espacio libre; guarda un informe en `logs/` sin grabaciones ni datos personales), tamaño de cada carpeta, vaciado de temporales y **desinstalación**.
 
+## Actualizaciones
+
+Al abrirse, el programa consulta en GitHub si se ha publicado una versión nueva (solo pregunta el número de versión; no envía ningún dato tuyo). Si la hay, te muestra las novedades y, **si aceptas**, la descarga, la comprueba y te ofrece reiniciar. También puedes buscarla a mano en *Ajustes → Acerca de → Buscar actualizaciones*, o desactivar la consulta automática allí mismo.
+
+- Se cambia solo el programa (`app/`): tus grabaciones, partituras, modelos y ajustes no se tocan.
+- La versión anterior se guarda en `app.anterior/`. Para volver a ella: `./iniciar-linux.sh --deshacer-actualizacion` (o `iniciar-windows.bat --deshacer-actualizacion`).
+- Si una versión nueva necesita otros paquetes, el lanzador los descarga dentro de `runtime/` en ese arranque.
+
 ## Formatos de salida
 
 | Sección | Archivos |
@@ -152,6 +162,7 @@ La interfaz clásica (1.0, con tarjetas en dos columnas) se conserva en la etiqu
 ```sh
 ./herramientas/probar.sh            # todas las pruebas, con el runtime portable
 ./herramientas/bloquear.sh          # regenera app/requisitos/*.txt (bloqueos con hashes)
+./herramientas/publicar.sh "novedades"  # publica en GitHub la versión actual; las instalaciones se actualizarán
 python3 herramientas/empaquetar.py  # crea dist/ con los tres paquetes
 ```
 

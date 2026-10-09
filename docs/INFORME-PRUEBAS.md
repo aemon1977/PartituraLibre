@@ -1,12 +1,12 @@
 # Informe de pruebas
 
-Fecha: 8 de octubre de 2026 · Versión 1.1.0
+Fecha: 8 de octubre de 2026 · Versión 1.2.0
 Equipo de pruebas: Debian 13 (trixie) x86_64 real, sesión Wayland con PipeWire, 24 hilos, 31 GB de RAM.
 **No se ha dispuesto de un Windows 11 ni de un Ubuntu 24.04.** Lo que no se pudo ejecutar se indica como tal.
 
 Cada prueba se clasifica como **superada**, **fallida** o **no ejecutable aquí**.
 
-## 1. Pruebas automatizadas — superadas (85 de 85, ninguna omitida)
+## 1. Pruebas automatizadas — superadas (91 de 91, ninguna omitida)
 
 Se ejecutan con `./herramientas/probar.sh`, siempre con el Python del paquete. Usan los motores reales, no simulacros.
 
@@ -18,6 +18,7 @@ Se ejecutan con `./herramientas/probar.sh`, siempre con el Python del paquete. U
 | `test_letras_flujo` | 8 | Audio libre en español: idioma detectado, palabras esperadas, tiempos crecientes, exportación y reimportación; idioma manual; error sin tumbar el motor; el modo «voz cantada» no da por bueno texto en música sin voz |
 | `test_exportar` | 10 | SRT, VTT y LRC exactos; ida y vuelta; texto editado conserva tiempos; una línea nueva no recibe un tiempo inventado |
 | `test_rutas_proyectos` | 10 | Nombres con tildes y caracteres prohibidos; nombres únicos; audio asociado a resultados; toma interrumpida marcada y conservada; solo se borran proyectos |
+| `test_actualizar` | 6 | Sobre una instalación de pega: solo se ofrecen versiones más nuevas y el paquete de este sistema; descargar, aplicar y volver atrás sin tocar los datos; un paquete dañado, falso o con rutas fuera de la carpeta no cambia nada |
 | `test_limpieza` | 4 | La desinstalación borra la carpeta del programa y nada más; se niega ante cualquier otra carpeta |
 | `test_ui` | 13 | La ventana real sin pantalla: navegación, botones bloqueados según el estado, partitura y letra de principio a fin, **partitura en vivo** (una melodía conocida entra por el callback de audio y sus notas aparecen antes de detener; al detener se crea la definitiva), error explicado, cancelación, diagnóstico |
 

@@ -6,7 +6,9 @@ from datetime import datetime
 from PySide6.QtWidgets import (QApplication, QButtonGroup, QHBoxLayout, QMainWindow, QStackedWidget, QVBoxLayout,
                                QWidget)
 
-from .. import __version__, proyectos, rutas, tareas
+from PySide6.QtCore import QTimer
+
+from .. import __version__, config, proyectos, rutas, tareas
 from . import tema
 from .ajustes import PaginaAjustes
 from .letras import PaginaLetras
@@ -124,6 +126,8 @@ def ejecutar():
     interrumpidas = proyectos.marcar_interrumpidos()
     app, v = crear()
     v.show()
+    if config.cargar().get("actualizaciones", True):   # consulta discreta: solo avisa si hay versión nueva
+        QTimer.singleShot(2500, v.ajustes.buscar_actualizacion)
     if interrumpidas:
         tema.dialogo(v, "Grabación recuperada", f"El programa se cerró mientras grababa. Se ha conservado el audio de "
                      f"{interrumpidas} toma(s) hasta el momento del corte; están en «Grabaciones / Proyectos» marcadas como interrumpidas.", tipo="aviso")

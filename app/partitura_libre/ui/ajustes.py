@@ -1,9 +1,9 @@
 """Sección Ajustes: modelos de voz, editor de partituras, diagnóstico y limpieza/desinstalación."""
-from PySide6.QtCore import Signal
-from PySide6.QtWidgets import (QApplication, QFileDialog, QGridLayout, QInputDialog, QPlainTextEdit, QVBoxLayout,
+from PySide6.QtCore import Qt, Signal
+from PySide6.QtWidgets import (QApplication, QCheckBox, QFileDialog, QGridLayout, QInputDialog, QPlainTextEdit, QVBoxLayout,
                                QWidget)
 
-from .. import __version__, config, diagnostico, editor, letras, limpieza, rutas, separacion, tareas
+from .. import __version__, actualizar, config, diagnostico, editor, letras, limpieza, rutas, separacion, tareas
 from . import tema
 
 LICENCIAS = ("Partitura Libre usa software libre que se descarga dentro de su carpeta: Python (PSF), Qt/PySide6 (LGPL v3), "
@@ -63,9 +63,26 @@ class PaginaAjustes(QWidget):
         vl.addLayout(tema.fila(self.b_desinstalar, None))
 
         ta, va = tema.tarjeta(f"Acerca de · Partitura Libre {__version__}")
+        autor = tema.etiqueta(f"Creado por <b>{actualizar.CREADOR}</b> · <a style='color:{tema.ACENTO}' href='{actualizar.WEB}'>"
+                              f"{actualizar.WEB.removeprefix('https://')}</a> · software libre, licencia MIT")
+        autor.setTextFormat(Qt.RichText)
+        autor.setOpenExternalLinks(True)
+        va.addWidget(autor)
+        self.e_actualizacion = tema.etiqueta("", "tenue")
+        self.b_actualizar = tema.boton("Buscar actualizaciones", lambda: self.buscar_actualizacion(True))
+        self.auto = QCheckBox("Buscar actualizaciones al abrir el programa")
+        self.auto.setChecked(config.cargar().get("actualizaciones", True))
+        self.auto.setToolTip("Al abrir, consulta en GitHub si hay una versión nueva. Solo se pregunta el número de versión: "
+                             "no se envía ningún dato tuyo. Nada se instala sin que lo aceptes.")
+        self.auto.toggled.connect(self._guardar_auto)
+        va.addLayout(tema.fila(self.b_actualizar, self.auto, None))
+        va.addWidget(self.e_actualizacion)
         va.addWidget(tema.etiqueta("Gratuito, sin cuentas ni cuotas. Tus grabaciones no salen de este equipo: Internet solo se usa "
-                                   "cuando pulsas un botón de descarga.", "tenue"))
+                                   "cuando pulsas un botón de descarga y, si lo dejas activado, para consultar si hay una versión nueva.", "tenue"))
         va.addWidget(tema.etiqueta(LICENCIAS, "tenue"))
+        pendiente = actualizar.pendiente()
+        if pendiente:
+            self.e_actualizacion.setText(f"La versión {pendiente} ya está descargada: se instalará la próxima vez que abras el programa.")
 
         area = tema.columna(tm, te, td, tl, ta)
         v = QVBoxLayout(self)
@@ -103,6 +120,57 @@ class PaginaAjustes(QWidget):
         self.b_ms_bajar.setEnabled(origen != "portable")
         self.b_ms_quitar.setEnabled(origen == "portable")
         self.b_ms_abrir.setEnabled(bool(exe))
+
+    # -- actualizaciones ---------------------------------------------------------
+    def _guardar_auto(self, si):
+        a = config.cargar()
+        a["actualizaciones"] = si
+        config.guardar(a)
+
+    def buscar_actualizacion(self, a_mano=False):
+        """Consulta la última versión publicada. Al abrir el programa (`a_mano=False`) solo dice algo si hay una nueva."""
+        if actualizar.pendiente():
+            return
+        self.b_actualizar.setEnabled(False)
+        if a_mano:
+            self.e_actualizacion.setText("Consultando en GitHub…")
+
+        def fin(info, e):
+            self.b_actualizar.setEnabled(True)
+            if e or not info:
+                if a_mano:
+                    self.e_actualizacion.setText(f"No se pudo consultar ({e}). Comprueba la conexión a Internet; "
+                                                 f"también puedes mirar en {actualizar.WEB}/releases")
+            elif not info["nueva"]:
+                self.e_actualizacion.setText(f"Tienes la última versión ({__version__})." if a_mano else "")
+            else:
+                self.e_actualizacion.setText(f"Hay una versión nueva: {info['version']}.")
+                self._ofrecer(info)
+        tema.en_hilo(actualizar.consultar, fin)
+
+    def _ofrecer(self, info):
+        notas = info["notas"][:900] + ("…" if len(info["notas"]) > 900 else "")
+        tema.descarga_con_dialogo(
+            self.window(), f"Actualizar a la versión {info['version']}",
+            f"Tienes la {__version__} y se ha publicado la {info['version']}.\n\n"
+            + (f"Novedades:\n{notas}\n\n" if notas else "")
+            + f"• Descarga: {info['mb']} MB, desde {actualizar.WEB}\n"
+            "• Se cambia solo el programa: tus grabaciones, partituras, modelos y ajustes no se tocan.\n"
+            "• La versión actual se guarda por si quieres volver atrás.",
+            lambda progreso, cancelar: actualizar.preparar(info, progreso, cancelar), lambda ok: self._preparada(ok, info))
+
+    def _preparada(self, ok, info):
+        if not ok:
+            return
+        self.e_actualizacion.setText(f"La versión {info['version']} ya está descargada: se instalará la próxima vez que abras el programa.")
+        if self._ocupada():
+            return tema.dialogo(self.window(), "Actualización preparada", "Hay una grabación o un análisis en curso, así que no se reinicia ahora. "
+                                f"La versión {info['version']} se instalará la próxima vez que abras el programa.")
+        if tema.confirmar(self.window(), "Actualización preparada", f"La versión {info['version']} está lista. Para usarla hay que reiniciar "
+                          "el programa (tarda unos segundos).", "Reiniciar ahora", "Más tarde"):
+            self._cerrar_app()
+            actualizar.reiniciar()
+            QApplication.quit()
 
     # -- modelos ---------------------------------------------------------------
     def _bajar_modelo(self, n):

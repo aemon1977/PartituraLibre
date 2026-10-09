@@ -22,6 +22,8 @@ PartituraLibre/
       tareas.py        procesos de análisis en segundo plano, cancelables
       diagnostico.py   comprobaciones e informe
       limpieza.py      contenido de la carpeta y desinstalación
+      actualizar.py    versiones nuevas desde GitHub: consulta, descarga, aplicación y vuelta atrás
+      separacion.py    separa la voz de los instrumentos (canciones)
       workers/notas.py audio -> notas -> MIDI -> MusicXML   (conjunto «partituras»)
       workers/voz.py   voz -> texto                         (conjunto «app»)
       ui/              interfaz Qt: tema, captura, pentagrama, partituras, letras, proyectos, ajustes, ventana
@@ -76,6 +78,8 @@ Lo cubre `tests/test_dependencias.py`, incluido el caso de dependencia ausente y
 **10. Voz a texto con faster-whisper en CPU (int8).** Sin GPU ni claves. Los modelos se bajan a `models/whisper/` solo al pulsar el botón, con tamaño, memoria y progreso; se verifica el sha256 que publica el repositorio. `HF_HUB_OFFLINE=1` impide que ninguna biblioteca descargue por su cuenta. Voz cantada: sin filtro de silencios ni arrastre de contexto y umbral de duda más estricto. **Separación de voz para canciones** (`separacion.py`): un modelo MDX-Net en ONNX (UVR-MDX-NET-Voc_FT, 64 MB, a petición) ejecutado con ONNX Runtime y una transformada de Fourier hecha con numpy, sin PyTorch. El motor de voz aísla la voz en un WAV temporal y transcribe ese. Se adoptó tras medir con tomas reales del usuario que mejora la letra con los tres modelos.
 
 **11. MuseScore, opcional.** La edición y el PDF se hacen en la app (ver 7 septies). Quien quiera puede abrir además el MusicXML en MuseScore Studio, descargado a `runtime/musescore/` (AppImage extraído en Linux, PortableApps en Windows) o uno ya instalado, que se usa sin modificarlo. A la copia portable se le fijan `HOME` y `XDG_*` dentro de la carpeta, porque de otro modo crea `~/Documents/MuseScore4`.
+
+**11 bis. Actualización desde GitHub** (`actualizar.py`). La app consulta la última *release* del repositorio público (una petición sin datos del usuario; se puede desactivar). Si hay una versión mayor y el usuario acepta, descarga el paquete de su sistema, verifica el sha256 que publica GitHub y que la versión de dentro es la anunciada, y lo deja en `runtime/actualizacion`. El cambio lo hace el lanzador en el arranque siguiente, antes de abrir nada: `app/` pasa a `app.anterior/` y entra la nueva; después se reinicia con el código nuevo, que reinstala paquetes si su bloqueo cambió. No se tocan `runtime/`, `models/`, `data/`, `config/` ni `logs/`. Los paquetes se extraen rechazando rutas fuera de la carpeta. En Windows no se sustituye el `.bat`, porque está en ejecución.
 
 **12. PortAudio en Linux es el del sistema.** El wheel de `sounddevice` solo lo incluye en Windows. No hay forma limpia de distribuirlo sin instalar nada, así que se usa `libportaudio2` si existe y, si no, el diagnóstico lo explica y la importación de archivos sigue funcionando.
 

@@ -70,6 +70,27 @@ def main(args=None):
         return 2
     rutas.crear_carpetas()
 
+    from . import actualizar   # una actualización descargada se aplica aquí, antes de abrir nada
+    if "--deshacer-actualizacion" in args:
+        v = actualizar.deshacer()
+        print(f"Se ha vuelto a la versión {v}." if v else "No hay una versión anterior guardada.")
+        args.remove("--deshacer-actualizacion")
+        if not v:
+            return 1
+        return subprocess.call([sys.executable, "-s", "-m", "partitura_libre.lanzar", *args])
+    try:
+        nueva = actualizar.aplicar()
+    except OSError as e:
+        print(f"AVISO: no se pudo aplicar la actualización descargada ({e}). Se sigue con la versión actual.")
+        nueva = ""
+    if nueva:   # se vuelve a empezar con el código nuevo (su lanzador puede pedir paquetes distintos)
+        print(f"Partitura Libre se ha actualizado a la versión {nueva}.")
+        codigo = subprocess.call([sys.executable, "-s", "-c", "import partitura_libre.lanzar"])
+        if codigo != 0:
+            actualizar.deshacer()
+            print("AVISO: la versión nueva no arranca; se ha restaurado la anterior.")
+        return subprocess.call([sys.executable, "-s", "-m", "partitura_libre.lanzar", *args])
+
     pendientes = [c for c in CONJUNTOS if reparar or not instalado(c)]
     if pendientes:
         print("\nSe van a descargar componentes DENTRO de esta carpeta (nada en el sistema):")
