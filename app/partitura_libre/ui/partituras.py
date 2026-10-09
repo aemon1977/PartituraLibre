@@ -66,7 +66,7 @@ class PaginaPartituras(QWidget):
         self.tempo.setSuffix(" pulsos/min")
         self.tempo.setToolTip("Tempo con el que se escribe la partitura. «Automático» lo estima del audio.")
         self.con_letra = QCheckBox("Añadir la letra bajo las notas (voz a texto)")
-        self.con_letra.setChecked(config.cargar().get("con_letra", False))
+        self.con_letra.setChecked(config.cargar().get("con_letra", True))
         self.con_letra.toggled.connect(self._guardar_con_letra)
         self.b_transcribir = tema.boton("Detectar notas y crear partitura", self.transcribir, "primario")
         self.b_cancelar = tema.boton("Cancelar análisis", self.cancelar)
@@ -111,13 +111,14 @@ class PaginaPartituras(QWidget):
         self.b_deshacer = tema.boton("↶", lambda: self._deshacer(), ayuda="Deshacer (Ctrl+Z)")
         self.b_rehacer = tema.boton("↷", lambda: self._deshacer(True), ayuda="Rehacer (Ctrl+Y)")
         self.b_reproducir = tema.boton("▶ Oír", self.reproducir, ayuda="Reproducir la partitura desde la nota elegida (Espacio)")
+        self.b_letra = tema.boton("Letra", self.poner_letra)
         self.b_carpeta = tema.boton("Carpeta", lambda: tema.abrir_en_sistema(self.proyecto), ayuda="Ver la carpeta del proyecto")
         self.b_panel_izq = tema.boton("Grabación", ayuda="Mostrar u ocultar el panel de grabación y análisis")
         self.b_panel_der = tema.boton("Lista de notas", ayuda="Mostrar u ocultar la tabla con los valores exactos de cada nota")
         for b in (self.b_panel_izq, self.b_panel_der):
             b.setCheckable(True)
         archivo = tema.herramientas(self.b_nueva, self.b_existente, self.b_regenerar, "|", self.b_deshacer, self.b_rehacer, "|",
-                                    self.b_reproducir, "|", self.b_pdf, self.b_midi, self.b_xml, self.b_musescore, self.b_carpeta,
+                                    self.b_reproducir, self.b_letra, "|", self.b_pdf, self.b_midi, self.b_xml, self.b_musescore, self.b_carpeta,
                                     None, self.b_panel_izq, self.b_panel_der)
 
         # -- barra de introducción de notas ---------------------------------------
@@ -273,6 +274,10 @@ class PaginaPartituras(QWidget):
         self.b_deshacer.setEnabled(hay and bool(self._hist))
         self.b_rehacer.setEnabled(hay and bool(self._rehechos))
         self.b_reproducir.setEnabled(bool(self.notas) and not grabando)
+        self.b_letra.setEnabled(hay and bool(self.notas) and audio and letras.instalado(modelo))
+        self.b_letra.setToolTip(
+            "Reconoce la voz del audio de este proyecto y escribe cada palabra bajo su nota, sin volver a detectar las notas"
+            if letras.instalado(modelo) else f"Primero descarga el modelo de voz «{modelo}» en la sección Letras")
         self.b_regenerar.setEnabled(hay and bool(self.notas))
         self.b_pdf.setEnabled(hay and bool(self.notas))
         self.b_midi.setEnabled(guardada)
@@ -395,15 +400,35 @@ class PaginaPartituras(QWidget):
         orden = {"cmd": "transcribir", "audio": str(self._audio()), "carpeta": str(self.proyecto),
                  "nombre": self.proyecto.name, "bpm": self.tempo.value() or None, **self._notacion()}
         if self.con_letra.isChecked() and self.con_letra.isEnabled():
-            return self._reconocer_letra(orden)
+            def seguir(palabras, aviso):
+                orden["palabras"], self._sin_letra = palabras, aviso
+                self._lanzar(orden, "Paso 2 de 2 · Detectando las notas…")
+            return self._reconocer_letra(seguir, "Paso 1 de 2 · ")
         self._lanzar(orden, "Preparando el análisis…")
 
-    def _reconocer_letra(self, orden):
-        """Primer paso de «partitura con letra»: voz a texto con el tiempo de cada palabra. Después se
-        detectan las notas y el motor coloca cada palabra en la suya."""
+    def poner_letra(self):
+        """Añade la letra a la partitura que ya está abierta, a partir de su audio y sin volver a detectar las notas."""
+        def colocar(palabras, aviso):
+            self.barra.setValue(1000 if palabras else 0)
+            if palabras:
+                self._recordar()
+                self.letra = partituras.asignar_letra(self.notas, palabras)
+                self._poner_notas(self.notas, self.bpm, self.tabla.currentRow())
+                con = sum(bool(t) for t in self.letra)
+                self.e_estado.setText(f"Letra colocada bajo {con} nota(s). Corrígela si hace falta y pulsa «Guardar versión» "
+                                      "para escribirla en el MusicXML." if con else
+                                      "Se reconoció texto, pero ninguna palabra coincide en el tiempo con las notas.")
+            else:
+                self.e_estado.setText(aviso or "No se reconoció ninguna palabra en el audio.")
+            self._botones()
+        self._reconocer_letra(colocar, "")
+
+    def _reconocer_letra(self, al_acabar, paso):
+        """Voz a texto con el tiempo de cada palabra, para colocar cada una bajo su nota. Al terminar llama a
+        `al_acabar(palabras, aviso)`; el texto completo queda guardado en el proyecto."""
         a, carpeta, frases, fallo = config.cargar(), self.proyecto, [], []
         self.barra.setValue(0)
-        self.e_estado.setText("Paso 1 de 2 · Reconociendo la letra (voz a texto)…")
+        self.e_estado.setText(paso + "Reconociendo la letra (voz a texto)…")
         tema.reclasificar(self.e_estado, "tenue")
 
         def evento(ev):
@@ -411,27 +436,26 @@ class PaginaPartituras(QWidget):
                 return
             if ev["t"] == "progreso":
                 self.barra.setValue(int(ev["v"] * 200))
-                self.e_estado.setText("Paso 1 de 2 · " + ev["msg"])
+                self.e_estado.setText(paso + ev["msg"])
             elif ev["t"] == "segmento":
                 frases.append(ev)
                 self.barra.setValue(int(ev["v"] * 400))
-                self.e_estado.setText(f"Paso 1 de 2 · Letra: «{ev['texto'][:60]}»")
+                self.e_estado.setText(f"{paso}Letra: «{ev['texto'][:60]}»")
             elif ev["t"] == "error":
                 fallo.append(ev["msg"])
             if ev["t"] in ("fin", "error"):
                 self.tarea = None
                 t.cancelar()
                 if frases:
-                    orden["palabras"] = [p for f in frases for p in f["palabras"]]
                     segs = [{k: f[k] for k in ("inicio", "fin", "texto", "dudoso")} for f in frases]
                     f_json = rutas.ruta_unica(carpeta, carpeta.name, ".letra.json", (".txt",))
                     f_txt = f_json.with_name(f_json.name.replace(".letra.json", ".txt"))
                     config.escribir_json(f_json, {"idioma": a["idioma"], "modelo": a["modelo"], "cantada": True, "segmentos": segs})
                     f_txt.write_text(exportar.txt(segs), encoding="utf-8")
                     proyectos.anotar_resultado(carpeta, "letra", segmentos=f_json.name, texto=f_txt.name)
-                self._sin_letra = (fallo[0] if fallo else "" if frases else
-                                   "No se reconoció ninguna palabra, así que la partitura se crea sin letra.")
-                self._lanzar(orden, "Paso 2 de 2 · Detectando las notas…")
+                self._botones()
+                al_acabar([p for f in frases for p in f["palabras"]],
+                          fallo[0] if fallo else "" if frases else "No se reconoció ninguna palabra, así que no hay letra que colocar.")
 
         def cerrado(codigo, cancelada):
             if self.tarea is not t:

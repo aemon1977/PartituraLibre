@@ -1,6 +1,6 @@
 # Informe de pruebas
 
-Fecha: 8 de octubre de 2026 · Versión 1.2.1
+Fecha: 8 de octubre de 2026 · Versión 1.2.2
 Equipo de pruebas: Debian 13 (trixie) x86_64 real, sesión Wayland con PipeWire, 24 hilos, 31 GB de RAM.
 **No se ha dispuesto de un Windows 11 ni de un Ubuntu 24.04.** Lo que no se pudo ejecutar se indica como tal.
 

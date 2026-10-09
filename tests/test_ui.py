@@ -515,6 +515,23 @@ class Interfaz(Aislada):
         self.assertIn("wikipedia", letra_xml(p.version))                      # y llegan al MusicXML
         p.vista.grab()
 
+        # El botón «Letra» la pone en una partitura que ya existe, sin volver a detectar las notas
+        notas_antes, versiones = [list(n) for n in p.notas], len(proyectos.leer(d)["resultados"])
+        p.letra = [""] * len(p.notas)
+        p._poner_notas(p.notas, p.bpm)
+        self.assertTrue(p.b_letra.isEnabled())
+        p.poner_letra()
+        self.assertTrue(p.b_cancelar.isEnabled())
+        self.assertTrue(esperar(lambda: p.tarea is None, 300))
+        self.assertIn("wikipedia", " ".join(p.letra).lower())
+        self.assertEqual(p.notas, notas_antes)                                # las notas no se tocan
+        self.assertIn("Letra colocada", p.e_estado.text())
+        self.assertEqual(len([r for r in proyectos.leer(d)["resultados"] if r["tipo"] == "partitura"]), 1)   # ni se crea otra versión sola
+        p._atajo("deshacer")                                                  # y se puede deshacer
+        self.assertEqual(p.letra, [""] * len(p.notas))
+        p._atajo("rehacer")
+        con_texto = [i for i, t in enumerate(p.letra) if t]
+
         i = con_texto[0]
         p.tabla.item(i, 4).setText("corregida")                               # corrección manual de una palabra
         self.assertEqual(p.letra[i], "corregida")
