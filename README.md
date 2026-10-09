@@ -25,14 +25,14 @@ Necesitas conexión a Internet solo la primera vez y unos **1,6 GB libres** (má
 ### Debian 13 / Ubuntu 24.04 (64 bits)
 
 ```sh
-tar -xzf PartituraLibre-1.2.0-linux-x64.tar.gz
+tar -xzf PartituraLibre-1.2.1-linux-x64.tar.gz
 cd PartituraLibre
 ./iniciar-linux.sh
 ```
 
 ### Windows 11 (64 bits)
 
-1. Descomprime `PartituraLibre-1.2.0-windows11-x64.zip` en una carpeta tuya (por ejemplo, Documentos).
+1. Descomprime `PartituraLibre-1.2.1-windows11-x64.zip` en una carpeta tuya (por ejemplo, Documentos).
 2. Doble clic en `iniciar-windows.bat`.
 
 ### Qué pasa en el primer arranque
@@ -103,7 +103,7 @@ Guardar y exportar: *Guardar versión* crea MIDI y MusicXML nuevos con tus cambi
 ### Letras
 
 1. **Elige un modelo** y pulsa *Descargar modelo* (una sola vez). `small` es el recomendado para español; `tiny` y `base` son más rápidos y fallan más; `medium` y `large-v3` son más precisos y lentos.
-2. **Elige la entrada de audio.** El botón *Sonido del equipo* selecciona con un clic la captura directa de lo que suena en el ordenador. Además de los micrófonos, en Linux aparece al final de la lista la entrada **«Sonido del equipo (lo que suena en este ordenador)»**, que graba directamente lo que reproduce otra aplicación (Spotify, un vídeo, una videollamada); ella sola localiza la salida por la que está sonando, sean altavoces o auriculares. Para transcribir algo que suena en el ordenador usa siempre esa opción y no el micrófono: por los altavoces llega flojo y con ruido, y el reconocimiento sale vacío.
+2. **Elige la entrada de audio.** El botón *Sonido del equipo* selecciona con un clic la captura directa de lo que suena en el ordenador. Además de los micrófonos, aparece al final de la lista la entrada **«Sonido del equipo (lo que suena en este ordenador)»**, que graba directamente lo que reproduce otra aplicación (Spotify, un vídeo, una videollamada); en Linux localiza sola la salida por la que está sonando, sean altavoces o auriculares; en Windows captura la salida predeterminada. Para transcribir algo que suena en el ordenador usa siempre esa opción y no el micrófono: por los altavoces llega flojo y con ruido, y el reconocimiento sale vacío.
 3. **Graba, dicta o importa** audio o vídeo (WAV, MP3, FLAC, OGG, M4A, MP4, MKV…). Con *Transcribir mientras hablo* aparece un borrador cada pocos segundos; al detener, la toma completa se transcribe de nuevo con más precisión.
 4. **Idioma:** español, detección automática u otro de la lista.
 5. **Voz hablada o voz cantada (modo de prueba).** Para canciones con instrumentos hay dos ayudas, y se suman: **separar la voz de la música** antes de transcribir (pulsa *Descargar separador*, 64 MB, una sola vez; tarda en torno a un tercio de la duración del audio) y usar el modelo **large-v3** (3 GB), que con canto acierta claramente más que `small`. Los versos poco fiables se marcan con **⚠** para que los escuches y corrijas; el programa no inventa texto donde no entiende. Aun así, la letra de una canción rara vez sale perfecta: revísala.

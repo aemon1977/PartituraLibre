@@ -63,7 +63,10 @@ def salida_que_suena():
 
 
 def suena_algo():
-    """True si alguna aplicación está reproduciendo sonido en este momento."""
+    """True si alguna aplicación está reproduciendo sonido en este momento; None si no se puede
+    saber (en Windows no hay forma sencilla de preguntarlo)."""
+    if rutas.WINDOWS or not shutil.which("pactl"):
+        return None
     try:
         return any(c.get("Corked") == "no" for c in _bloques(_pactl("list", "sink-inputs")))
     except (OSError, subprocess.SubprocessError):
@@ -90,6 +93,75 @@ def fuentes_del_servidor():
     return fuentes
 
 
+def microfonos_windows(s):
+    """Entradas en Windows a partir de sounddevice (`s`): las de WASAPI, que dan el nombre completo
+    del dispositivo (la interfaz antigua, MME, los corta a 31 letras y añade entradas duplicadas).
+    Si WASAPI no está, las de la interfaz predeterminada."""
+    apis, dispositivos = s.query_hostapis(), list(s.query_devices())
+    wasapi = next((i for i, a in enumerate(apis) if "WASAPI" in a["name"]), None)
+    pred = s.default.device[0]
+    api = wasapi if wasapi is not None else (dispositivos[pred]["hostapi"] if pred is not None and pred >= 0 else 0)
+    pred_api = apis[api].get("default_input_device", -1) if apis else -1
+    lista = [{"indice": i, "nombre": d["name"], "sr": int(d["default_samplerate"]), "predeterminado": i == pred_api,
+              "fuente": None, "sistema": False}
+             for i, d in enumerate(dispositivos) if d["max_input_channels"] > 0 and d["hostapi"] == api]
+    return sorted(lista, key=lambda d: not d["predeterminado"])
+
+
+def captura_del_equipo_windows():
+    """Módulo pyaudiowpatch si se puede capturar lo que suena en Windows (WASAPI «loopback»), o None."""
+    if not rutas.WINDOWS:
+        return None
+    try:
+        import pyaudiowpatch
+        return pyaudiowpatch
+    except Exception:   # falta el paquete o su biblioteca no carga: simplemente no se ofrece la entrada
+        return None
+
+
+def a_mono(datos, canales):
+    """Bytes PCM16 entrelazados -> matriz (muestras, 1) en int16, promediando los canales."""
+    import numpy as np
+    x = np.frombuffer(datos, dtype=np.int16)
+    if canales > 1:
+        x = x[:len(x) - len(x) % canales].reshape(-1, canales).mean(axis=1).astype(np.int16)
+    return x.reshape(-1, 1)
+
+
+class FlujoDelEquipo:
+    """Captura en Windows lo que suena por la salida predeterminada y lo entrega a `al_bloque` igual
+    que hace sounddevice con un micrófono. Mientras no suena nada, Windows no entrega bloques."""
+
+    def __init__(self, al_bloque, pa=None):
+        from types import SimpleNamespace
+        self.pa = pa or captura_del_equipo_windows()
+        if self.pa is None:
+            raise ErrorAudio("No está disponible la captura del sonido del equipo. Ejecuta: iniciar-windows.bat --reparar")
+        self.motor = self.pa.PyAudio()
+        try:
+            salida = self.motor.get_default_wasapi_loopback()
+            self.canales, self.sr = int(salida["maxInputChannels"]), int(salida["defaultSampleRate"])
+
+            def recibir(datos, n, _tiempo, estado):
+                al_bloque(a_mono(datos, self.canales), n, None, SimpleNamespace(input_overflow=bool(estado & self.pa.paInputOverflow)))
+                return None, self.pa.paContinue
+            self.flujo = self.motor.open(format=self.pa.paInt16, channels=self.canales, rate=self.sr, input=True,
+                                         input_device_index=salida["index"], frames_per_buffer=1024, stream_callback=recibir)
+        except Exception:
+            self.motor.terminate()
+            raise
+
+    def start(self):
+        self.flujo.start_stream()
+
+    def stop(self):
+        self.flujo.stop_stream()
+
+    def close(self):
+        self.flujo.close()
+        self.motor.terminate()
+
+
 def microfonos(refrescar=False):
     """Entradas disponibles: [{'indice', 'nombre', 'sr', 'predeterminado', 'fuente'}], la predeterminada primero.
     En Linux con servidor de sonido se listan sus micrófonos reales; `fuente` es el que hay que pedirle."""
@@ -97,6 +169,11 @@ def microfonos(refrescar=False):
     if refrescar:  # PortAudio solo vuelve a enumerar al reiniciarse
         s._terminate()
         s._initialize()
+    if rutas.WINDOWS:
+        lista = microfonos_windows(s)
+        if captura_del_equipo_windows():
+            lista.append({"indice": None, "nombre": SISTEMA, "sr": 48000, "predeterminado": False, "fuente": FUENTE_SISTEMA, "sistema": True})
+        return lista
     puente = next((i for i, d in enumerate(s.query_devices()) if d["name"] == "pulse" and d["max_input_channels"] > 0), None)
     fuentes = fuentes_del_servidor() if puente is not None else []
     if fuentes:
@@ -191,6 +268,7 @@ class Grabadora:
         self.perdidos = 0      # muestras descartadas porque el disco no daba abasto
         self.error = ""        # motivo por el que la captura se detuvo sola
         self.pausada = False
+        self.rellenar = False  # captura del equipo en Windows: los silencios no llegan y hay que escribirlos
         self._flujo = self._hilo = self._wav = None
         self._cola = queue.Queue(self.COLA)
         self._vivo = False
@@ -227,13 +305,23 @@ class Grabadora:
     # -- ciclo de vida -------------------------------------------------------
     def iniciar(self):
         s = sd()
-        if self.fuente:  # el servidor de sonido conecta este flujo a la entrada elegida
+        del_equipo_windows = rutas.WINDOWS and self.fuente == FUENTE_SISTEMA
+        if self.fuente and not rutas.WINDOWS:  # el servidor de sonido conecta este flujo a la entrada elegida
             os.environ["PULSE_SOURCE"] = salida_que_suena() + ".monitor" if self.fuente == FUENTE_SISTEMA else self.fuente
         try:
-            self.sr = int(s.query_devices(self.dispositivo, "input")["default_samplerate"])
-            self._preparar()
-            self._flujo = s.InputStream(device=self.dispositivo, channels=1, samplerate=self.sr,
-                                        dtype="int16", callback=self._bloque)
+            if del_equipo_windows:
+                self._flujo = FlujoDelEquipo(self._bloque)
+                self.sr, self.rellenar = self._flujo.sr, True
+                self._preparar()
+            else:
+                info = s.query_devices(self.dispositivo, "input")
+                self.sr = int(info["default_samplerate"])
+                self._preparar()
+                ajustes = None
+                if rutas.WINDOWS and "WASAPI" in s.query_hostapis(info["hostapi"])["name"]:
+                    ajustes = s.WasapiSettings(auto_convert=True)   # que Windows adapte canales y frecuencia si hace falta
+                self._flujo = s.InputStream(device=self.dispositivo, channels=1, samplerate=self.sr, dtype="int16",
+                                            callback=self._bloque, extra_settings=ajustes)
             self._flujo.start()
         except Exception as e:
             self._cerrar_escritura()
@@ -272,6 +360,12 @@ class Grabadora:
                 try:
                     datos = self._cola.get(timeout=0.5)
                 except queue.Empty:
+                    if self.rellenar:      # no sonaba nada en ese medio segundo: se escribe silencio para no perder el compás del tiempo
+                        if not self.pausada and time.monotonic() - self._ultimo >= 0.5:
+                            hueco = bytes(2 * (self.sr // 2))
+                            self._wav.escribir(hueco)
+                            self.frames += len(hueco) // 2
+                        continue
                     if self._flujo and not self.pausada and time.monotonic() - self._ultimo > self.SILENCIO_S:
                         raise ErrorAudio("El micrófono dejó de enviar audio (¿se desconectó?). "
                                          "La toma se ha guardado hasta ese momento.")

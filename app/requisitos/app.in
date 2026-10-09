@@ -2,5 +2,6 @@
 numpy
 PySide6-Essentials
 sounddevice
+PyAudioWPatch ; sys_platform == 'win32'   # captura de lo que suena en el equipo (WASAPI loopback)
 soundfile
 faster-whisper

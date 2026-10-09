@@ -173,6 +173,98 @@ class Captura(Aislada):
         self.assertLess(time.monotonic() - t0, 120)
 
 
+class Windows(Aislada):
+    """La parte de Windows, comprobada con dobles de las bibliotecas de audio (no hay un Windows real en las pruebas)."""
+
+    class FalsoSd:
+        class default:
+            device = (1, 5)
+
+        def query_hostapis(self, i=None):
+            apis = [{"name": "MME", "default_input_device": 1}, {"name": "Windows WASAPI", "default_input_device": 4}]
+            return apis if i is None else apis[i]
+
+        def query_devices(self):
+            return [
+                {"name": "Asignador de sonido Microsoft - Input", "hostapi": 0, "max_input_channels": 2, "default_samplerate": 44100.0},
+                {"name": "Micrófono (Maono DM40 Wireless M", "hostapi": 0, "max_input_channels": 1, "default_samplerate": 44100.0},
+                {"name": "Altavoces (Realtek)", "hostapi": 1, "max_input_channels": 0, "default_samplerate": 48000.0},
+                {"name": "Micrófono (Realtek High Definition Audio)", "hostapi": 1, "max_input_channels": 2, "default_samplerate": 48000.0},
+                {"name": "Micrófono (Maono DM40 Wireless Mic)", "hostapi": 1, "max_input_channels": 1, "default_samplerate": 48000.0},
+            ]
+
+    def test_la_lista_de_microfonos_usa_wasapi_con_nombres_completos(self):
+        lista = audio.microfonos_windows(self.FalsoSd())
+        self.assertEqual([m["nombre"] for m in lista], ["Micrófono (Maono DM40 Wireless Mic)", "Micrófono (Realtek High Definition Audio)"])
+        self.assertEqual([(m["indice"], m["sr"], m["predeterminado"]) for m in lista], [(4, 48000, True), (3, 48000, False)])
+        self.assertTrue(all(set(m) == {"indice", "nombre", "sr", "predeterminado", "fuente", "sistema"} for m in lista))
+
+    def test_sin_wasapi_se_usa_la_interfaz_predeterminada(self):
+        class SoloMme(self.FalsoSd):
+            def query_hostapis(self, i=None):
+                apis = [{"name": "MME", "default_input_device": 1}]
+                return apis if i is None else apis[i]
+        nombres = [m["nombre"] for m in audio.microfonos_windows(SoloMme())]
+        self.assertEqual(nombres[0], "Micrófono (Maono DM40 Wireless M")       # la predeterminada, primero
+        self.assertEqual(len(nombres), 2)
+
+    def test_estereo_a_mono(self):
+        estereo = np.array([[1000, 3000], [-200, 200], [32767, 32767]], dtype=np.int16).tobytes()
+        np.testing.assert_array_equal(audio.a_mono(estereo, 2), np.array([[2000], [0], [32767]], dtype=np.int16))
+        np.testing.assert_array_equal(audio.a_mono(np.array([5, -5], dtype=np.int16).tobytes(), 1), [[5], [-5]])
+
+    def falso_pyaudio(self):
+        registro = {}
+
+        class Flujo:
+            def start_stream(self): registro["iniciado"] = True
+            def stop_stream(self): registro["parado"] = True
+            def close(self): registro["cerrado"] = True
+
+        class Motor:
+            def get_default_wasapi_loopback(self):
+                return {"index": 7, "maxInputChannels": 2, "defaultSampleRate": 48000.0, "name": "Altavoces (Realtek) [Loopback]"}
+
+            def open(self, **kw):
+                registro.update(kw)
+                return Flujo()
+
+            def terminate(self): registro["terminado"] = True
+
+        class Modulo:
+            paInt16, paContinue, paInputOverflow, PyAudio = 8, 0, 2, Motor
+        return Modulo, registro
+
+    def test_el_sonido_del_equipo_llega_a_la_grabadora_como_un_microfono_mas(self):
+        modulo, registro = self.falso_pyaudio()
+        g = audio.Grabadora(self.dir / "equipo.wav")
+        flujo = audio.FlujoDelEquipo(g._bloque, modulo)
+        g.sr, g.rellenar, g._flujo = flujo.sr, True, flujo
+        g._preparar()
+        flujo.start()
+        self.assertEqual((flujo.sr, registro["input_device_index"], registro["channels"], registro["input"]), (48000, 7, 2, True))
+        recibir = registro["stream_callback"]
+        estereo = np.repeat(bloques(0.5)[0], 2, axis=1)                         # lo que entregaría Windows: 2 canales
+        for _ in range(20):
+            self.assertEqual(recibir(estereo.tobytes(), len(estereo), None, 0), (None, 0))
+        recibir(estereo.tobytes(), len(estereo), None, modulo.paInputOverflow)  # Windows avisa de un desbordamiento
+        time.sleep(1.3)                                                         # nada suena: Windows no entrega bloques
+        recibir(estereo.tobytes(), len(estereo), None, 0)
+        g.detener()
+        self.assertTrue(registro.get("parado") and registro.get("cerrado") and registro.get("terminado"))
+        self.assertEqual((g.desbordes, g.error), (1, ""))                       # el silencio no se toma por un micrófono caído
+        x, sr = sf.read(g.destino, dtype="int16")
+        self.assertEqual(sr, 48000)
+        np.testing.assert_array_equal(x[:BLOQUE], estereo[:, 0])               # mismo contenido, ya en mono
+        self.assertGreaterEqual(len(x), 22 * BLOQUE + 48000)                    # y el hueco quedó escrito como silencio (≥ 1 s)
+        self.assertTrue((x[21 * BLOQUE:21 * BLOQUE + 24000] == 0).all())
+
+    def test_si_falta_la_captura_del_equipo_se_explica(self):
+        with self.assertRaises(audio.ErrorAudio) as e:
+            audio.FlujoDelEquipo(lambda *a: None)       # en Linux no existe pyaudiowpatch: mismo camino que si faltara en Windows
+        self.assertIn("--reparar", str(e.exception))
+
+
 class SonidoDelEquipo(unittest.TestCase):
     SALIDAS = "58\taltavoces\tPipeWire\ts32le 2ch 48000Hz\tSUSPENDED\n69\tauriculares\tPipeWire\ts16le 2ch 48000Hz\tRUNNING\n"
     PAUSADO = "Sink Input #185\n\tDriver: PipeWire\n\tSink: 58\n\tCorked: yes\n\tProperties:\n\t\tapplication.name = \"Firefox\"\n"

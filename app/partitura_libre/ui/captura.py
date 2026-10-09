@@ -186,7 +186,7 @@ class PanelCaptura(QWidget):
         self._parar_prueba()
         if not self._ofrecer_sistema():
             return
-        if self._es_sistema() and not audio.suena_algo() and not tema.confirmar(
+        if self._es_sistema() and audio.suena_algo() is False and not tema.confirmar(
                 self, "Ahora mismo no suena nada", "Has elegido grabar el sonido del equipo, pero ninguna aplicación está reproduciendo "
                 "audio en este momento.\n\nPon en marcha la música o el vídeo y vuelve a pulsar «Grabar». También puedes empezar ya "
                 "y darle a reproducir enseguida.", "Grabar igualmente"):

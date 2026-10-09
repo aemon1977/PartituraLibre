@@ -1,19 +1,19 @@
 # Informe de pruebas
 
-Fecha: 8 de octubre de 2026 · Versión 1.2.0
+Fecha: 8 de octubre de 2026 · Versión 1.2.1
 Equipo de pruebas: Debian 13 (trixie) x86_64 real, sesión Wayland con PipeWire, 24 hilos, 31 GB de RAM.
 **No se ha dispuesto de un Windows 11 ni de un Ubuntu 24.04.** Lo que no se pudo ejecutar se indica como tal.
 
 Cada prueba se clasifica como **superada**, **fallida** o **no ejecutable aquí**.
 
-## 1. Pruebas automatizadas — superadas (91 de 91, ninguna omitida)
+## 1. Pruebas automatizadas — superadas (96 de 96, ninguna omitida)
 
 Se ejecutan con `./herramientas/probar.sh`, siempre con el Python del paquete. Usan los motores reales, no simulacros.
 
 | Archivo | Nº | Qué comprueba |
 |---|---|---|
 | `test_dependencias` | 7 | El intérprete en uso es el del paquete (3.11); `sounddevice` y `soundfile` se cargan desde `runtime/`; una dependencia ausente se detecta y se nombra; con el Python del sistema el programa se niega a abrir y dice cómo arrancar; el diagnóstico no filtra rutas personales |
-| `test_audio` | 14 | Señal sintética guardada idéntica muestra a muestra; pausa; cola saturada y desbordamiento notificados y toma marcada incompleta; disco lleno conserva lo grabado; WAV válido antes de cerrarse; cancelar borra; segmentos en vivo contiguos; **sesión simulada de 40 min** sin pérdidas |
+| `test_audio` | 19 | Señal sintética guardada idéntica muestra a muestra; pausa; cola saturada y desbordamiento notificados y toma marcada incompleta; disco lleno conserva lo grabado; WAV válido antes de cerrarse; cancelar borra; segmentos en vivo contiguos; **sesión simulada de 40 min** sin pérdidas |
 | `test_partitura_flujo` | 19 | **Pentagrama:** posición de las notas en clave de Sol, Fa y Do (3.ª y 4.ª), figuras, acordes; la clave elegida y los nombres Do-Re-Mi llegan al MusicXML. Además: WAV sintético (escala de Do) → notas exactas → MIDI → MusicXML; corrección manual crea versión nueva sin tocar la anterior; nota que cruza trozos no se parte; silencio no inventa notas; archivo ilegible da error explicado; cancelación sin restos |
 | `test_letras_flujo` | 8 | Audio libre en español: idioma detectado, palabras esperadas, tiempos crecientes, exportación y reimportación; idioma manual; error sin tumbar el motor; el modo «voz cantada» no da por bueno texto en música sin voz |
 | `test_exportar` | 10 | SRT, VTT y LRC exactos; ida y vuelta; texto editado conserva tiempos; una línea nueva no recibe un tiempo inventado |
@@ -178,6 +178,19 @@ No hay Windows en este entorno. **No se declara validado.** Como aproximación s
 | Carga de Qt y NumPy 2 | **no ejecutable aquí**: a Wine le faltan `icuuc.dll` y `ucrtbase.crealf`, que Windows 10/11 sí incluyen |
 | Descarga de uv con `curl`/`tar`/`certutil` del lanzador | **no ejecutable aquí** (Wine no los trae; se precargó `uv.exe`) |
 | Ventana, micrófono (WASAPI), MuseScore `.paf.exe`, desinstalación | **no ejecutable aquí** |
+
+### Audio en Windows (versión 1.2.1) — lógica superada con dobles; **sin probar en un Windows real**
+
+Se añadió la lista de micrófonos por WASAPI (nombres completos) y la entrada «Sonido del equipo» mediante PyAudioWPatch.
+
+| Comprobación | Resultado |
+|---|---|
+| Selección de dispositivos WASAPI, entrada predeterminada y alternativa sin WASAPI (con un doble de `sounddevice`) | superada |
+| El sonido del equipo llega a la grabadora en mono, se cuenta el desbordamiento y el silencio se escribe en vez de tomarse por un fallo (con un doble de PyAudioWPatch) | superada |
+| Bajo Wine: el paquete de Windows se instala con la dependencia nueva; PyAudioWPatch carga, sus constantes coinciden con las usadas, existe la interfaz WASAPI con nombres completos y se localiza el dispositivo de captura de la salida | superada |
+| Grabar de verdad un micrófono o el sonido del equipo en Windows 11 | **no ejecutable aquí** |
+
+En Windows la app no puede saber si hay algo sonando, así que no ofrece por sí sola cambiar del micrófono al sonido del equipo: hay que pulsar el botón.
 
 ## 9. Otras no ejecutables aquí
 

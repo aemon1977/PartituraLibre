@@ -9,6 +9,7 @@ El código propio de Partitura Libre es MIT (`LICENSE`). Salvo la fuente Bravura
 | PySide6-Essentials 6.11 (Qt 6) | Interfaz gráfica | LGPL v3 (se usa como biblioteca dinámica sin modificar) | PyPI |
 | sounddevice | Captura de audio (PortAudio) | MIT | PyPI |
 | PortAudio | Biblioteca de audio: incluida en el wheel en Windows; la del sistema en Linux | MIT | — |
+| PyAudioWPatch (solo Windows) | Capturar lo que suena en el equipo (WASAPI *loopback*) | MIT | PyPI |
 | soundfile + libsndfile | Lectura de WAV/FLAC/OGG/MP3 | BSD 3 / LGPL 2.1 | PyPI |
 | NumPy | Cálculo | BSD 3 | PyPI |
 | faster-whisper, CTranslate2 | Voz a texto en CPU | MIT | PyPI |

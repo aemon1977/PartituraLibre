@@ -13,7 +13,8 @@ from . import rutas
 
 # conjunto: (módulos que deben poder importarse, tamaño aproximado en disco, imprescindible)
 CONJUNTOS = {
-    "app": (["PySide6.QtWidgets", "numpy", "sounddevice", "soundfile", "faster_whisper", "av"], "≈ 650 MB", True),
+    "app": (["PySide6.QtWidgets", "numpy", "sounddevice", "soundfile", "faster_whisper", "av",
+             *(["pyaudiowpatch"] if rutas.WINDOWS else [])], "≈ 650 MB", True),
     "partituras": (["basic_pitch.inference", "onnxruntime", "pretty_midi", "music21", "soundfile"], "≈ 710 MB", False),
 }
 
