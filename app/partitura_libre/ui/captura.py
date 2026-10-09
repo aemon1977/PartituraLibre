@@ -115,8 +115,11 @@ class PanelCaptura(QWidget):
         i = self._indice_sistema()
         if i >= 0:
             self.micro.setCurrentIndex(i)
-            self._decir("Se grabará lo que suene en este equipo. Pon la música y pulsa «Grabar».")
+            self._decir("Se grabará lo que suene en este equipo, directamente y sin micrófono. Pon la música y pulsa «Grabar».")
             self._botones()
+
+    def _es_sistema(self):
+        return bool((self.micro.currentData() or {}).get("sistema"))
 
     def _micro(self):
         """(índice de dispositivo, fuente del servidor de sonido) del micrófono elegido."""
@@ -135,7 +138,8 @@ class PanelCaptura(QWidget):
             self.g = None
             return tema.error(self, "Micrófono no disponible", str(e))
         self._fin_prueba = 10_000 // self._tic.interval()
-        self._decir("Probando: habla o toca y observa el nivel. No se guarda nada.")
+        self._decir("Probando el sonido del equipo: pon la música en marcha y observa el nivel. No se guarda nada." if self._es_sistema()
+                    else "Probando: habla o toca y observa el nivel. No se guarda nada.")
         self._tic.start()
         self._botones()
 
@@ -151,6 +155,11 @@ class PanelCaptura(QWidget):
     # -- grabación ------------------------------------------------------------
     def grabar(self):
         self._parar_prueba()
+        if self._es_sistema() and not audio.suena_algo() and not tema.confirmar(
+                self, "Ahora mismo no suena nada", "Has elegido grabar el sonido del equipo, pero ninguna aplicación está reproduciendo "
+                "audio en este momento.\n\nPon en marcha la música o el vídeo y vuelve a pulsar «Grabar». También puedes empezar ya "
+                "y darle a reproducir enseguida.", "Grabar igualmente"):
+            return
         carpeta = self._carpeta()
         libre = shutil.disk_usage(carpeta if carpeta and rutas.Path(carpeta).is_dir() else rutas.RAIZ).free // 2**20
         if libre < ESPACIO_MINIMO_MB:
@@ -194,7 +203,7 @@ class PanelCaptura(QWidget):
         """Cierra la toma y la conserva siempre, aunque esté incompleta."""
         if not self.grabando:
             return
-        g, carpeta = self.g, self.proyecto
+        g, carpeta, sistema = self.g, self.proyecto, self._es_sistema()
         g.detener()
         self._tic.stop()
         self.g = self.proyecto = None
@@ -206,6 +215,13 @@ class PanelCaptura(QWidget):
             self._decir("Toma guardada, pero INCOMPLETA. " + " ".join(g.avisos()), "error")
             tema.dialogo(self, "Grabación incompleta", "La toma se ha guardado, pero no está completa:\n\n• "
                          + "\n• ".join(g.avisos()), tipo="aviso")
+        elif sistema and (g.muda or g.floja):
+            self._decir("Toma guardada, pero " + ("sin sonido." if g.muda else f"con el equipo sonando muy bajo (pico del {g.pico * 100:.0f} %)."), "aviso")
+            tema.dialogo(self, "No se grabó sonido del equipo" if g.muda else "El equipo sonaba muy bajo",
+                         ("Durante la toma no sonó nada por la salida de audio.\n\n" if g.muda else "El sonido llegó muy flojo.\n\n")
+                         + "• Comprueba que la música o el vídeo estaban reproduciéndose (no en pausa) y sin silenciar.\n"
+                         "• Sube el volumen dentro de la aplicación que reproduce (Spotify, el navegador…).\n"
+                         "• Si escuchas por unos auriculares y cambiaste de salida a mitad, vuelve a grabar: la salida se elige al empezar.", tipo="aviso")
         elif g.muda:
             self._decir("Toma guardada, pero no contiene sonido.", "aviso")
             tema.dialogo(self, "La toma está en silencio", "Se ha grabado, pero el micrófono no envió ninguna señal.\n\n"
@@ -251,8 +267,12 @@ class PanelCaptura(QWidget):
         self.nivel.setValue(int(max(0, min(100, (db + 60) / 60 * 100))))
         flojo = g.frames > 2 * g.sr or (not self.grabando and self._fin_prueba < 8_000 // self._tic.interval())
         if flojo and g.pico < 0.1 and not g.pausada and self.texto.property("clase") != "error":   # aviso en directo, antes de perder la toma
-            self._decir(f"Nivel muy bajo (pico del {g.pico * 100:.0f} %): acerca el micrófono o sube su ganancia"
-                        + (". No se guarda nada." if not self.grabando else "; así el reconocimiento puede fallar."), "aviso")
+            if self._es_sistema():   # no hay micrófono que acercar: o no suena nada, o suena muy bajo
+                self._decir("No llega sonido del equipo: pon en marcha la música o el vídeo (y que no esté silenciado)." if g.pico < 0.001
+                            else f"El equipo suena muy bajo (pico del {g.pico * 100:.0f} %): sube el volumen de la aplicación que reproduce.", "aviso")
+            else:
+                self._decir(f"Nivel muy bajo (pico del {g.pico * 100:.0f} %): acerca el micrófono o sube su ganancia"
+                            + (". No se guarda nada." if not self.grabando else "; así el reconocimiento puede fallar."), "aviso")
         elif g.pico >= 0.1 and self.texto.text().startswith("Nivel muy bajo"):   # la señal ya llega bien
             self._decir("Grabando…" if self.grabando else "Probando: el nivel es correcto. No se guarda nada.", "aviso" if self.grabando else "tenue")
         clase = "alto" if g.nivel > 0.97 else "bajo" if flojo and g.pico < 0.1 else ""

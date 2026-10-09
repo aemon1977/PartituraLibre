@@ -35,36 +35,58 @@ def sd():
             f"Mientras tanto puedes importar archivos de audio. Detalle: {e}") from e
 
 
-SISTEMA = "Sonido del equipo · "   # prefijo de las entradas que graban lo que suena por una salida
+SISTEMA = "Sonido del equipo (lo que suena en este ordenador)"
+FUENTE_SISTEMA = "@sistema@"   # se resuelve al empezar a grabar: la salida por la que esté sonando algo
+
+
+def _pactl(*args):
+    return subprocess.run(["pactl", *args], capture_output=True, text=True, timeout=5,
+                          env={**os.environ, "LC_ALL": "C.UTF-8"}).stdout
+
+
+def _bloques(texto):
+    """Campos de primer nivel de cada bloque de un listado de `pactl list …`."""
+    for bloque in texto.split("\n\n"):
+        yield dict(l.strip().split(": ", 1) for l in bloque.splitlines() if ": " in l and l.startswith("\t") and not l.startswith("\t\t"))
+
+
+def salida_que_suena():
+    """Nombre de la salida de audio por la que está sonando algo ahora mismo; si no suena nada,
+    la salida predeterminada. Así «Sonido del equipo» acierta aunque la música vaya por los
+    auriculares y no por los altavoces."""
+    try:
+        salidas = dict(l.split("\t")[:2] for l in _pactl("list", "short", "sinks").splitlines() if "\t" in l)
+        sonando = [c["Sink"] for c in _bloques(_pactl("list", "sink-inputs")) if c.get("Corked") == "no" and c.get("Sink") in salidas]
+        return salidas[sonando[-1]] if sonando else _pactl("get-default-sink").strip()
+    except (OSError, subprocess.SubprocessError):
+        return ""
+
+
+def suena_algo():
+    """True si alguna aplicación está reproduciendo sonido en este momento."""
+    try:
+        return any(c.get("Corked") == "no" for c in _bloques(_pactl("list", "sink-inputs")))
+    except (OSError, subprocess.SubprocessError):
+        return False
 
 
 def fuentes_del_servidor():
     """Entradas que publica el servidor de sonido de Linux (PipeWire o PulseAudio), con el nombre que ve
-    el usuario: [{'nombre', 'fuente', 'predeterminado', 'sistema'}], los micrófonos primero. Las de
-    `sistema` graban directamente lo que suena por una salida (música de otra aplicación, un vídeo…).
-    Vacío si no hay servidor o en Windows. Solo consulta con `pactl`, que ya es parte del sistema."""
+    el usuario: [{'nombre', 'fuente', 'predeterminado', 'sistema'}]. Primero los micrófonos y, al final,
+    una única entrada de `sistema`, que graba directamente lo que suena en el equipo (música de otra
+    aplicación, un vídeo…). Vacío si no hay servidor o en Windows. Solo consulta con `pactl`, que ya es
+    parte del sistema; no cambia nada en él."""
     if rutas.WINDOWS or not shutil.which("pactl"):
         return []
     try:
-        entorno = {**os.environ, "LC_ALL": "C.UTF-8"}
-        texto = subprocess.run(["pactl", "list", "sources"], capture_output=True, text=True, timeout=5, env=entorno).stdout
-        pred = subprocess.run(["pactl", "get-default-source"], capture_output=True, text=True, timeout=5, env=entorno).stdout.strip()
-        salida = subprocess.run(["pactl", "get-default-sink"], capture_output=True, text=True, timeout=5, env=entorno).stdout.strip()
+        campos = list(_bloques(_pactl("list", "sources")))
+        pred = _pactl("get-default-source").strip()
     except (OSError, subprocess.SubprocessError):
         return []
-    fuentes = []
-    for bloque in texto.split("\n\n"):
-        campos = dict(l.strip().split(": ", 1) for l in bloque.splitlines() if ": " in l and l.startswith("\t") and not l.startswith("\t\t"))
-        if not campos.get("Name"):
-            continue
-        de_salida = campos.get("Monitor of Sink", "n/a")
-        nombre = campos.get("Description") or campos["Name"]
-        if de_salida == "n/a":
-            fuentes.append({"nombre": nombre, "fuente": campos["Name"], "predeterminado": campos["Name"] == pred, "sistema": False})
-        else:
-            fuentes.append({"nombre": SISTEMA + nombre.removeprefix("Monitor of ") + (" (salida en uso)" if de_salida == salida else ""),
-                            "fuente": campos["Name"], "predeterminado": False, "sistema": True, "_orden": de_salida != salida})
-    fuentes.sort(key=lambda f: (f["sistema"], f.pop("_orden", False)))
+    fuentes = [{"nombre": c.get("Description") or c["Name"], "fuente": c["Name"], "predeterminado": c["Name"] == pred, "sistema": False}
+               for c in campos if c.get("Name") and c.get("Monitor of Sink", "n/a") == "n/a"]   # los «monitor» no son micrófonos
+    if any(c.get("Monitor of Sink", "n/a") != "n/a" for c in campos):
+        fuentes.append({"nombre": SISTEMA, "fuente": FUENTE_SISTEMA, "predeterminado": False, "sistema": True})
     return fuentes
 
 
@@ -205,8 +227,8 @@ class Grabadora:
     # -- ciclo de vida -------------------------------------------------------
     def iniciar(self):
         s = sd()
-        if self.fuente:  # el servidor de sonido conecta este flujo al micrófono elegido
-            os.environ["PULSE_SOURCE"] = self.fuente
+        if self.fuente:  # el servidor de sonido conecta este flujo a la entrada elegida
+            os.environ["PULSE_SOURCE"] = salida_que_suena() + ".monitor" if self.fuente == FUENTE_SISTEMA else self.fuente
         try:
             self.sr = int(s.query_devices(self.dispositivo, "input")["default_samplerate"])
             self._preparar()

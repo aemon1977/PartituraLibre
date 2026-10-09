@@ -39,6 +39,7 @@ def comprobar(probar_micro=True):
         r.append(("Micrófonos", OK if micros else AVISO,
                   "; ".join(m["nombre"] + (" (predeterminado)" if m["predeterminado"] else "") for m in micros)
                   or "No hay ninguna entrada de audio. Conecta un micrófono y pulsa «Actualizar»."))
+        micros = [m for m in micros if not m["sistema"]] or micros
         if micros and probar_micro:
             try:
                 g = audio.Grabadora(dispositivo=micros[0]["indice"], fuente=micros[0]["fuente"])

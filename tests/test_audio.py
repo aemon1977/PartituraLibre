@@ -173,6 +173,37 @@ class Captura(Aislada):
         self.assertLess(time.monotonic() - t0, 120)
 
 
+class SonidoDelEquipo(unittest.TestCase):
+    SALIDAS = "58\taltavoces\tPipeWire\ts32le 2ch 48000Hz\tSUSPENDED\n69\tauriculares\tPipeWire\ts16le 2ch 48000Hz\tRUNNING\n"
+    PAUSADO = "Sink Input #185\n\tDriver: PipeWire\n\tSink: 58\n\tCorked: yes\n\tProperties:\n\t\tapplication.name = \"Firefox\"\n"
+    SONANDO = PAUSADO + "\nSink Input #190\n\tDriver: PipeWire\n\tSink: 69\n\tCorked: no\n\tProperties:\n\t\tapplication.name = \"spotify\"\n"
+
+    def con(self, entradas):
+        respuestas = {("list", "short", "sinks"): self.SALIDAS, ("list", "sink-inputs"): entradas, ("get-default-sink",): "altavoces\n"}
+        original, audio._pactl = audio._pactl, lambda *a: respuestas[a]
+        self.addCleanup(setattr, audio, "_pactl", original)
+
+    def test_se_graba_de_la_salida_por_la_que_suena_la_musica(self):
+        self.con(self.SONANDO)      # Spotify suena por los auriculares aunque la salida predeterminada sean los altavoces
+        self.assertEqual(audio.salida_que_suena(), "auriculares")
+        self.assertTrue(audio.suena_algo())
+
+    def test_si_no_suena_nada_se_usa_la_salida_predeterminada(self):
+        self.con(self.PAUSADO)      # un vídeo en pausa no cuenta
+        self.assertEqual(audio.salida_que_suena(), "altavoces")
+        self.assertFalse(audio.suena_algo())
+        self.con("")
+        self.assertEqual(audio.salida_que_suena(), "altavoces")
+
+    def test_la_lista_ofrece_una_sola_entrada_de_sonido_del_equipo(self):
+        try:
+            micros = audio.microfonos()
+        except audio.ErrorAudio as e:
+            self.skipTest(f"sin sistema de audio: {e}")
+        self.assertLessEqual(sum(m["sistema"] for m in micros), 1)
+        self.assertTrue(all(not m["sistema"] or m is micros[-1] for m in micros))   # y va la última, tras los micrófonos
+
+
 class Dispositivos(unittest.TestCase):
     def test_enumerar_microfonos_no_falla_y_tiene_formato(self):
         try:
