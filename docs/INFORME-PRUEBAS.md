@@ -118,6 +118,16 @@ Con la última toma de letra (pico del 13 %, señal apenas 3 dB sobre el ruido d
 
 La lista ofrecía una entrada por cada salida de audio, y la del micrófono inalámbrico (que también tiene salida de auriculares) se confundía con el propio micrófono: al elegirla el nivel era 0 %. Ahora hay una única entrada que, al empezar, localiza la salida por la que está sonando algo (o la predeterminada si no suena nada), avisa antes de grabar si nada se está reproduciendo y da mensajes propios en vez de «acerca el micrófono». Verificado que se conecta a la salida correcta; **no ejecutable aquí** con música real, porque no sonaba nada durante la prueba.
 
+### Actualización automática desde GitHub — superada en Linux, de punta a punta
+
+Publicada la versión 1.2.0 en github.com/aemon1977/PartituraLibre, se montó una instalación con el número de versión rebajado a 1.1.9 y una marca propia en `app/`:
+
+- detectó la 1.2.0 publicada, descargó el paquete de Linux (0,9 MB) y verificó el sha256 que da GitHub;
+- en el arranque siguiente el lanzador la aplicó: la app pasó a 1.2.0, la anterior quedó en `app.anterior/`, y los datos y el runtime no se tocaron;
+- `--deshacer-actualizacion` devolvió la instalación a la 1.1.9.
+
+**No ejecutable aquí:** el diálogo dentro de la ventana con el botón «Reiniciar ahora» manejado a mano, y todo el proceso en Windows.
+
 ### Mejora de la voz cantada (medida con tomas reales) — superada
 
 Dos tomas del usuario de una canción con instrumentos, capturadas por «Sonido del equipo» (pico de −7 dB), con la letra real como referencia:
