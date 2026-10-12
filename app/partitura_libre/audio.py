@@ -1,6 +1,7 @@
 """Captura de audio: callback ligero -> cola acotada -> hilo que escribe WAV por bloques."""
 import errno
 import os
+import sys
 import queue
 import shutil
 import struct
@@ -23,10 +24,21 @@ class ErrorAudio(Exception):
 def sd():
     """sounddevice del runtime portable, o un error que dice qué hacer."""
     try:
+        biblioteca = rutas.RUNTIME / "lib" / "libportaudio.so.2"
+        if not rutas.WINDOWS and biblioteca.is_file() and "sounddevice" not in sys.modules:
+            # El paquete completo de Linux lleva su propio PortAudio: se le indica a sounddevice, que si no
+            # solo lo busca en las carpetas del sistema.
+            import ctypes.util
+            buscar = ctypes.util.find_library
+            ctypes.util.find_library = lambda nombre: str(biblioteca) if nombre == "portaudio" else buscar(nombre)
+            try:
+                import sounddevice
+            finally:
+                ctypes.util.find_library = buscar
         import sounddevice
         return sounddevice
     except ImportError as e:
-        lanzador = "iniciar-windows.bat --reparar" if rutas.WINDOWS else "./iniciar-linux.sh --reparar"
+        lanzador = f"{rutas.LANZADOR} --reparar"
         raise ErrorAudio(f"El runtime portable no contiene sounddevice ({e}). Ejecuta: {lanzador}") from e
     except OSError as e:
         raise ErrorAudio(
@@ -155,7 +167,7 @@ class FlujoDelEquipo:
         from types import SimpleNamespace
         self.pa = pa or captura_del_equipo_windows()
         if self.pa is None:
-            raise ErrorAudio("No está disponible la captura del sonido del equipo. Ejecuta: iniciar-windows.bat --reparar")
+            raise ErrorAudio(f"No está disponible la captura del sonido del equipo. Ejecuta: {rutas.LANZADOR} --reparar")
         self.motor = self.pa.PyAudio()
         try:
             try:

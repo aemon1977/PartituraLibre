@@ -50,9 +50,12 @@ class Actualizacion(Aislada):
 
     def test_consultar_detecta_solo_versiones_mas_nuevas_y_elige_el_paquete_de_este_sistema(self):
         def respuesta(tag):
+            v = tag.lstrip("v")
             return {"tag_name": tag, "body": "Novedades", "html_url": "https://ejemplo/r", "assets": [
-                {"name": "PartituraLibre-9-windows11-x64.zip", "browser_download_url": "https://ejemplo/w.zip", "size": 2**20, "digest": "sha256:aa"},
-                {"name": "PartituraLibre-9-linux-x64.tar.gz", "browser_download_url": "https://ejemplo/l.tgz", "size": 2**21, "digest": "sha256:bb"}]}
+                {"name": "PartituraLibre-linux-x64.tar.gz", "browser_download_url": "https://ejemplo/completo.tgz", "size": 2**30},
+                {"name": "PartituraLibre-windows11-x64.zip", "browser_download_url": "https://ejemplo/completo.zip", "size": 2**30},
+                {"name": f"PartituraLibre-{v}-windows11-x64.zip", "browser_download_url": "https://ejemplo/w.zip", "size": 2**20, "digest": "sha256:aa"},
+                {"name": f"PartituraLibre-{v}-linux-x64.tar.gz", "browser_download_url": "https://ejemplo/l.tgz", "size": 2**21, "digest": "sha256:bb"}]}
         original = descargas.leer_json
         self.addCleanup(setattr, descargas, "leer_json", original)
         descargas.leer_json = lambda url: respuesta("v99.0.0")

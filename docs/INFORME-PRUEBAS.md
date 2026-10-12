@@ -1,6 +1,6 @@
 # Informe de pruebas
 
-Fecha: 8 de octubre de 2026 · Versión 1.4.0
+Fecha: 8 de octubre de 2026 · Versión 1.5.0
 Equipo de pruebas: Debian 13 (trixie) x86_64 real, sesión Wayland con PipeWire, 24 hilos, 31 GB de RAM.
 **No se ha dispuesto de un Windows 11 ni de un Ubuntu 24.04.** Lo que no se pudo ejecutar se indica como tal.
 
@@ -117,6 +117,18 @@ Con la última toma de letra (pico del 13 %, señal apenas 3 dB sobre el ruido d
 ### «Sonido del equipo» elegía la salida equivocada (caso real) — corregido
 
 La lista ofrecía una entrada por cada salida de audio, y la del micrófono inalámbrico (que también tiene salida de auriculares) se confundía con el propio micrófono: al elegirla el nivel era 0 %. Ahora hay una única entrada que, al empezar, localiza la salida por la que está sonando algo (o la predeterminada si no suena nada), avisa antes de grabar si nada se está reproduciendo y da mensajes propios en vez de «acerca el micrófono». Verificado que se conecta a la salida correcta; **no ejecutable aquí** con música real, porque no sonaba nada durante la prueba.
+
+### Windows real en GitHub y paquetes autónomos (1.5)
+
+Con las Actions de GitHub (máquinas Windows y Linux reales, sin micrófonos ni salidas de audio):
+
+| | Resultado |
+|---|---|
+| Instalación desde cero con el lanzador en **Windows** | superada; 117 de 118 pruebas a la primera, y todas tras los arreglos |
+| Ídem en **Linux** (Ubuntu 24.04) | 118 de 118 |
+| Fallos reales encontrados en Windows | **Desinstalar no borraba la carpeta** (comillas mal pasadas a `cmd`); sin salida de audio, la captura del equipo daba un error técnico. Corregidos |
+
+Paquetes completos (1.5): `PartituraLibre.exe` compilado (sin `.bat`) y, en Linux, PortAudio y las bibliotecas de X11 dentro. Se construyen en GitHub al publicar y se prueban descomprimidos en una carpeta nueva con «ñ», en máquinas sin esas bibliotecas: diagnóstico correcto y ventana abierta. **No ejecutable aquí:** un Windows 11 de escritorio con micrófono real.
 
 ### Versión 1.4 — sílabas, tonalidad, escucha y detalles
 

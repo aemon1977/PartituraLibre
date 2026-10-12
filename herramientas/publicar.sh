@@ -17,11 +17,8 @@ fi
 python3 herramientas/empaquetar.py
 git tag -a "v$VERSION" -m "Partitura Libre $VERSION"
 git push origin main "v$VERSION"
-# Además de los paquetes con número de versión, copias con nombre fijo: así los enlaces
-# …/releases/latest/download/PartituraLibre-windows11-x64.zip siempre dan la última versión.
-cp "dist/PartituraLibre-$VERSION-windows11-x64.zip" dist/PartituraLibre-windows11-x64.zip
-cp "dist/PartituraLibre-$VERSION-linux-x64.tar.gz" dist/PartituraLibre-linux-x64.tar.gz
+# Se suben los paquetes pequeños (solo el programa), que usan las actualizaciones automáticas. Al publicarse
+# la versión, GitHub construye y añade los paquetes COMPLETOS con nombre fijo (.github/workflows/paquetes.yml).
 gh release create "v$VERSION" --title "Partitura Libre $VERSION" --notes "$1" \
-    "dist/PartituraLibre-$VERSION-linux-x64.tar.gz" "dist/PartituraLibre-$VERSION-windows11-x64.zip" \
-    dist/PartituraLibre-windows11-x64.zip dist/PartituraLibre-linux-x64.tar.gz
+    "dist/PartituraLibre-$VERSION-linux-x64.tar.gz" "dist/PartituraLibre-$VERSION-windows11-x64.zip"
 echo "Publicada la versión $VERSION."

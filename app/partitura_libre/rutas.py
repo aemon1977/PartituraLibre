@@ -14,6 +14,8 @@ CONFIG = RAIZ / "config"
 LOGS = RAIZ / "logs"
 TEMP = RAIZ / "temp"
 WINDOWS = os.name == "nt"
+# Cómo se abre el programa: el ejecutable compilado en Windows, el guion en Linux
+LANZADOR = "PartituraLibre.exe" if WINDOWS else "./iniciar-linux.sh"
 
 _RESERVADOS = {"CON", "PRN", "AUX", "NUL", *(f"COM{i}" for i in range(1, 10)), *(f"LPT{i}" for i in range(1, 10))}
 

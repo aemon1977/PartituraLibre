@@ -36,7 +36,7 @@ def es_carpeta_del_programa(carpeta):
     """Salvaguarda: solo se borra una carpeta que sea inequívocamente la de Partitura Libre."""
     c = rutas.Path(carpeta).resolve()
     return ((c / "app" / "partitura_libre" / "__init__.py").is_file() and len(c.parts) >= 3
-            and c != rutas.Path.home().resolve() and any((c / f).is_file() for f in ("iniciar-linux.sh", "iniciar-windows.bat")))
+            and c != rutas.Path.home().resolve() and any((c / f).is_file() for f in ("iniciar-linux.sh", "iniciar-windows.bat", "PartituraLibre.exe")))
 
 
 def desinstalar():

@@ -16,10 +16,15 @@ Creado por **aemon1977** · [github.com/aemon1977/PartituraLibre](https://github
 
 | Sistema | Descarga (siempre la última versión) |
 |---|---|
-| **Windows 11** (64 bits) | [PartituraLibre-windows11-x64.zip](https://github.com/aemon1977/PartituraLibre/releases/latest/download/PartituraLibre-windows11-x64.zip) |
-| **Debian 13 / Ubuntu 24.04** (64 bits) | [PartituraLibre-linux-x64.tar.gz](https://github.com/aemon1977/PartituraLibre/releases/latest/download/PartituraLibre-linux-x64.tar.gz) |
+| **Windows 10/11** (64 bits) | [PartituraLibre-windows11-x64.zip](https://github.com/aemon1977/PartituraLibre/releases/latest/download/PartituraLibre-windows11-x64.zip) |
+| **Linux** (Debian 12/13, Ubuntu 22.04/24.04 y posteriores, 64 bits) | [PartituraLibre-linux-x64.tar.gz](https://github.com/aemon1977/PartituraLibre/releases/latest/download/PartituraLibre-linux-x64.tar.gz) |
 
-Descomprime y abre `iniciar-windows.bat` (Windows) o `./iniciar-linux.sh` (Linux). La primera vez descarga lo que necesita dentro de esa misma carpeta; después el programa se actualiza solo cuando se publica una versión nueva. Todas las versiones: [Releases](https://github.com/aemon1977/PartituraLibre/releases).
+**No hay que instalar nada.** El paquete lo lleva todo dentro: el programa, Python, todas las bibliotecas (también las de audio), el modelo de voz `small` y el separador de voz. Descomprímelo en una carpeta tuya y ábrelo:
+
+- **Windows:** doble clic en **`PartituraLibre.exe`**. Si Windows avisa de que viene de Internet, elige «Más información → Ejecutar de todas formas» (el programa no está firmado).
+- **Linux:** `./iniciar-linux.sh` desde una terminal en esa carpeta.
+
+Funciona sin conexión desde el primer momento. Ocupa unos 2 GB descomprimido. El programa se actualiza solo cuando se publica una versión nueva (se descarga solo lo que cambia, unos pocos MB). Todas las versiones: [Releases](https://github.com/aemon1977/PartituraLibre/releases).
 
 ## Es portable: una carpeta y nada más
 
@@ -29,41 +34,16 @@ Lo único que no se borra con ella son las copias que tú exportes a otros sitio
 
 ## Instalación
 
-Necesitas conexión a Internet solo la primera vez y unos **1,6 GB libres** (más los modelos de voz que elijas).
+No hay instalación: ver [Descargar](#descargar). Solo se descarga algo más si tú lo pides desde la app (los modelos de voz más grandes, como `large-v3`, recomendado para canciones; o MuseScore, opcional), y siempre dentro de la carpeta del programa:
 
-### Debian 13 / Ubuntu 24.04 (64 bits)
-
-```sh
-tar -xzf PartituraLibre-1.4.0-linux-x64.tar.gz
-cd PartituraLibre
-./iniciar-linux.sh
-```
-
-### Windows 11 (64 bits)
-
-1. Descarga [PartituraLibre-windows11-x64.zip](https://github.com/aemon1977/PartituraLibre/releases/latest/download/PartituraLibre-windows11-x64.zip) y descomprímelo en una carpeta tuya (por ejemplo, Documentos). Si Windows avisa de que el archivo viene de Internet, elige «Ejecutar de todas formas»: el programa no está firmado.
-2. Doble clic en `iniciar-windows.bat`.
-
-### Qué pasa en el primer arranque
-
-El lanzador muestra lo que va a bajar y lo guarda en `runtime/`:
-
-| Componente | Tamaño en disco |
-|---|---|
-| Gestor `uv` | ≈ 50 MB |
-| Python 3.11 portable | ≈ 90 MB |
-| Paquetes «app» (interfaz Qt, audio, voz a texto) | ≈ 650 MB (≈ 460 MB en Windows) |
-| Paquetes «partituras» (Basic Pitch, music21) | ≈ 710 MB (≈ 550 MB en Windows) |
-
-Después comprueba que todo se puede importar y abre la ventana. Los siguientes arranques son inmediatos y no usan Internet.
-
-Opcionales, solo cuando pulsas el botón correspondiente:
-
-| Descarga | Tamaño | Dónde |
+| Descarga opcional | Tamaño | Dónde |
 |---|---|---|
-| Modelo de voz `tiny` / `base` / `small` / `medium` / `large-v3` | 75 / 145 / 485 / 1530 / 3090 MB | `models/whisper/` |
-| Separador de voz para canciones | 64 MB | `models/separacion/` |
+| Modelo de voz `tiny` / `base` / `medium` / `large-v3` | 75 / 145 / 1530 / 3090 MB | `models/whisper/` |
 | MuseScore Studio 4.7.5 portable (opcional; la app edita y exporta PDF sin él) | 195 MB (≈ 570 MB descomprimido) | `runtime/musescore/` |
+
+### Desde el código fuente (para desarrollo)
+
+Clonando el repositorio, `./iniciar-linux.sh` o `iniciar-windows.bat` descargan Python y los paquetes dentro de la carpeta en el primer arranque (≈ 1,4 GB). En Linux, desde el código, el audio usa la biblioteca `libportaudio2` del sistema; los paquetes de descarga llevan la suya.
 
 ## Uso
 
@@ -139,7 +119,7 @@ Modelos de voz, MuseScore portable, **Diagnóstico** (runtime, micrófonos, moto
 Al abrirse, el programa consulta en GitHub si se ha publicado una versión nueva (solo pregunta el número de versión; no envía ningún dato tuyo). Si la hay, te muestra las novedades y, **si aceptas**, la descarga, la comprueba y te ofrece reiniciar. También puedes buscarla a mano en *Ajustes → Acerca de → Buscar actualizaciones*, o desactivar la consulta automática allí mismo.
 
 - Se cambia solo el programa (`app/`): tus grabaciones, partituras, modelos y ajustes no se tocan.
-- La versión anterior se guarda en `app.anterior/`. Para volver a ella: `./iniciar-linux.sh --deshacer-actualizacion` (o `iniciar-windows.bat --deshacer-actualizacion`).
+- La versión anterior se guarda en `app.anterior/`. Para volver a ella: `./iniciar-linux.sh --deshacer-actualizacion` (o `PartituraLibre.exe --deshacer-actualizacion`).
 - Si una versión nueva necesita otros paquetes, el lanzador los descarga dentro de `runtime/` en ese arranque.
 
 ## Formatos de salida
@@ -155,10 +135,10 @@ Cada proyecto es una carpeta en `data/proyectos/` (o donde tú elijas).
 
 | Síntoma | Qué hacer |
 |---|---|
-| El lanzador dice que un conjunto de paquetes no funciona | `./iniciar-linux.sh --reparar` o `iniciar-windows.bat --reparar`. Reinstala dentro de la carpeta, nada global. |
-| Quiero ver qué falla sin abrir la ventana | `./iniciar-linux.sh --diagnostico` (o `iniciar-windows.bat --diagnostico`). |
-| «No se pudo cargar PortAudio» (Linux) | Falta la biblioteca de audio del sistema `libportaudio2`. El programa no instala nada en el sistema: pídeselo a quien administre el equipo. Mientras tanto puedes importar archivos. |
-| La ventana no se abre en una sesión X11 (Linux) | Qt necesita `libxcb-cursor0` del sistema. En sesiones Wayland (las de Debian 13 y Ubuntu 24.04 por defecto) no hace falta. |
+| El lanzador dice que un conjunto de paquetes no funciona | `./iniciar-linux.sh --reparar` o `PartituraLibre.exe --reparar`. Reinstala dentro de la carpeta, nada global. |
+| Quiero ver qué falla sin abrir la ventana | `./iniciar-linux.sh --diagnostico` (o `PartituraLibre.exe --diagnostico` desde una terminal). |
+| «No se pudo cargar PortAudio» (Linux) | Con el paquete de descarga no debería pasar (lleva su PortAudio). Desde el código fuente, falta `libportaudio2` del sistema. |
+
 | «No se pudo abrir el micrófono» | Otro programa lo está usando o no hay permiso. Pulsa *Actualizar* y elige otro. En Windows: Configuración → Privacidad y seguridad → Micrófono. |
 | No aparece mi micrófono | Conéctalo y pulsa *Actualizar*. En Linux se listan los que publica PipeWire/PulseAudio; si no hay servidor de sonido se muestran los dispositivos ALSA. |
 | La transcripción sale vacía | El motor no encontró voz inteligible y no inventa texto. Si era música del propio equipo, grábala con «Sonido del equipo»; si es una canción, marca «Voz cantada»; revisa el idioma y prueba el modelo `medium`. |

@@ -5,7 +5,7 @@ from . import rutas
 
 
 def main():
-    lanzador = "iniciar-windows.bat" if rutas.WINDOWS else "./iniciar-linux.sh"
+    lanzador = rutas.LANZADOR
     if "--diagnostico" in sys.argv:
         from . import diagnostico
         r = diagnostico.comprobar()

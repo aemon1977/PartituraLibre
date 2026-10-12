@@ -17,7 +17,7 @@ def _anonimo(texto):
 def comprobar(probar_micro=True):
     """Lista de (comprobación, estado, detalle)."""
     r = []
-    lanzador = "iniciar-windows.bat" if rutas.WINDOWS else "./iniciar-linux.sh"
+    lanzador = rutas.LANZADOR
     r.append(("Sistema", OK, f"{platform.system()} {platform.release()} · Partitura Libre {__version__}"))
 
     portable = rutas.es_runtime_portable()

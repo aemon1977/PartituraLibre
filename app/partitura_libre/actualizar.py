@@ -47,8 +47,9 @@ def consultar():
     """Datos de la última versión publicada: {'version', 'nueva', 'notas', 'url', 'sha256', 'mb', 'pagina'}.
     Lanza OSError si no hay conexión o aún no hay ninguna versión publicada."""
     d = descargas.leer_json(API)
-    paquete = next((a for a in d.get("assets", []) if a["name"].endswith(SUFIJO)), None)
     version = d.get("tag_name", "").lstrip("v")
+    # El paquete pequeño (solo el programa), no el completo de descarga, que lleva Python y modelos
+    paquete = next((a for a in d.get("assets", []) if a["name"] == f"PartituraLibre-{version}{SUFIJO}"), None)
     return {"version": version, "nueva": bool(paquete) and numero(version) > numero(__version__),
             "notas": (d.get("body") or "").strip(), "pagina": d.get("html_url", WEB),
             "url": paquete["browser_download_url"] if paquete else "",
@@ -132,8 +133,9 @@ def deshacer():
 def reiniciar():
     """Abre de nuevo el programa con su lanzador (que aplicará la actualización). La app debe cerrarse después."""
     if rutas.WINDOWS:
-        subprocess.Popen(["cmd", "/c", "start", "", str(rutas.RAIZ / "iniciar-windows.bat")], cwd=str(rutas.RAIZ),
-                         creationflags=0x00000008)
+        exe = rutas.RAIZ / "PartituraLibre.exe"
+        orden = [str(exe)] if exe.is_file() else ["cmd", "/c", "start", "", str(rutas.RAIZ / "iniciar-windows.bat")]
+        subprocess.Popen(orden, cwd=str(rutas.RAIZ), creationflags=0x00000008)
     else:
         subprocess.Popen(["/bin/sh", str(rutas.RAIZ / "iniciar-linux.sh")], cwd=str(rutas.RAIZ), start_new_session=True,
                          stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)

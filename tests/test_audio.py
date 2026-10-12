@@ -302,6 +302,7 @@ class Windows(Aislada):
         self.assertTrue(registro.get("terminado"))
 
 
+@unittest.skipIf(audio.rutas.WINDOWS, "simula el servidor de sonido de Linux (pactl); en Windows se escucha la salida")
 class SonidoDelEquipo(unittest.TestCase):
     SALIDAS = "58\taltavoces\tPipeWire\ts32le 2ch 48000Hz\tSUSPENDED\n69\tauriculares\tPipeWire\ts16le 2ch 48000Hz\tRUNNING\n"
     PAUSADO = "Sink Input #185\n\tDriver: PipeWire\n\tSink: 58\n\tCorked: yes\n\tProperties:\n\t\tapplication.name = \"Firefox\"\n"

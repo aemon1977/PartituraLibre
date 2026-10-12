@@ -53,7 +53,7 @@ if __name__ == "__main__":
     shutil.rmtree(DIST, ignore_errors=True)
     DIST.mkdir()
     hechos = [
-        hacer_zip(f"PartituraLibre-{VERSION}-windows11-x64.zip", [*COMUN, "iniciar-windows.bat"], VACIAS),
+        hacer_zip(f"PartituraLibre-{VERSION}-windows11-x64.zip", COMUN, VACIAS),   # solo el programa: para actualizar
         hacer_tar(f"PartituraLibre-{VERSION}-linux-x64.tar.gz", [*COMUN, "iniciar-linux.sh"], VACIAS),
         hacer_zip(f"PartituraLibre-{VERSION}-proyecto.zip", [*COMUN, "iniciar-windows.bat", "iniciar-linux.sh", "tests", "herramientas", ".gitignore"]),
     ]

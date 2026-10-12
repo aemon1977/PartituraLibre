@@ -52,4 +52,10 @@ if [ ! -x "$RT/uv" ] || [ -z "$PY" ]; then
     [ -n "$PY" ] || error "no aparece Python 3.11 en $RT/python. Borra la carpeta runtime y reintenta."
 fi
 
+# El paquete completo trae bibliotecas propias (PortAudio, las de la ventana en X11) en runtime/lib:
+# se usan antes que las del sistema, para no depender de que estén instaladas.
+if [ -d "$RT/lib" ]; then
+    LD_LIBRARY_PATH="$RT/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+    export LD_LIBRARY_PATH
+fi
 PYTHONPATH="$DIR/app" PYTHONNOUSERSITE=1 exec "$PY" -s -m partitura_libre.lanzar "$@"

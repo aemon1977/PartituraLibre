@@ -52,10 +52,21 @@ def comprobar(conjunto):
     """Importa de verdad los módulos con el intérprete y rutas que usará la app.
     Devuelve '' si todo va bien o el texto del error."""
     modulos = CONJUNTOS[conjunto][0]
-    codigo = "import importlib,sys\nfor m in sys.argv[1:]:\n    importlib.import_module(m)\n"
+    # sounddevice se carga como lo hace la app (con el PortAudio incluido en el paquete, si lo hay)
+    codigo = ("import importlib,sys\nfor m in sys.argv[1:]:\n"
+              "    importlib.import_module(m) if m != 'sounddevice' else importlib.import_module('partitura_libre.audio').sd()\n")
     r = subprocess.run([sys.executable, "-s", "-c", codigo, *modulos], env=rutas.entorno(conjunto),
-                       capture_output=True, text=True, encoding="utf-8", errors="replace")
+                       capture_output=True, text=True, encoding="utf-8", errors="replace",
+                       creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
     return "" if r.returncode == 0 else (r.stderr.strip().splitlines() or ["error desconocido"])[-1]
+
+
+def avisar(texto):
+    """Escribe el mensaje; abierto con PartituraLibre.exe no hay consola, así que además se muestra en una ventana."""
+    print(texto)
+    if rutas.WINDOWS and sys.stdout is None:
+        import ctypes
+        ctypes.windll.user32.MessageBoxW(None, texto.strip(), "Partitura Libre", 0x10)
 
 
 def main(args=None):
@@ -63,10 +74,10 @@ def main(args=None):
     reparar = "--reparar" in args
     si = "--si" in args or not sys.stdin or not sys.stdin.isatty()
     args = [a for a in args if a not in ("--reparar", "--si")]
-    lanzador = "iniciar-windows.bat" if rutas.WINDOWS else "./iniciar-linux.sh"
+    lanzador = rutas.LANZADOR
 
     if not rutas.es_runtime_portable():
-        print(f"ERROR: este programa debe abrirse con {lanzador}\n"
+        avisar(f"ERROR: este programa debe abrirse con {lanzador}\n"
               f"  Python usado: {sys.executable}\n  Se esperaba uno dentro de: {rutas.RUNTIME}")
         return 2
     rutas.crear_carpetas()
@@ -102,7 +113,7 @@ def main(args=None):
         for c in pendientes:
             print(f"\n== Instalando paquetes «{c}» ==", flush=True)
             if not instalar(c):
-                print(f"\nERROR: no se pudieron descargar los paquetes «{c}».\n"
+                avisar(f"\nERROR: no se pudieron descargar los paquetes «{c}».\n"
                       f"  Revisa la conexión a Internet y el espacio libre, y ejecuta: {lanzador} --reparar")
                 if CONJUNTOS[c][2]:
                     return 1
@@ -112,8 +123,8 @@ def main(args=None):
     for c, (_, _, imprescindible) in CONJUNTOS.items():
         fallo = comprobar(c) if instalado(c) else "paquetes sin instalar"
         if fallo:
-            print(f"\n{'ERROR' if imprescindible else 'AVISO'}: el conjunto «{c}» no funciona: {fallo}\n"
-                  f"  Solución (no instala nada en el sistema): {lanzador} --reparar")
+            (avisar if imprescindible else print)(f"\n{'ERROR' if imprescindible else 'AVISO'}: el conjunto «{c}» no funciona: {fallo}\n"
+                                                  f"  Solución (no instala nada en el sistema): {lanzador} --reparar")
             if imprescindible:
                 return 1
 
