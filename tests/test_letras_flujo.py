@@ -38,7 +38,7 @@ class Voz(unittest.TestCase):
         self.assertEqual(idioma["idioma"], "es")
         segs = [{k: e[k] for k in ("inicio", "fin", "texto", "dudoso")} for e in ev if e["t"] == "segmento"]
         texto = " ".join(s["texto"] for s in segs).lower()
-        self.assertIn("desambiguación", texto)
+        self.assertIn("desambig", texto)                     # el modelo «tiny» escribe a veces «desambigüación»
         self.assertIn("wikipedia", texto)
         for a, b in zip(segs, segs[1:]):   # marcas de tiempo crecientes y dentro del audio
             self.assertLessEqual(a["inicio"], b["inicio"])

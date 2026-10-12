@@ -19,7 +19,7 @@ Creado por **aemon1977** · [github.com/aemon1977/PartituraLibre](https://github
 | **Windows 10/11** (64 bits) | [PartituraLibre-windows11-x64.zip](https://github.com/aemon1977/PartituraLibre/releases/latest/download/PartituraLibre-windows11-x64.zip) |
 | **Linux** (Debian 12/13, Ubuntu 22.04/24.04 y posteriores, 64 bits) | [PartituraLibre-linux-x64.tar.gz](https://github.com/aemon1977/PartituraLibre/releases/latest/download/PartituraLibre-linux-x64.tar.gz) |
 
-**No hay que instalar nada.** El paquete lo lleva todo dentro: el programa, Python, todas las bibliotecas (también las de audio), el modelo de voz `small` y el separador de voz. Descomprímelo en una carpeta tuya y ábrelo:
+**No hay que instalar nada.** (En Linux basta con tener un escritorio gráfico, como el de cualquier Debian, Ubuntu, Mint o Fedora.) El paquete lo lleva todo dentro: el programa, Python, todas las bibliotecas (también las de audio), el modelo de voz `small` y el separador de voz. Descomprímelo en una carpeta tuya y ábrelo:
 
 - **Windows:** doble clic en **`PartituraLibre.exe`**. Si Windows avisa de que viene de Internet, elige «Más información → Ejecutar de todas formas» (el programa no está firmado).
 - **Linux:** `./iniciar-linux.sh` desde una terminal en esa carpeta.
