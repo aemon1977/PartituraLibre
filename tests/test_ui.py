@@ -366,7 +366,7 @@ class Interfaz(Aislada):
         QTest.keyClicks(p.e_letra, "can"); QTest.keyClick(p.e_letra, Qt.Key_Minus)
         QTest.keyClicks(p.e_letra, "ta"); QTest.keyClick(p.e_letra, Qt.Key_Space)
         QTest.keyClicks(p.e_letra, "re"); QTest.keyClick(p.e_letra, Qt.Key_Escape)
-        self.assertEqual(p.letra[:3], ["can", "ta", "re"])
+        self.assertEqual(p.letra[:3], ["can-", "ta", "re"])      # el guion marca que la palabra sigue en la nota siguiente
         self.assertTrue(p.vista.hasFocus())
 
         p.tabla.selectRow(0)                                # introducir en medio desplaza lo que sigue, no lo pisa
@@ -505,7 +505,7 @@ class Interfaz(Aislada):
         self.assertTrue(esperar(lambda: p.tarea is None and p.version is not None, 300), p.e_estado.text())
         self.assertEqual(self.dialogos, [])
 
-        cantado = " ".join(t for t in p.letra if t).lower()
+        cantado = " ".join(t for t in p.letra if t).lower().replace("- ", "")   # sílabas («wi- kipedia») unidas
         self.assertGreater(len(p.notas), 10)
         self.assertEqual(len(p.letra), len(p.notas))
         self.assertIn("wikipedia", cantado)                                   # las palabras están bajo las notas
@@ -514,7 +514,8 @@ class Interfaz(Aislada):
         self.assertEqual(p.tabla.item(con_texto[0], 4).text(), p.letra[con_texto[0]])
         tipos = [r["tipo"] for r in proyectos.leer(d)["resultados"]]
         self.assertEqual(sorted(tipos), ["letra", "partitura"])               # un proyecto, los dos resultados
-        letra_xml = lambda v: " ".join(l.findtext("text") or "" for l in ET.parse(d / v["musicxml"]).getroot().iter("lyric")).lower()
+        letra_xml = lambda v: "".join((l.findtext("text") or "") + ("" if l.findtext("syllabic") in ("begin", "middle") else " ")
+                                      for l in ET.parse(d / v["musicxml"]).getroot().iter("lyric") if l.get("number") == "1").lower()
         self.assertIn("wikipedia", letra_xml(p.version))                      # y llegan al MusicXML
         p.vista.grab()
 
@@ -526,7 +527,7 @@ class Interfaz(Aislada):
         p.poner_letra()
         self.assertTrue(p.b_cancelar.isEnabled())
         self.assertTrue(esperar(lambda: p.tarea is None, 300))
-        self.assertIn("wikipedia", " ".join(p.letra).lower())
+        self.assertIn("wikipedia", " ".join(p.letra).lower().replace("- ", ""))
         self.assertEqual(p.notas, notas_antes)                                # las notas no se tocan
         self.assertIn("Letra colocada", p.e_estado.text())
         self.assertEqual(len([r for r in proyectos.leer(d)["resultados"] if r["tipo"] == "partitura"]), 1)   # ni se crea otra versión sola
