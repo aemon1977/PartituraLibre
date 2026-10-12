@@ -84,10 +84,10 @@ def suena_algo(pa=None, espera=0.4):
         except Exception:
             return None
         return any(v > 30 for v in oido)   # bloques con algo más que silencio digital
-    if not shutil.which("pactl"):
-        return None
     try:
         return any(c.get("Corked") == "no" for c in _bloques(_pactl("list", "sink-inputs")))
+    except FileNotFoundError:   # sin servidor de sonido con pactl (PipeWire/PulseAudio): no se puede saber
+        return None
     except (OSError, subprocess.SubprocessError):
         return False
 
@@ -158,7 +158,11 @@ class FlujoDelEquipo:
             raise ErrorAudio("No está disponible la captura del sonido del equipo. Ejecuta: iniciar-windows.bat --reparar")
         self.motor = self.pa.PyAudio()
         try:
-            salida = self.motor.get_default_wasapi_loopback()
+            try:
+                salida = self.motor.get_default_wasapi_loopback()
+            except Exception as e:   # sin salida de audio o sin WASAPI: un mensaje claro, no un error técnico
+                raise ErrorAudio("No se encuentra ninguna salida de audio activa de la que grabar el sonido del equipo. "
+                                 f"Comprueba en Windows que hay altavoces o auriculares conectados y activos. Detalle: {e}") from e
             self.canales, self.sr = int(salida["maxInputChannels"]), int(salida["defaultSampleRate"])
 
             def recibir(datos, n, _tiempo, estado):

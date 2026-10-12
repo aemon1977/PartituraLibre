@@ -284,9 +284,22 @@ class Windows(Aislada):
         self.assertLess(audio.UMBRAL_SISTEMA, audio.UMBRAL_MICRO)   # una canción suave capturada del equipo no es «floja»
 
     def test_si_falta_la_captura_del_equipo_se_explica(self):
+        original = audio.captura_del_equipo_windows
+        audio.captura_del_equipo_windows = lambda: None   # como si faltara el paquete
+        self.addCleanup(setattr, audio, "captura_del_equipo_windows", original)
         with self.assertRaises(audio.ErrorAudio) as e:
-            audio.FlujoDelEquipo(lambda *a: None)       # en Linux no existe pyaudiowpatch: mismo camino que si faltara en Windows
+            audio.FlujoDelEquipo(lambda *a: None)
         self.assertIn("--reparar", str(e.exception))
+
+    def test_sin_salida_de_audio_el_error_es_claro(self):
+        modulo, registro = self.falso_pyaudio()
+        def sin_salida(motor):
+            raise OSError(-9996, "Invalid device info")   # lo que da Windows sin ninguna salida activa
+        modulo.PyAudio.get_default_wasapi_loopback = sin_salida
+        with self.assertRaises(audio.ErrorAudio) as e:
+            audio.FlujoDelEquipo(lambda *a: None, modulo)
+        self.assertIn("ninguna salida de audio", str(e.exception))
+        self.assertTrue(registro.get("terminado"))
 
 
 class SonidoDelEquipo(unittest.TestCase):
@@ -303,6 +316,13 @@ class SonidoDelEquipo(unittest.TestCase):
         self.con(self.SONANDO)      # Spotify suena por los auriculares aunque la salida predeterminada sean los altavoces
         self.assertEqual(audio.salida_que_suena(), "auriculares")
         self.assertTrue(audio.suena_algo())
+
+    def test_sin_pactl_no_se_sabe_si_suena_algo(self):
+        def sin_pactl(*a):
+            raise FileNotFoundError("pactl")
+        original, audio._pactl = audio._pactl, sin_pactl
+        self.addCleanup(setattr, audio, "_pactl", original)
+        self.assertIsNone(audio.suena_algo())
 
     def test_si_no_suena_nada_se_usa_la_salida_predeterminada(self):
         self.con(self.PAUSADO)      # un vídeo en pausa no cuenta

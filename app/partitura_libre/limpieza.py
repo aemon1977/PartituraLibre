@@ -46,8 +46,10 @@ def desinstalar():
     if not es_carpeta_del_programa(raiz):
         raise RuntimeError(f"Por seguridad no se borra {raiz}: no parece la carpeta de Partitura Libre.")
     if rutas.WINDOWS:
-        orden = f'ping -n 4 127.0.0.1 >nul & rmdir /s /q "{raiz}"'
-        subprocess.Popen(["cmd", "/c", orden], cwd=str(raiz.parent), creationflags=0x00000008 | 0x08000000)  # DETACHED | NO_WINDOW
+        # Como texto y con /s: así cmd conserva las comillas de la ruta (en forma de lista, Python las escaparía con \"
+        # y cmd no las entiende, y el borrado no ocurría).
+        orden = f'cmd /s /c "ping -n 4 127.0.0.1 >nul & rmdir /s /q "{raiz}""'
+        subprocess.Popen(orden, cwd=str(raiz.parent), creationflags=0x00000008 | 0x08000000)  # DETACHED | NO_WINDOW
     else:
         subprocess.Popen(["/bin/sh", "-c", 'sleep 2; rm -rf -- "$1"', "sh", str(raiz)], cwd=str(raiz.parent),
                          start_new_session=True, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
