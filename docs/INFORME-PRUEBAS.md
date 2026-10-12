@@ -1,12 +1,12 @@
 # Informe de pruebas
 
-Fecha: 8 de octubre de 2026 · Versión 1.3.1
+Fecha: 8 de octubre de 2026 · Versión 1.4.0
 Equipo de pruebas: Debian 13 (trixie) x86_64 real, sesión Wayland con PipeWire, 24 hilos, 31 GB de RAM.
 **No se ha dispuesto de un Windows 11 ni de un Ubuntu 24.04.** Lo que no se pudo ejecutar se indica como tal.
 
 Cada prueba se clasifica como **superada**, **fallida** o **no ejecutable aquí**.
 
-## 1. Pruebas automatizadas — superadas (102 de 102, ninguna omitida)
+## 1. Pruebas automatizadas — superadas (116 de 116, ninguna omitida)
 
 Se ejecutan con `./herramientas/probar.sh`, siempre con el Python del paquete. Usan los motores reales, no simulacros.
 
@@ -117,6 +117,22 @@ Con la última toma de letra (pico del 13 %, señal apenas 3 dB sobre el ruido d
 ### «Sonido del equipo» elegía la salida equivocada (caso real) — corregido
 
 La lista ofrecía una entrada por cada salida de audio, y la del micrófono inalámbrico (que también tiene salida de auriculares) se confundía con el propio micrófono: al elegirla el nivel era 0 %. Ahora hay una única entrada que, al empezar, localiza la salida por la que está sonando algo (o la predeterminada si no suena nada), avisa antes de grabar si nada se está reproduciendo y da mensajes propios en vez de «acerca el micrófono». Verificado que se conecta a la salida correcta; **no ejecutable aquí** con música real, porque no sonaba nada durante la prueba.
+
+### Versión 1.4 — sílabas, tonalidad, escucha y detalles
+
+Con el primer minuto de «Barcelona ciudad» (Loquillo y los Trogloditas, importada por el usuario), en la app:
+
+| | 1.3 | 1.4 |
+|---|---|---|
+| Sílabas o palabras colocadas | 33 palabras, varias amontonadas y alguna desordenada | 49 sílabas en orden («Bar-ce-lo-na», «ju-ven-tud», «can-ción») |
+| Introducción instrumental | llena de notas falsas | compases vacíos |
+| Tonalidad | sin armadura, todo con sostenidos | Do menor, tres bemoles, becuadros y ligaduras |
+
+Pruebas nuevas: silabeo de 20 palabras difíciles; reparto de sílabas (notas que suenan, libres siguientes, división, melisma, sin retroceso, notas nuevas con la altura cantada); sílabas enlazadas en el MusicXML y de vuelta; tonalidad de escalas mayores y menores; deletreo; posiciones de la armadura en las cuatro claves; marcar pulso; reproducción sincronizada; tiempo restante; umbral de la captura del equipo; detección de sonido en Windows (con un doble).
+
+- **Silabeo:** palabras raras o en otros idiomas pueden dividirse mal; se corrigen en el campo de letra (el guion marca que la palabra sigue).
+- **Comprobación en Windows reales de GitHub:** preparada pero **no ejecutada**. GitHub no la inició porque la cuenta tiene las Actions bloqueadas por un problema de facturación. Sigue sin haber ninguna prueba en Windows real.
+- **No ejecutable aquí:** oír de verdad la reproducción sincronizada por los altavoces.
 
 ### Canción: melodía cantada con su letra a la vez (1.3) — superada con una canción real
 

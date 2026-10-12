@@ -25,14 +25,14 @@ Necesitas conexión a Internet solo la primera vez y unos **1,6 GB libres** (má
 ### Debian 13 / Ubuntu 24.04 (64 bits)
 
 ```sh
-tar -xzf PartituraLibre-1.3.1-linux-x64.tar.gz
+tar -xzf PartituraLibre-1.4.0-linux-x64.tar.gz
 cd PartituraLibre
 ./iniciar-linux.sh
 ```
 
 ### Windows 11 (64 bits)
 
-1. Descomprime `PartituraLibre-1.3.1-windows11-x64.zip` en una carpeta tuya (por ejemplo, Documentos).
+1. Descomprime `PartituraLibre-1.4.0-windows11-x64.zip` en una carpeta tuya (por ejemplo, Documentos).
 2. Doble clic en `iniciar-windows.bat`.
 
 ### Qué pasa en el primer arranque
@@ -70,7 +70,7 @@ La sección está organizada como un editor de partituras:
 
 Tres maneras de empezar:
 
-- **Desde un audio.** Elige la entrada de audio, *Probar nivel* y *Grabar* (con *Ver las notas mientras grabo* la partitura se dibuja en vivo como borrador), o importa un WAV, MP3, FLAC u OGG. Después, *Detectar notas y crear partitura*. Con *Canción: melodía de la voz cantada con su letra* (activado por defecto), en un solo paso se aísla la voz de los instrumentos, se escribe **la melodía que se canta** (una sola línea, en el registro de la voz) y se coloca **una palabra de la letra bajo cada nota**. La letra se reconoce con el modelo más preciso que tengas (`large-v3` si está). Hace falta un modelo de voz y el separador (64 MB; la app lo ofrece la primera vez). Si en el audio no se oye letra cantada, las notas salen de todo el audio, como en una pieza instrumental. La voz aislada queda guardada en el proyecto (`voz aislada.wav`). A una partitura ya creada se le pone la letra con el botón *Letra*, sin volver a detectar las notas.
+- **Desde un audio.** Elige la entrada de audio, *Probar nivel* y *Grabar* (con *Ver las notas mientras grabo* la partitura se dibuja en vivo como borrador), o importa un WAV, MP3, FLAC u OGG. Después, *Detectar notas y crear partitura*. Con *Canción: melodía de la voz cantada con su letra* (activado por defecto), en un solo paso se aísla la voz de los instrumentos, se escribe **la melodía que se canta** (una sola línea, en el registro de la voz) y se coloca **una palabra de la letra bajo cada nota**. La letra se reconoce con el modelo más preciso que tengas (`large-v3` si está). Hace falta un modelo de voz y el separador (64 MB; la app lo ofrece la primera vez). Si en el audio no se oye letra cantada, las notas salen de todo el audio, como en una pieza instrumental. La voz aislada queda guardada en el proyecto (`voz aislada.wav`). La letra va **en sílabas**, como en una partitura de canción («Bar-ce-lo-na»): cada sílaba bajo su nota y, donde el detector no encontró nota, se crea una con la altura que canta la voz. Las notas sueltas de introducciones y solos (restos de los instrumentos) se quitan. Debajo de «Canción» eliges con qué modelo se reconoce la letra. A una partitura ya creada se le pone la letra con el botón *Letra*, sin volver a detectar las notas.
 - **Desde una partitura existente.** *Abrir…* convierte un MusicXML, MXL o MIDI en una partitura editable; el archivo original se guarda en el proyecto.
 - **En blanco.** *Nueva* crea una hoja vacía con el modo *Introducir* activado.
 
@@ -95,6 +95,12 @@ Editar, con las mismas teclas que MuseScore:
 La casilla *Nombre de cada nota* escribe bajo cada una lo que es (Do, Re, Mi, Fa♯…) en azul, para no confundirlo con la letra, que va en negro; y al pasar el ratón por encima de una nota aparece su ficha completa: nombre con octava, figura, cuándo empieza, cuánto dura y su letra.
 
 Con el ratón: clic elige una nota, arrastrarla arriba o abajo cambia su altura y, en modo introducir, un clic en el pentagrama escribe una nota a esa altura. Al introducir una nota en medio, las siguientes se desplazan para hacerle sitio. Todo está también en los botones de la barra de notas, y los valores exactos en el panel *Lista de notas*.
+
+**Tonalidad y ritmo.** La tonalidad se detecta sola y se escribe su armadura; las notas se nombran según ella (Si♭ en Fa mayor, no La♯) y las alteraciones valen hasta el final del compás, con becuadro cuando hace falta. Puedes fijarla a mano en la barra inferior. Una nota que cruza la barra de compás se escribe ligada. Si el tempo detectado no encaja, pulsa *Marcar pulso* al ritmo de la canción (4 veces o más) y se fija solo.
+
+**Oír.** Junto a *▶ Oír* eliges qué suena: la partitura tal como está escrita, el **audio original** o la **voz aislada**. Suena desde la nota elegida y la nota que está sonando se resalta en naranja, así es fácil comparar y corregir.
+
+Los análisis largos muestran cuánto tiempo queda.
 
 Guardar y exportar: *Guardar versión* crea MIDI y MusicXML nuevos con tus cambios, sin pisar los anteriores. *PDF…* escribe en A4 la partitura tal como la ves, con clave, nombres y letra. MuseScore es opcional: si lo tienes, aparece un botón para abrir en él el MusicXML guardado.
 
