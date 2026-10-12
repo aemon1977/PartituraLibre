@@ -66,40 +66,83 @@ def melodia(notas):
     return linea
 
 
-SILABA_S = 0.25  # una nota solo se divide si cada trozo dura al menos esto
-SALTO_S = 0.7   # una palabra que no cabe en su nota puede pasar a la siguiente libre si empieza a menos de esto
+MIN_SILABA_S = 0.12   # una nota cantada solo se divide si cada trozo dura al menos esto
+SALTO_S = 0.7         # una palabra puede tomar notas libres que empiecen hasta esto después de su final
+DURACION_MAX_S = 2.0  # con el canto el reconocedor adelanta el principio de las palabras: se recorta a esto
+RESTO_S = 1.5         # notas sin letra a más de esto de toda palabra cantada: restos de instrumentos
 
 
-def letra_cantada(notas, palabras):
-    """Letra de una canción sobre su melodía: (notas, letra) con UNA palabra por nota.
-    El reconocedor da tiempos aproximados con el canto, así que varias palabras suelen caer en la misma
-    nota: cada una ocupa la nota que suena cuando se canta. Si ya está cogida y es larga, se divide (sílabas
-    seguidas a la misma altura); si es corta, la palabra pasa a la siguiente nota libre cercana."""
-    notas = sorted(list(n) for n in notas)
-    if not notas:
-        return [], []
-    grupos = [[] for _ in notas]                    # palabras de cada nota, en orden
-    for ini, fin, texto in sorted(palabras):
-        if not texto.strip():
-            continue
-        t = max(ini, fin - 0.5)                     # con el canto, el inicio que da el reconocedor suele adelantarse
-        dentro = [i for i, n in enumerate(notas) if n[0] - UNION_S <= t < n[1] - 0.02]
-        i = dentro[-1] if dentro else min(range(len(notas)), key=lambda i: min(abs(t - notas[i][0]), abs(t - notas[i][1])))
-        if not dentro and min(abs(t - notas[i][0]), abs(t - notas[i][1])) > LEJOS_S:
-            continue                                # lejos de toda nota: hablado, no cantado
-        j = i
-        cabe = (notas[i][1] - notas[i][0]) / (len(grupos[i]) + 1) >= SILABA_S   # nota larga: se puede dividir
-        while grupos[j] and not cabe and j + 1 < len(notas) and notas[j + 1][0] - t <= SALTO_S:
-            j += 1                                  # nota corta y ya cogida: a la siguiente libre
-        grupos[j if not grupos[j] else i].append(texto.strip())
-    salida, letra = [], []
-    for (ini, fin, tono, v), g in zip(notas, grupos):
-        k = max(1, len(g))
-        paso = (fin - ini) / k
-        for n in range(k):
-            salida.append([round(ini + n * paso, 4), round(ini + (n + 1) * paso, 4), tono, v])
-            letra.append(g[n] if n < len(g) else "")
-    return salida, letra
+def letra_cantada(notas, palabras, tono_en=None):
+    """Letra de una canción sobre su melodía: (notas, letra) con UNA SÍLABA por nota, como en una partitura.
+    Una sílaba que sigue en la nota siguiente acaba en guion («be-», «be-», «ré»).
+    - Las notas de una palabra son las que suenan mientras se canta (entre su principio y su final).
+      Con el canto el reconocedor adelanta a veces el principio: se considera como mucho DURACION_MAX_S.
+    - Si una palabra empieza dentro de una nota que ya tiene sílaba, la nota se parte ahí (sílabas
+      repetidas a la misma altura).
+    - Si faltan notas: se toman las libres que siguen, antes de la palabra siguiente; si aún faltan, se
+      dividen las notas de la palabra cuando caben todas las sílabas; si no, lo que sobra va junto en la última.
+    - Notas de sobra en una palabra quedan sin texto (melisma).
+    - Las notas lejos de toda letra cantada (introducciones, solos) son restos de instrumentos y se quitan.
+    - `tono_en(a, b)`, si se da, devuelve la nota que canta la voz entre a y b (o None): con él, las sílabas
+      que no tienen nota detectada reciben una nueva en vez de amontonarse o perderse."""
+    from .silabas import silabas
+    piezas = [[n[0], n[1], n[2], n[3], None] for n in sorted(notas)]   # texto None = sin asignar
+    palabras = sorted(p for p in palabras if p[2].strip())
+    if not piezas or not palabras:
+        return [list(n) for n in sorted(notas)], [""] * len(notas)
+    tramos, ultima = [], None                                # ultima: pieza con la sílaba más reciente
+    for k, (ini, fin, texto) in enumerate(palabras):
+        a = max(ini, fin - DURACION_MAX_S)
+        b = max(fin, a + 0.05)
+        tramos.append((a, b))
+        siguiente = palabras[k + 1][0] if k + 1 < len(palabras) else float("inf")
+        if ultima is not None and ultima[0] + MIN_SILABA_S <= a <= ultima[1] - MIN_SILABA_S:
+            j = next(i for i, p in enumerate(piezas) if p is ultima)   # empieza dentro de la última nota cantada: se parte ahí
+            piezas.insert(j + 1, [a, ultima[1], ultima[2], ultima[3], None])
+            ultima[1] = a
+        desde = 0 if ultima is None else next(i for i, p in enumerate(piezas) if p is ultima) + 1
+        libres = [p for p in piezas[desde:] if p[4] is None]          # la letra siempre avanza: nunca notas anteriores
+        suyas = [p for p in libres if a - 0.05 <= p[0] < b or min(p[1], b) - max(p[0], a) >= 0.5 * (p[1] - p[0])]
+        unidades = [s + ("-" if n < len(ps) - 1 else "") for ps in [silabas(texto.strip())] for n, s in enumerate(ps)]
+        if tono_en:                                          # sílabas sin nota detectada: notas nuevas con la altura cantada
+            hueco = max(a, suyas[-1][1] if suyas else (ultima[1] if ultima is not None else a))
+            faltan = len(unidades) - len(suyas)
+            if faltan > 0 and b - hueco >= MIN_SILABA_S:
+                n = min(faltan, int((b - hueco) / MIN_SILABA_S))
+                paso = (b - hueco) / n
+                for m in range(n):
+                    tono = tono_en(hueco + m * paso, hueco + (m + 1) * paso)
+                    if tono is not None:
+                        nueva = [hueco + m * paso, hueco + (m + 1) * paso, tono, 0.5, None]
+                        pos = next((i for i, p in enumerate(piezas) if p[0] > nueva[0]), len(piezas))
+                        piezas.insert(pos, nueva)
+                        suyas.append(nueva)
+        if not suyas:                                        # ninguna suena a la vez: la libre más cercana
+            cerca = [p for p in libres if a - LEJOS_S <= p[0] <= b + LEJOS_S]
+            suyas = [min(cerca, key=lambda p: abs(p[0] - a))] if cerca else []
+        if not suyas:
+            continue                                         # hablado o sin melodía detectada
+        j = piezas.index(suyas[-1]) + 1
+        while len(suyas) < len(unidades) and j < len(piezas) and piezas[j][4] is None \
+                and piezas[j][0] < siguiente - 0.1 and piezas[j][0] - b <= SALTO_S:
+            suyas.append(piezas[j])
+            j += 1
+        if len(suyas) < len(unidades) and sum(int((p[1] - p[0]) / MIN_SILABA_S) for p in suyas) >= len(unidades):
+            while len(suyas) < len(unidades):                # divide la más larga hasta que quepan todas
+                o = max(suyas, key=lambda p: p[1] - p[0])
+                medio = (o[0] + o[1]) / 2
+                nueva = [medio, o[1], o[2], o[3], None]
+                o[1] = medio
+                piezas.insert(next(i for i, p in enumerate(piezas) if p is o) + 1, nueva)
+                suyas.insert(suyas.index(o) + 1, nueva)
+        for n, o in enumerate(suyas):
+            o[4] = unidades[n] if n < len(unidades) else ""
+        ultima = suyas[-1]
+        if len(unidades) > len(suyas):                       # no caben: lo que sobra, junto en la última
+            resto = unidades[len(suyas) - 1:]
+            suyas[-1][4] = "".join(u[:-1] if u.endswith("-") else u + " " for u in resto[:-1]) + resto[-1]
+    piezas = [p for p in piezas if p[4] is not None or any(t0 - RESTO_S <= p[0] <= t1 + RESTO_S for t0, t1 in tramos)]
+    return [[round(p[0], 4), round(p[1], 4), p[2], p[3]] for p in piezas], [p[4] or "" for p in piezas]
 
 
 def quitar_armonicos(notas):

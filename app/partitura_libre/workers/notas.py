@@ -88,6 +88,29 @@ def en_vivo():
     return 0
 
 
+def afinacion(audio):
+    """Sigue la altura de una voz aislada (pYIN) y devuelve `tono_en(a, b)`: la nota que se canta entre
+    a y b segundos, o None si en ese tramo casi no hay voz con afinación clara."""
+    try:
+        import librosa
+        import numpy as np
+        y, sr = librosa.load(str(audio), sr=16000, mono=True)
+        salto = 256
+        f0, sonora, _prob = librosa.pyin(y, fmin=65, fmax=1050, sr=sr, frame_length=1024, hop_length=salto)
+    except Exception as e:   # sin afinación no se crean notas nuevas: se sigue con las detectadas
+        print("No se pudo seguir la afinación de la voz:", e)
+        return None
+    por_trama = salto / sr
+
+    def tono_en(a, b):
+        tramo = f0[int(a / por_trama):max(int(a / por_trama) + 1, int(b / por_trama))]
+        validas = tramo[~np.isnan(tramo)]
+        if len(validas) < 0.3 * max(len(tramo), 1):
+            return None
+        return int(round(float(librosa.hz_to_midi(np.median(validas)))))
+    return tono_en
+
+
 def importar(ruta):
     """Lee una partitura existente (MusicXML, MXL o MIDI) y la convierte en notas editables:
     (notas, bpm, letra). Las notas ligadas se unen en una sola."""
@@ -103,7 +126,8 @@ def importar(ruta):
             if n.tie is not None and n.tie.type != "start" and p.midi in abiertas:
                 abiertas[p.midi][0][1] = round(fin, 4)       # continuación de una nota ligada
                 continue
-            cantado = next((l.text or "" for l in n.lyrics if l.identifier != NOMBRES_ID), "")   # no la línea Do-Re-Mi
+            cantado = next(((l.text or "") + ("-" if l.syllabic in ("begin", "middle") else "")
+                            for l in n.lyrics if l.identifier != NOMBRES_ID), "")   # no la línea Do-Re-Mi; «be-» si la palabra sigue
             fila = [[round(ini, 4), round(fin, 4), p.midi, 0.7], cantado if k == 0 else ""]
             filas.append(fila)
             abiertas[p.midi] = fila
@@ -151,6 +175,7 @@ def escribir(notas, bpm, carpeta, nombre, titulo, clave="", nombres=False, letra
                 c.activeSite.remove(c)
             (parte.getElementsByClass("Measure").first() or parte).insert(0, elegida())
         libres = {i for i, texto in enumerate(letra) if texto}
+        sigue = False   # la sílaba anterior continúa en esta nota (acababa en guion)
         for n in parte.recurse().notes:
             if n.tie is not None and n.tie.type != "start":
                 continue
@@ -163,7 +188,11 @@ def escribir(notas, bpm, carpeta, nombre, titulo, clave="", nombres=False, letra
                         libres.discard(i)
                         versos.append(letra[i])
                 if versos:
-                    n.addLyric(" ".join(versos))
+                    texto = " ".join(versos)
+                    continua = texto.endswith("-")
+                    n.addLyric(texto.removesuffix("-"))   # el guion entre sílabas lo dibuja el editor de partituras
+                    n.lyrics[-1].syllabic = ("middle" if continua else "end") if sigue else ("begin" if continua else "single")
+                    sigue = continua
             if nombres:  # Do, Re, Mi… bajo cada nota (segunda línea si hay letra)
                 n.addLyric(" ".join(partituras.solfeo(p.midi) for p in n.pitches), lyricNumber=2 if any(letra) else 1,
                            lyricIdentifier=NOMBRES_ID)
@@ -186,8 +215,9 @@ def main():
             emitir("progreso", v=0.0, msg="Cargando el motor Basic Pitch")
             notas, bpm = detectar(o["audio"], o.get("trozo_s", TROZO_S), VOZ if o.get("melodia") else None)
             bpm = o.get("bpm") or bpm
-            if o.get("melodia"):   # voz aislada: una sola línea, como se canta, y una palabra por nota
-                notas, letra = partituras.letra_cantada(partituras.melodia(notas), o.get("palabras") or [])
+            if o.get("melodia"):   # voz aislada: una sola línea, como se canta, y una sílaba por nota
+                emitir("progreso", v=0.9, msg="Siguiendo la afinación de la voz")
+                notas, letra = partituras.letra_cantada(partituras.melodia(notas), o.get("palabras") or [], afinacion(o["audio"]))
             else:
                 letra = partituras.asignar_letra(notas, o.get("palabras") or [])
             if not notas:

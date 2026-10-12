@@ -848,6 +848,8 @@ class PaginaPartituras(QWidget):
         """En el campo de letra, como en MuseScore: espacio o guion pasan a la nota siguiente; Esc vuelve a la partitura."""
         if objeto is self.e_letra and ev.type() == QEvent.KeyPress:
             if ev.key() in (Qt.Key_Space, Qt.Key_Minus) and self.e_letra.cursorPosition() == len(self.e_letra.text()):
+                if ev.key() == Qt.Key_Minus and self.e_letra.text().strip():   # guion: la palabra sigue en la nota siguiente
+                    self.e_letra.setText(self.e_letra.text().strip() + "-")
                 self._letra_editada()
                 i = self.tabla.currentRow()
                 if i + 1 < len(self.notas):
