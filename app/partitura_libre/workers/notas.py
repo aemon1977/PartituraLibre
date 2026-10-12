@@ -26,6 +26,7 @@ TROZO_S = 120
 # Detección afinada para una voz aislada: su registro (Do2–Do6, sin los armónicos de encima), notas
 # más cortas (sílabas rápidas) y umbrales algo más bajos, porque una voz sola es más débil que una mezcla.
 VOZ = {"minimum_frequency": 65, "maximum_frequency": 1050, "minimum_note_length": 70, "onset_threshold": 0.4, "frame_threshold": 0.25}
+COLOR_NOMBRES = "#1D5FA8"
 NOMBRES_ID = "nombres"   # marca en el MusicXML la línea de nombres de nota, para no confundirla con la letra
 MARGEN_S = 2   # contexto que se analiza de más a cada lado de un trozo
 
@@ -166,6 +167,7 @@ def escribir(notas, bpm, carpeta, nombre, titulo, clave="", nombres=False, letra
             if nombres:  # Do, Re, Mi… bajo cada nota (segunda línea si hay letra)
                 n.addLyric(" ".join(partituras.solfeo(p.midi) for p in n.pitches), lyricNumber=2 if any(letra) else 1,
                            lyricIdentifier=NOMBRES_ID)
+                n.lyrics[-1].style.color = COLOR_NOMBRES   # en azul, para distinguirlos de la letra
     partitura.write("musicxml", fp=str(p_xml))
     partituras.guardar_notas(p_notas, bpm, notas, letra)
     for p, f in ((p_notas, f_notas), (p_mid, f_mid), (p_xml, f_xml)):

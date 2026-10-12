@@ -11,6 +11,7 @@ from .. import partituras
 
 ESP = 10            # píxeles entre dos líneas del pentagrama con el zoom al 100 %
 TEXTO_Y = 6.0       # espacios bajo la línea inferior donde empieza el texto (deja sitio a las notas graves)
+NOMBRE = "#1d5fa8"   # color de los nombres de nota (la letra va en negro)
 MESA, PAPEL, TINTA, ELEGIDA, TENUE = "#2f3948", "#fdfcf7", "#1b2433", "#0f9d8f", "#7a8494"
 A4_ANCHO, A4_ALTO = 1000, 1414   # hoja A4 en unidades de dibujo para el PDF
 # Símbolos SMuFL de Bravura
@@ -267,7 +268,7 @@ class Pentagrama(QWidget):
                             g.fillRect(QRectF(x + p["ancho"] - 6 * z, y(9), 5 * z, 5 * e), QColor(15, 157, 143, 90))
                     if self.nombres and k < 2:              # nombres bajo el pentagrama; en acordes, del grave al agudo
                         g.setFont(f_nombre)
-                        g.setPen(color)
+                        g.setPen(color if i == sel else QColor(NOMBRE))   # azul: nunca se confunde con la letra
                         g.drawText(QRectF(x - 20 * z, base + TEXTO_Y * e + (19 * z if hay_letra else 0) + 14 * z * k, ancho + 40 * z, 16 * z),
                                    Qt.AlignCenter, partituras.solfeo(tono))
         if not self.notas and cabecera and pantalla and bases:

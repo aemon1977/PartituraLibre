@@ -25,14 +25,14 @@ Necesitas conexión a Internet solo la primera vez y unos **1,6 GB libres** (má
 ### Debian 13 / Ubuntu 24.04 (64 bits)
 
 ```sh
-tar -xzf PartituraLibre-1.3.0-linux-x64.tar.gz
+tar -xzf PartituraLibre-1.3.1-linux-x64.tar.gz
 cd PartituraLibre
 ./iniciar-linux.sh
 ```
 
 ### Windows 11 (64 bits)
 
-1. Descomprime `PartituraLibre-1.3.0-windows11-x64.zip` en una carpeta tuya (por ejemplo, Documentos).
+1. Descomprime `PartituraLibre-1.3.1-windows11-x64.zip` en una carpeta tuya (por ejemplo, Documentos).
 2. Doble clic en `iniciar-windows.bat`.
 
 ### Qué pasa en el primer arranque
@@ -92,7 +92,7 @@ Editar, con las mismas teclas que MuseScore:
 | **Espacio** | Oír desde la nota elegida |
 | **Esc** | Sale del modo introducir o quita la selección |
 
-La casilla *Nombre de cada nota* escribe bajo cada una lo que es (Do, Re, Mi, Fa♯…), y al pasar el ratón por encima de una nota aparece su ficha completa: nombre con octava, figura, cuándo empieza, cuánto dura y su letra.
+La casilla *Nombre de cada nota* escribe bajo cada una lo que es (Do, Re, Mi, Fa♯…) en azul, para no confundirlo con la letra, que va en negro; y al pasar el ratón por encima de una nota aparece su ficha completa: nombre con octava, figura, cuándo empieza, cuánto dura y su letra.
 
 Con el ratón: clic elige una nota, arrastrarla arriba o abajo cambia su altura y, en modo introducir, un clic en el pentagrama escribe una nota a esa altura. Al introducir una nota en medio, las siguientes se desplazan para hacerle sitio. Todo está también en los botones de la barra de notas, y los valores exactos en el panel *Lista de notas*.
 

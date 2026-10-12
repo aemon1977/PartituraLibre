@@ -85,6 +85,7 @@ class Flujo(Aislada):
         raiz = ET.parse(self.dir / eventos[-1]["musicxml"]).getroot()
         self.assertEqual([(c.findtext("sign"), c.findtext("line")) for c in raiz.iter("clef")], [("F", "4")])
         self.assertEqual([l.findtext("text") for l in raiz.iter("lyric")], ["Do", "Re", "Mi", "Fa", "Sol", "La", "Si", "Do"])
+        self.assertEqual({l.get("color") for l in raiz.iter("lyric")}, {"#1D5FA8"})     # nombres en azul, distinto de la letra
         self.assertEqual(tonos_musicxml(self.dir / eventos[-1]["musicxml"]), ESCALA)   # la clave no cambia las notas
         sin, _ = ejecutar({"cmd": "regenerar", "notas": str(self.dir / eventos[-1]["notas"]), "carpeta": str(self.dir), "nombre": "sin nombres"})
         self.assertEqual(list(ET.parse(self.dir / sin[-1]["musicxml"]).getroot().iter("lyric")), [])
