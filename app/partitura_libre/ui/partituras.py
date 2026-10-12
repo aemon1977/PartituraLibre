@@ -1,6 +1,7 @@
 """Sección Partituras: grabar o importar, detectar notas, revisar/corregir y exportar."""
 import json
 import shutil
+import time
 from pathlib import Path
 
 from PySide6.QtCore import QEvent, Qt, QTimer, Signal
@@ -65,6 +66,9 @@ class PaginaPartituras(QWidget):
         self.tempo.setSpecialValueText("Automático")
         self.tempo.setSuffix(" pulsos/min")
         self.tempo.setToolTip("Tempo con el que se escribe la partitura. «Automático» lo estima del audio.")
+        self.b_pulso = tema.boton("Marcar pulso", self._marcar_pulso,
+                                  ayuda="Pulsa este botón al ritmo de la canción (4 veces o más) y el tempo se fija solo")
+        self._toques = []
         self.con_letra = QCheckBox("Canción: melodía de la voz cantada con su letra")
         self.con_letra.setChecked(config.cargar().get("con_letra", True))
         self.con_letra.toggled.connect(self._guardar_con_letra)
@@ -77,7 +81,7 @@ class PaginaPartituras(QWidget):
         self.e_estado = tema.etiqueta("", "tenue")
         t2, v2 = tema.tarjeta("2 · Convertir en partitura")
         v2.addWidget(self.e_toma)
-        v2.addLayout(tema.fila(tema.etiqueta("Tempo", "tenue", False), self.tempo, None, self.b_oir))
+        v2.addLayout(tema.fila(tema.etiqueta("Tempo", "tenue", False), self.tempo, self.b_pulso, None, self.b_oir))
         v2.addWidget(self.con_letra)
         v2.addLayout(tema.fila(self.b_transcribir, self.b_cancelar, estirar=self.b_transcribir))
         v2.addWidget(self.barra)
@@ -162,6 +166,13 @@ class PaginaPartituras(QWidget):
         self.nombres.setChecked(a["nombres"])
         self.nombres.setToolTip("Escribe bajo cada nota lo que es (Do, Re, Mi, Fa♯…), aquí y en el MusicXML/PDF. "
                                 "Al pasar el ratón sobre una nota se ve además su octava, su figura y su duración.")
+        self.tonalidad = QComboBox()
+        self.tonalidad.addItem("Tonalidad automática", None)
+        for q in range(-6, 7):
+            self.tonalidad.addItem(partituras.nombre_armadura(q) + (f"  ({abs(q)} {'♯' if q > 0 else '♭'})" if q else "  (sin alteraciones)"), q)
+        self.tonalidad.setCurrentIndex(max(0, self.tonalidad.findData(a.get("tonalidad"))) if a.get("tonalidad") is not None else 0)
+        self.tonalidad.setToolTip("Armadura con la que se escribe la partitura. «Automática» la deduce de las notas.")
+        self.tonalidad.currentIndexChanged.connect(self._cambio_de_vista)
         self.clave.currentIndexChanged.connect(self._cambio_de_vista)
         self.nombres.toggled.connect(self._cambio_de_vista)
         self.e_zoom = tema.etiqueta(f"{round(self.vista.zoom * 100)} %", "tenue", False)
@@ -198,7 +209,7 @@ class PaginaPartituras(QWidget):
         self.b_atajos = tema.boton("Atajos de teclado", lambda: tema.dialogo(self, "Atajos de teclado", ATAJOS),
                                    ayuda="N introducir · 3-7 figura · A-G nota · 0 silencio · . puntillo · Ctrl+L letra…")
         # clave, nombres y zoom van abajo, como en la barra de estado de un editor de partituras
-        pie = tema.herramientas(aviso, None, self.b_atajos, "|", self.clave, "|",
+        pie = tema.herramientas(aviso, None, self.b_atajos, "|", self.clave, self.tonalidad, "|",
                                 tema.boton("−", lambda: self._zoom(-10), ayuda="Reducir"), self.e_zoom,
                                 tema.boton("+", lambda: self._zoom(10), ayuda="Ampliar"))
 
@@ -600,20 +611,21 @@ class PaginaPartituras(QWidget):
     def _dibujar(self):
         sel = self.tabla.currentRow()
         titulo = self.proyecto.name if self.proyecto else ""
-        self.vista.poner(self.notas, sel, self.tempo.value() or self.bpm, self.clave.currentData(), self.nombres.isChecked(), self.letra, titulo)
+        self.vista.poner(self.notas, sel, self.tempo.value() or self.bpm, self.clave.currentData(), self.nombres.isChecked(), self.letra,
+                         titulo, self.tonalidad.currentData())
         if sel >= 0:  # la nota elegida queda a la vista en la partitura
             r = self.vista.rect_de(sel)
             self.rollo.ensureVisible(r.center().x(), r.center().y(), 40, r.height() // 2 + 10)
 
     def _cambio_de_vista(self):
         a = config.cargar()
-        a["clave"], a["nombres"] = self.clave.currentData(), self.nombres.isChecked()
+        a["clave"], a["nombres"], a["tonalidad"] = self.clave.currentData(), self.nombres.isChecked(), self.tonalidad.currentData()
         config.guardar(a)
         self._dibujar()
 
     def _notacion(self):
         """Clave y nombres que se escriben en el MusicXML."""
-        return {"clave": self.clave.currentData(), "nombres": self.nombres.isChecked()}
+        return {"clave": self.clave.currentData(), "nombres": self.nombres.isChecked(), "armadura": self.tonalidad.currentData()}
 
     def _celda_editada(self, it):
         if self._cargando:
@@ -670,6 +682,20 @@ class PaginaPartituras(QWidget):
             {"arriba": lambda: self._mover(1), "abajo": lambda: self._mover(-1), "octava+": lambda: self._mover(12),
              "octava-": lambda: self._mover(-12), "borrar": self._borrar, "antes": lambda: self._desplazar(-1),
              "despues": lambda: self._desplazar(1)}[accion]()
+
+    def _marcar_pulso(self):
+        """Tempo a mano: cada pulsación es un pulso; con 4 o más seguidas se fija el tempo."""
+        ahora = time.monotonic()
+        if self._toques and ahora - self._toques[-1] > 2.5:   # pausa larga: se empieza de nuevo
+            self._toques = []
+        self._toques = (self._toques + [ahora])[-12:]
+        if len(self._toques) < 4:
+            return self.b_pulso.setText(f"Marcar pulso ({len(self._toques)}/4)")
+        intervalos = sorted(b - a for a, b in zip(self._toques, self._toques[1:]))
+        bpm = int(round(60 / intervalos[len(intervalos) // 2]))
+        self.tempo.setValue(max(30, min(240, bpm)))
+        self.b_pulso.setText(f"Marcar pulso · {self.tempo.value()}")
+        self._dibujar()
 
     def _figura(self, fig):
         self._fig_nueva = fig                 # también es la figura de la próxima nota que se introduzca

@@ -140,16 +140,22 @@ def estimar_bpm(x, sr):
         import librosa
         import numpy as np
         bpm = float(np.atleast_1d(librosa.beat.beat_track(y=x, sr=sr)[0])[0])
-        return int(round(bpm)) if 40 <= bpm <= 220 else 120
+        if not 30 <= bpm <= 300:
+            return 120
+        while bpm > 160:          # el detector suele dar el doble (o la mitad) del pulso que se escribe
+            bpm /= 2
+        while bpm < 60:
+            bpm *= 2
+        return int(round(bpm))
     except Exception as e:  # sin pulso claro: 120 es el valor neutro de MIDI
         print("No se pudo estimar el tempo:", e)
         return 120
 
 
-def escribir(notas, bpm, carpeta, nombre, titulo, clave="", nombres=False, letra=()):
+def escribir(notas, bpm, carpeta, nombre, titulo, clave="", nombres=False, letra=(), armadura=None):
     """Escribe nombre.notas.json, nombre.mid y nombre.musicxml sin pisar nada."""
     import pretty_midi
-    from music21 import clef, converter, metadata
+    from music21 import clef, converter, key, metadata, pitch
 
     carpeta = Path(carpeta)
     base = rutas.ruta_unica(carpeta, nombre, ".mid", (".musicxml", ".notas.json")).with_suffix("")
@@ -174,6 +180,16 @@ def escribir(notas, bpm, carpeta, nombre, titulo, clave="", nombres=False, letra
             for c in list(parte.recurse().getElementsByClass(clef.Clef)):
                 c.activeSite.remove(c)
             (parte.getElementsByClass("Measure").first() or parte).insert(0, elegida())
+        arm = partituras.tonalidad(notas)[0] if armadura is None else armadura
+        (parte.getElementsByClass("Measure").first() or parte).insert(0, key.KeySignature(arm))
+        en_armadura = partituras.alteraciones(arm)
+        for n in parte.recurse().notes:      # cada nota, deletreada según la tonalidad (Si♭ y no La♯ en Fa mayor)
+            for p in n.pitches:
+                letra_n, alt, octava = partituras.deletrear(p.midi, arm)
+                p.step, p.octave = "CDEFGAB"[letra_n], octava
+                p.accidental = (pitch.Accidental({1: "sharp", -1: "flat", 0: "natural"}[alt])
+                                if alt or en_armadura.get(letra_n) else None)
+        parte.makeAccidentals(inPlace=True, overrideStatus=True)   # alteraciones visibles según armadura y compás
         libres = {i for i, texto in enumerate(letra) if texto}
         sigue = False   # la sílaba anterior continúa en esta nota (acababa en guion)
         for n in parte.recurse().notes:
@@ -194,7 +210,7 @@ def escribir(notas, bpm, carpeta, nombre, titulo, clave="", nombres=False, letra
                     n.lyrics[-1].syllabic = ("middle" if continua else "end") if sigue else ("begin" if continua else "single")
                     sigue = continua
             if nombres:  # Do, Re, Mi… bajo cada nota (segunda línea si hay letra)
-                n.addLyric(" ".join(partituras.solfeo(p.midi) for p in n.pitches), lyricNumber=2 if any(letra) else 1,
+                n.addLyric(" ".join(partituras.solfeo(p.midi, arm) for p in n.pitches), lyricNumber=2 if any(letra) else 1,
                            lyricIdentifier=NOMBRES_ID)
                 n.lyrics[-1].style.color = COLOR_NOMBRES   # en azul, para distinguirlos de la letra
     partitura.write("musicxml", fp=str(p_xml))
@@ -234,7 +250,7 @@ def main():
             d = json.loads(Path(o["notas"]).read_text(encoding="utf-8"))
             notas, bpm, letra = d["notas"], o.get("bpm") or d.get("bpm", 120), d.get("letra") or []
         emitir("fin", **escribir(notas, bpm, o["carpeta"], o["nombre"], o.get("titulo", o["nombre"]),
-                                 o.get("clave", ""), o.get("nombres", False), letra))
+                                 o.get("clave", ""), o.get("nombres", False), letra, o.get("armadura")))
         return 0
     except Exception as e:
         import traceback

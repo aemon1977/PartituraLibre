@@ -176,11 +176,66 @@ def clave_adecuada(notas):
     return "sol" if not tonos or tonos[len(tonos) // 2] >= 57 else "fa"
 
 
-def posicion(midi, clave):
+def posicion(midi, clave, armadura=0):
     """(posición en el pentagrama, lleva sostenido). 0 es la línea inferior, 1 el primer espacio,
-    8 la línea superior; valores negativos o mayores de 8 necesitan líneas adicionales."""
-    grado = (midi // 12 - 1) * 7 + _LETRA[midi % 12]
-    return grado - CLAVES[clave][1], _SOSTENIDO[midi % 12]
+    8 la línea superior; valores negativos o mayores de 8 necesitan líneas adicionales.
+    Con `armadura` (quintas: +n sostenidos, −n bemoles) la nota se deletrea según la tonalidad."""
+    letra, alteracion, octava = deletrear(midi, armadura)
+    return (octava + 1) * 7 + letra - CLAVES[clave][1] - 7, alteracion == 1
+
+
+# -- tonalidad -----------------------------------------------------------------
+_BASE = [0, 2, 4, 5, 7, 9, 11]                 # Do Re Mi Fa Sol La Si
+_LETRAS = ["Do", "Re", "Mi", "Fa", "Sol", "La", "Si"]
+ORDEN_SOSTENIDOS = [3, 0, 4, 1, 5, 2, 6]       # Fa Do Sol Re La Mi Si
+ORDEN_BEMOLES = [6, 2, 5, 1, 4, 0, 3]          # Si Mi La Re Sol Do Fa
+MAYORES = {-6: "Sol♭", -5: "Re♭", -4: "La♭", -3: "Mi♭", -2: "Si♭", -1: "Fa", 0: "Do", 1: "Sol", 2: "Re", 3: "La", 4: "Mi", 5: "Si", 6: "Fa♯"}
+MENORES = {-6: "Mi♭", -5: "Si♭", -4: "Fa", -3: "Do", -2: "Sol", -1: "Re", 0: "La", 1: "Mi", 2: "Si", 3: "Fa♯", 4: "Do♯", 5: "Sol♯", 6: "Re♯"}
+# Perfiles de Krumhansl-Kessler: cuánto «pertenece» cada grado a una tonalidad mayor y a una menor
+_PERFIL_MAYOR = [6.35, 2.23, 3.48, 2.33, 4.38, 4.09, 2.52, 5.19, 2.39, 3.66, 2.29, 2.88]
+_PERFIL_MENOR = [6.33, 2.68, 3.52, 5.38, 2.60, 3.53, 2.54, 4.75, 3.98, 2.69, 3.34, 3.17]
+
+
+def nombre_armadura(armadura):
+    """«Re mayor / Si menor» para una armadura dada a mano."""
+    return f"{MAYORES[armadura]} mayor / {MENORES[armadura]} menor"
+
+
+def alteraciones(armadura):
+    """{letra: +1 o −1} de una armadura (en quintas)."""
+    orden = ORDEN_SOSTENIDOS if armadura > 0 else ORDEN_BEMOLES
+    return {l: (1 if armadura > 0 else -1) for l in orden[:abs(armadura)]}
+
+
+def deletrear(midi, armadura=0):
+    """(letra 0-6 desde Do, alteración −1/0/+1, octava) de una nota según la tonalidad: se prefiere la
+    forma que pide la armadura, luego la natural, y para las notas ajenas a la tonalidad, sostenidos en
+    tonalidades con sostenidos (o Do) y bemoles en las de bemoles."""
+    pc, arm = midi % 12, alteraciones(armadura)
+    opciones = [(l, alt) for l in range(7) for alt in (-1, 0, 1) if (_BASE[l] + alt) % 12 == pc]
+    letra, alt = min(opciones, key=lambda o: (arm.get(o[0], 0) != o[1], o[1] != 0, o[1] != (-1 if armadura < 0 else 1)))
+    return letra, alt, (midi - alt) // 12 - 1
+
+
+def tonalidad(notas):
+    """(armadura en quintas, nombre) más probable para esas notas, pesando cada nota por su duración."""
+    peso = [0.0] * 12
+    for ini, fin, tono, _v in notas:
+        peso[tono % 12] += max(fin - ini, 0.05)
+    if not any(peso):
+        return 0, "Do mayor"
+
+    def correlacion(perfil, tonica):
+        x = [perfil[(i - tonica) % 12] for i in range(12)]
+        mx, mp = sum(x) / 12, sum(peso) / 12
+        num = sum((a - mx) * (b - mp) for a, b in zip(x, peso))
+        den = (sum((a - mx) ** 2 for a in x) * sum((b - mp) ** 2 for b in peso)) ** 0.5
+        return num / den if den else 0
+    mejor = max([(correlacion(_PERFIL_MAYOR, t), t, True) for t in range(12)] + [(correlacion(_PERFIL_MENOR, t), t, False) for t in range(12)])
+    _, tonica, mayor = mejor
+    relativa = tonica if mayor else (tonica + 3) % 12              # la menor comparte armadura con su relativa mayor
+    armadura = min(range(-6, 7), key=lambda q: ((q * 7) % 12 != relativa, abs(q)))
+    return armadura, (MAYORES[armadura] + " mayor") if mayor else (MENORES[armadura] + " menor")
 
 
 def figura_y_puntillo(segundos, bpm):
@@ -259,8 +314,9 @@ def columnas(notas):
     return cols
 
 
-def solfeo(midi):
-    return NOMBRES[midi % 12]
+def solfeo(midi, armadura=0):
+    letra, alt, _ = deletrear(midi, armadura)
+    return _LETRAS[letra] + {1: "♯", -1: "♭", 0: ""}[alt]
 
 
 def descripcion(nota, bpm, letra=""):
@@ -272,8 +328,8 @@ def descripcion(nota, bpm, letra=""):
     return " · ".join(partes + ([f"«{letra}»"] if letra else []))
 
 
-def nombre_nota(midi):
-    return f"{NOMBRES[midi % 12]}{midi // 12 - 1}"
+def nombre_nota(midi, armadura=0):
+    return f"{solfeo(midi, armadura)}{deletrear(midi, armadura)[2]}"
 
 
 LEJOS_S = 1.0   # una palabra a más de esto de cualquier nota no se canta: se queda fuera de la partitura

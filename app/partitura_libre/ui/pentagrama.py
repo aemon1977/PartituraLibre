@@ -4,7 +4,7 @@ letra. Se edita con el ratón y el teclado y se exporta a PDF. Dibujada con la f
 from pathlib import Path
 
 from PySide6.QtCore import QMarginsF, QPointF, QRect, QRectF, Qt, Signal
-from PySide6.QtGui import QColor, QFont, QFontDatabase, QFontMetrics, QPageLayout, QPageSize, QPainter, QPdfWriter, QPen
+from PySide6.QtGui import QColor, QFont, QFontDatabase, QFontMetrics, QPageLayout, QPageSize, QPainter, QPainterPath, QPdfWriter, QPen
 from PySide6.QtWidgets import QToolTip, QWidget
 
 from .. import partituras
@@ -17,6 +17,12 @@ A4_ANCHO, A4_ALTO = 1000, 1414   # hoja A4 en unidades de dibujo para el PDF
 # Símbolos SMuFL de Bravura
 G_CLAVE = {"sol": "", "fa": "", "do3": "", "do4": ""}
 G_CABEZA = {"redonda": "", "blanca": ""}
+G_BEMOL, G_BECUADRO = "\ue260", "\ue261"
+# Armadura: (letra, octava) de cada alteración en clave de Sol, en el orden en que se escriben
+ARMADURA_SOL = {1: [(3, 5), (0, 5), (4, 5), (1, 5), (5, 4), (2, 5), (6, 4)], -1: [(6, 4), (2, 5), (5, 4), (1, 5), (4, 4), (0, 5), (3, 4)]}
+# Posición de la armadura en cada clave respecto a la de Sol (en pasos de pentagrama) y altura máxima permitida
+DESPLAZA_CLAVE = {"sol": (0, 9), "fa": (-2, 9), "do3": (-1, 9), "do4": (1, 8)}
+ANCHO_ALTERACION = 9
 G_NEGRA, G_SOSTENIDO, G_CUATRO, G_PUNTILLO = "", "", "", ""
 G_CORCHETE = {("corchea", True): "", ("corchea", False): "",
               ("semicorchea", True): "", ("semicorchea", False): ""}
@@ -49,6 +55,7 @@ class Pentagrama(QWidget):
     def __init__(self):
         super().__init__()
         self.notas, self.sel, self.bpm, self.clave, self.nombres, self.letra = [], -1, 120, "sol", True, []
+        self.armadura, self.tonalidad = 0, "Do mayor"
         self.titulo, self.zoom, self.insertar = "", 1.0, False
         self.sistemas = []   # cada sistema: lista de piezas {'col': índices de notas (vacío = silencio), 'x', 'barra', 'ancho', 'compas', 'silencio'}
         self._sis_y = []     # y de la línea inferior de cada sistema
@@ -60,10 +67,14 @@ class Pentagrama(QWidget):
         self.setMinimumWidth(560)
 
     # -- contenido ----------------------------------------------------------
-    def poner(self, notas, sel=-1, bpm=120, clave="", nombres=True, letra=(), titulo=""):
-        """`letra` es el texto bajo cada nota (paralela a `notas`)."""
+    def poner(self, notas, sel=-1, bpm=120, clave="", nombres=True, letra=(), titulo="", armadura=None):
+        """`letra` es el texto bajo cada nota (paralela a `notas`). `armadura` en quintas (+ sostenidos,
+        − bemoles); None la detecta de las notas."""
         self.notas, self.sel, self.bpm, self.nombres, self.letra = notas, sel, bpm or 120, nombres, list(letra)
         self.clave, self.titulo = clave or partituras.clave_adecuada(notas), titulo
+        detectada = partituras.tonalidad(notas)
+        self.armadura = detectada[0] if armadura is None else armadura
+        self.tonalidad = detectada[1] if armadura is None else partituras.nombre_armadura(armadura)
         self._componer()
         self.update()
 
@@ -102,18 +113,26 @@ class Pentagrama(QWidget):
             for fig in partituras.silencios(inicio - fin_previo):       # el silencio entre dos notas
                 piezas.append({"col": [], "ancho": 34 * z, "compas": int(hueco // 4), "silencio": fig})
                 hueco += partituras.NEGRAS[fig]
-            piezas.append({"col": col, "ancho": max(46 * z, medir.horizontalAdvance(self._cantado(col)) + 16 * z),
-                           "compas": int(inicio // 4), "silencio": None})
-            fin_previo = max(fin_previo, max(partituras.pulso(self.notas[i][1], self.bpm) for i in col), inicio + 0.25)
+            final = max(max(partituras.pulso(self.notas[i][1], self.bpm) for i in col), inicio + 0.25)
+            ancho = max(46 * z, medir.horizontalAdvance(self._cantado(col)) + 16 * z)
+            tramos = [inicio]                             # una nota que cruza la barra se parte en dos ligadas
+            while (tramos[-1] // 4 + 1) * 4 < final - 0.2:
+                tramos.append((tramos[-1] // 4 + 1) * 4)
+            for k, t in enumerate(tramos):
+                fin_tramo = tramos[k + 1] if k + 1 < len(tramos) else final
+                piezas.append({"col": col, "ancho": ancho if k == 0 else 46 * z, "compas": int(t // 4), "silencio": None,
+                               "negras": fin_tramo - t if len(tramos) > 1 else None, "ligada": k > 0})
+            fin_previo = max(fin_previo, final)
 
         sistemas, actual, corte, previo = [], [], 0, None
-        x = izq + 92 * z                                      # clave y compás de 4/4 en el primer sistema
+        armadura = abs(self.armadura) * ANCHO_ALTERACION * z
+        x = izq + 92 * z + armadura                           # clave, armadura y compás de 4/4 en el primer sistema
         for p in piezas:
             barra = bool(actual) and p["compas"] != previo
             if actual and x + (14 * z if barra else 0) + p["ancho"] > der:
                 resto = actual[corte:] if 0 < corte < len(actual) and not barra else []   # el compás a medias baja entero
                 sistemas.append(actual[:len(actual) - len(resto)])
-                actual, corte, x = [], 0, izq + 58 * z
+                actual, corte, x = [], 0, izq + 58 * z + armadura
                 for r in resto:
                     r["x"], r["barra"] = x, False
                     actual.append(r)
@@ -142,7 +161,7 @@ class Pentagrama(QWidget):
         for piezas, base in zip(self.sistemas, self._sis_y):
             for p in piezas:
                 for i in p["col"]:
-                    pos = max(-10, min(17, partituras.posicion(self.notas[i][2], self.clave)[0]))
+                    pos = max(-10, min(17, partituras.posicion(self.notas[i][2], self.clave, self.armadura)[0]))
                     self._cajas.append((QRectF(p["x"] - 6 * z, base - pos * e / 2 - e, 1.18 * e + 12 * z, 2 * e), i))
 
     def _banda(self, s):
@@ -197,7 +216,10 @@ class Pentagrama(QWidget):
             g.setFont(self._fuente(11, z, serif=True))
             g.drawText(QRectF(izq, papel.top() + 60 * z, der - izq, 18 * z), Qt.AlignRight, "Partitura Libre")
             g.drawText(QRectF(izq, papel.top() + 60 * z, der - izq, 18 * z), Qt.AlignLeft,
-                       f"{partituras.CLAVES[self.clave][0]}   ♩ = {self.bpm}" if self.notas else partituras.CLAVES[self.clave][0])
+                       f"{partituras.CLAVES[self.clave][0]}  ·  {self.tonalidad}  ·  ♩ = {self.bpm}" if self.notas else partituras.CLAVES[self.clave][0])
+        arm = partituras.alteraciones(self.armadura)
+        ancho_arm = abs(self.armadura) * ANCHO_ALTERACION * z
+        ligaduras = {}                                    # id de la columna -> (x, sistema) de su tramo anterior
 
         ancho = 1.18 * e                                  # ancho de una cabeza de nota
         for s, piezas, base in zip(numeros, sistemas, bases):
@@ -215,16 +237,26 @@ class Pentagrama(QWidget):
                 g.drawLine(QPointF(fin, y(0)), QPointF(fin, y(8)))
             g.setFont(musica)
             g.drawText(QPointF(izq + 8 * z, y(partituras.CLAVES[self.clave][2])), G_CLAVE[self.clave])
+            if self.armadura:                              # armadura en cada sistema, como en una partitura
+                signo = 1 if self.armadura > 0 else -1
+                for k, (letra, octava) in enumerate(ARMADURA_SOL[signo][:abs(self.armadura)]):
+                    desplaza, maximo = DESPLAZA_CLAVE[self.clave]
+                    pos = octava * 7 + letra - 30 + desplaza
+                    pos = pos - 7 if pos > maximo else pos + 7 if pos < -1 else pos
+                    g.drawText(QPointF(izq + 40 * z + k * ANCHO_ALTERACION * z, y(pos)), G_SOSTENIDO if signo > 0 else G_BEMOL)
             if s == 0:                                     # compás de 4/4
-                g.drawText(QPointF(izq + 46 * z, y(6)), G_CUATRO)
-                g.drawText(QPointF(izq + 46 * z, y(2)), G_CUATRO)
+                g.drawText(QPointF(izq + 46 * z + ancho_arm, y(6)), G_CUATRO)
+                g.drawText(QPointF(izq + 46 * z + ancho_arm, y(2)), G_CUATRO)
             elif piezas:
                 g.setFont(f_peque)
                 g.setPen(QColor(TENUE))
                 g.drawText(QPointF(izq + 2, y(8) - 6 * z), str(piezas[0]["compas"] + 1))   # n.º de compás
 
+            compas_actual, estado = None, {}
             for p in piezas:
                 x, col = p["x"], p["col"]
+                if p["compas"] != compas_actual:           # las alteraciones valen hasta el final del compás
+                    compas_actual, estado = p["compas"], {}
                 if p["barra"]:
                     g.setPen(linea)
                     g.drawLine(QPointF(x - 14 * z, y(0)), QPointF(x - 14 * z, y(8)))
@@ -234,28 +266,42 @@ class Pentagrama(QWidget):
                     g.setPen(QColor(TINTA))
                     g.drawText(QPointF(x + 4 * z, y(pos)), simbolo)
                     continue
-                cantado = self._cantado(col)
+                cantado = "" if p.get("ligada") else self._cantado(col)   # el tramo ligado no repite la sílaba
                 if cantado:   # la letra, bajo el pentagrama y empezando en su nota; los nombres bajan una línea
                     g.setFont(f_letra)
                     g.setPen(QColor(TINTA))
                     g.drawText(QPointF(x - 2, base + TEXTO_Y * e + 13 * z), cantado)
                 for k, i in enumerate(col):
                     ini, final, tono, _v = self.notas[i]
-                    pos, sostenido = partituras.posicion(tono, self.clave)
+                    pos, _ = partituras.posicion(tono, self.clave, self.armadura)
                     pos = max(-10, min(17, pos))           # fuera de ese margen no cabría en el sistema
-                    fig, puntillo = partituras.figura_y_puntillo(final - ini, self.bpm)
+                    duracion = p["negras"] * 60 / self.bpm if p.get("negras") else final - ini
+                    fig, puntillo = partituras.figura_y_puntillo(duracion, self.bpm)
+                    letra_n, alt, octava = partituras.deletrear(tono, self.armadura)
+                    vigente = estado.get((letra_n, octava), arm.get(letra_n, 0))
+                    estado[(letra_n, octava)] = alt
                     color = QColor(ELEGIDA if i == sel else TINTA)
                     g.setPen(QPen(color, max(1.0, 1.1 * z)))
                     for extra in [q for q in range(-2, pos - 1, -2)] + [q for q in range(10, pos + 1, 2)]:
                         g.drawLine(QPointF(x - 5 * z, y(extra)), QPointF(x + ancho + 5 * z, y(extra)))   # líneas adicionales
                     g.setFont(musica)
                     g.drawText(QPointF(x, y(pos)), G_CABEZA.get(fig, G_NEGRA))
-                    if sostenido:
-                        g.drawText(QPointF(x - 1.15 * e, y(pos)), G_SOSTENIDO)
+                    if alt != vigente and not p.get("ligada"):   # alteración solo si cambia lo que rige en el compás
+                        g.drawText(QPointF(x - 1.15 * e, y(pos)), {1: G_SOSTENIDO, -1: G_BEMOL, 0: G_BECUADRO}[alt])
+                    arriba = pos < 4
+                    if p.get("ligada"):                    # ligadura desde el tramo anterior de la misma nota
+                        x0, s0 = ligaduras.get((id(col), i), (izq + 60 * z + ancho_arm, s))
+                        x0 = x0 if s0 == s else izq + 60 * z + ancho_arm
+                        yl = y(pos) + (0.9 if arriba else -0.9) * e
+                        curva = QPainterPath(QPointF(x0 + ancho + 2 * z, yl))
+                        curva.cubicTo(QPointF(x0 + ancho + 8 * z, yl + (0.9 if arriba else -0.9) * e),
+                                      QPointF(x - 6 * z, yl + (0.9 if arriba else -0.9) * e), QPointF(x - 1 * z, yl))
+                        g.setBrush(Qt.NoBrush)
+                        g.drawPath(curva)
+                    ligaduras[(id(col), i)] = (x, s)
                     if puntillo:   # a la derecha de la cabeza, siempre en un espacio
                         g.drawText(QPointF(x + ancho + 3 * z, y(pos if pos % 2 else pos + 1)), G_PUNTILLO)
                     if fig != "redonda":
-                        arriba = pos < 4
                         xp = x + ancho - 0.6 if arriba else x + 0.6
                         punta = y(pos) + (-3.4 if arriba else 3.4) * e
                         g.drawLine(QPointF(xp, y(pos)), QPointF(xp, punta))
@@ -266,11 +312,11 @@ class Pentagrama(QWidget):
                         g.drawRoundedRect(QRectF(x - 6 * z, y(pos) - 1.1 * e, ancho + 12 * z, 2.2 * e), 3, 3)
                         if pantalla and self.insertar:      # cursor de introducción: ahí irá la próxima nota
                             g.fillRect(QRectF(x + p["ancho"] - 6 * z, y(9), 5 * z, 5 * e), QColor(15, 157, 143, 90))
-                    if self.nombres and k < 2:              # nombres bajo el pentagrama; en acordes, del grave al agudo
+                    if self.nombres and k < 2 and not p.get("ligada"):              # nombres bajo el pentagrama; en acordes, del grave al agudo
                         g.setFont(f_nombre)
                         g.setPen(color if i == sel else QColor(NOMBRE))   # azul: nunca se confunde con la letra
                         g.drawText(QRectF(x - 20 * z, base + TEXTO_Y * e + (19 * z if hay_letra else 0) + 14 * z * k, ancho + 40 * z, 16 * z),
-                                   Qt.AlignCenter, partituras.solfeo(tono))
+                                   Qt.AlignCenter, partituras.solfeo(tono, self.armadura))
         if not self.notas and cabecera and pantalla and bases:
             g.setFont(self._fuente(13, z))
             g.setPen(QColor(TENUE))

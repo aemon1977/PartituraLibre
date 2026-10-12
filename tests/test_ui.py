@@ -72,6 +72,22 @@ class Interfaz(Aislada):
         p.clave.setCurrentIndex(p.clave.findData("do3"))
         self.assertEqual(p.vista.clave, "do3")
         p.vista.grab()                                                  # se dibuja sin errores
+        self.assertEqual(p.vista.tonalidad, "Do mayor")                 # la escala de Do: sin armadura
+        p.tonalidad.setCurrentIndex(p.tonalidad.findData(-1))          # tonalidad elegida a mano: Fa mayor
+        self.assertEqual((p.vista.armadura, p._notacion()["armadura"]), (-1, -1))
+        p.tonalidad.setCurrentIndex(0)
+        import time as _t                                               # marcar el pulso a mano: 4 toques cada 0,5 s = 120
+        reloj = [100.0]
+        original = _t.monotonic
+        try:
+            _t.monotonic = lambda: reloj[0]
+            for _ in range(4):
+                p._marcar_pulso()
+                reloj[0] += 0.5
+        finally:
+            _t.monotonic = original
+        self.assertEqual(p.tempo.value(), 120)
+        p.tempo.setValue(0)
         from PySide6.QtCore import QPoint                               # al pasar el ratón por una nota se dice qué es
         from PySide6.QtTest import QTest
         from PySide6.QtWidgets import QToolTip

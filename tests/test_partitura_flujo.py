@@ -176,6 +176,51 @@ class Silabas(unittest.TestCase):
             self.assertEqual(partituras.leer_letra(Path(d) / ev2[-1]["notas"]), ["be-", "be-", "ré", "sí"])
 
 
+class Tonalidad(unittest.TestCase):
+    def test_detecta_la_tonalidad_de_escalas_conocidas(self):
+        escala = lambda tonica, pasos: [[i * 0.5, i * 0.5 + 0.5, tonica + p, .7] for i, p in enumerate(pasos)] + [[4.0, 6.0, tonica, .7]]
+        mayor, menor = [0, 2, 4, 5, 7, 9, 11, 12], [0, 2, 3, 5, 7, 8, 10, 12]
+        self.assertEqual(partituras.tonalidad(escala(60, mayor)), (0, "Do mayor"))
+        self.assertEqual(partituras.tonalidad(escala(62, mayor)), (2, "Re mayor"))
+        self.assertEqual(partituras.tonalidad(escala(65, mayor)), (-1, "Fa mayor"))
+        self.assertEqual(partituras.tonalidad(escala(70, mayor)), (-2, "Si♭ mayor"))
+        self.assertEqual(partituras.tonalidad(escala(57, menor)), (0, "La menor"))
+        self.assertEqual(partituras.tonalidad(escala(62, menor)), (-1, "Re menor"))
+        self.assertEqual(partituras.tonalidad([]), (0, "Do mayor"))
+
+    def test_deletreo_segun_la_armadura(self):
+        self.assertEqual(partituras.solfeo(70, 0), "La♯")        # sin armadura, sostenidos (como hasta ahora)
+        self.assertEqual(partituras.solfeo(70, -1), "Si♭")       # en Fa mayor, Si bemol
+        self.assertEqual(partituras.solfeo(66, 2), "Fa♯")
+        self.assertEqual(partituras.solfeo(68, -3), "La♭")       # en Mi♭ mayor
+        self.assertEqual(partituras.solfeo(61, -2), "Re♭")       # nota ajena en tonalidad de bemoles: bemol
+        self.assertEqual(partituras.nombre_nota(71, -6), "Do♭5")  # Do bemol: la octava es la de Do
+        self.assertEqual(partituras.alteraciones(3), {3: 1, 0: 1, 4: 1})
+        self.assertEqual(partituras.alteraciones(-2), {6: -1, 2: -1})
+        self.assertEqual(partituras.posicion(70, "sol", -1), (4, False))   # Si♭4 en la línea central, sin sostenido
+        self.assertEqual(partituras.posicion(70, "sol", 0), (3, True))     # La♯4 en el segundo espacio
+
+
+class ArmaduraEnLaHoja(unittest.TestCase):
+    def test_posiciones_estandar_de_la_armadura_en_cada_clave(self):
+        from partitura_libre.ui.pentagrama import ARMADURA_SOL, DESPLAZA_CLAVE
+
+        def posiciones(clave, signo):
+            desplaza, maximo = DESPLAZA_CLAVE[clave]
+            salida = []
+            for letra, octava in ARMADURA_SOL[signo]:
+                pos = octava * 7 + letra - 30 + desplaza
+                salida.append(pos - 7 if pos > maximo else pos + 7 if pos < -1 else pos)
+            return salida
+        # 0 = línea inferior, 8 = superior. Posiciones de los manuales de solfeo:
+        self.assertEqual(posiciones("sol", 1), [8, 5, 9, 6, 3, 7, 4])
+        self.assertEqual(posiciones("sol", -1), [4, 7, 3, 6, 2, 5, 1])
+        self.assertEqual(posiciones("fa", 1), [6, 3, 7, 4, 1, 5, 2])
+        self.assertEqual(posiciones("fa", -1), [2, 5, 1, 4, 0, 3, -1])
+        self.assertEqual(posiciones("do3", 1), [7, 4, 8, 5, 2, 6, 3])
+        self.assertEqual(posiciones("do4", 1), [2, 6, 3, 7, 4, 8, 5])
+
+
 class Notacion(unittest.TestCase):
     def test_posicion_de_las_notas_en_cada_clave(self):
         # Hechos de solfeo: la clave da nombre a su línea (0 = línea inferior, 2 = segunda, 8 = superior).
