@@ -23,11 +23,14 @@ from .. import partituras, rutas
 from . import emitir, reemplazar
 
 TROZO_S = 120
+# Detección afinada para una voz aislada: su registro (Do2–Do6, sin los armónicos de encima), notas
+# más cortas (sílabas rápidas) y umbrales algo más bajos, porque una voz sola es más débil que una mezcla.
+VOZ = {"minimum_frequency": 65, "maximum_frequency": 1050, "minimum_note_length": 70, "onset_threshold": 0.4, "frame_threshold": 0.25}
 NOMBRES_ID = "nombres"   # marca en el MusicXML la línea de nombres de nota, para no confundirla con la letra
 MARGEN_S = 2   # contexto que se analiza de más a cada lado de un trozo
 
 
-def detectar(audio, trozo_s=TROZO_S):
+def detectar(audio, trozo_s=TROZO_S, ajustes=None):
     import numpy as np
     import soundfile as sf
     from basic_pitch import FilenameSuffix, build_icassp_2022_model_path
@@ -53,7 +56,7 @@ def detectar(audio, trozo_s=TROZO_S):
                 a0 = c0 - len(antes) / sr
                 c1 = c0 + len(nucleo) / sr if len(despues) else float("inf")
                 partituras.integrar(notas, ultima, [[round(a0 + float(i), 4), round(a0 + float(e), 4), int(t), round(float(v), 3)]
-                                                    for i, e, t, v, _ in predict(str(trozo), modelo)[2]], a0, c0, c1)
+                                                    for i, e, t, v, _ in predict(str(trozo), modelo, **(ajustes or {}))[2]], a0, c0, c1)
                 hasta = c0 + len(nucleo) / sr
                 emitir("progreso", v=min(0.9, 0.9 * hasta * sr / total), msg=f"Analizado hasta {int(hasta // 60)}:{int(hasta % 60):02d}")
                 antes, c0 = nucleo[-margen:], c0 + len(nucleo) / sr
@@ -179,13 +182,16 @@ def main():
             return en_vivo()
         if o["cmd"] == "transcribir":
             emitir("progreso", v=0.0, msg="Cargando el motor Basic Pitch")
-            notas, bpm = detectar(o["audio"], o.get("trozo_s", TROZO_S))
+            notas, bpm = detectar(o["audio"], o.get("trozo_s", TROZO_S), VOZ if o.get("melodia") else None)
             bpm = o.get("bpm") or bpm
+            if o.get("melodia"):   # voz aislada: una sola línea, como se canta, y una palabra por nota
+                notas, letra = partituras.letra_cantada(partituras.melodia(notas), o.get("palabras") or [])
+            else:
+                letra = partituras.asignar_letra(notas, o.get("palabras") or [])
             if not notas:
                 emitir("error", msg="No se detectó ninguna nota. Comprueba que el audio tiene una melodía audible; "
                                     "la grabación original se conserva.")
                 return 1
-            letra = partituras.asignar_letra(notas, o.get("palabras") or [])
         elif o["cmd"] == "importar":
             emitir("progreso", v=0.2, msg="Leyendo la partitura")
             notas, bpm, letra = importar(o["partitura"])

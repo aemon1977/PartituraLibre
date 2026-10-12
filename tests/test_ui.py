@@ -282,6 +282,9 @@ class Interfaz(Aislada):
         from partitura_libre.ui.captura import PanelCaptura
         panel = self.v.partituras.captura
         PanelCaptura._avisado_flojo = False
+        original = audio.suena_algo                           # que no dependa de si en el equipo suena algo
+        audio.suena_algo = lambda: False
+        self.addCleanup(setattr, audio, "suena_algo", original)
 
         class Estado:
             input_overflow = False

@@ -5,6 +5,7 @@ Recibe órdenes JSON por la entrada estándar, una por línea:
     {"id": 1, "audio": "...", "idioma": "es" | "", "cantada": false, "desfase": 0.0, "borrar": false, "palabras": false}
 `palabras` añade a cada frase el tiempo de cada palabra (para poner la letra bajo las notas).
 `separar` aísla antes la voz de los instrumentos (canciones); necesita el modelo de separación descargado.
+`guardar_voz` (ruta) conserva ahí esa voz aislada, para sacar de ella la melodía cantada.
 `borrar` elimina el audio al terminar (segmentos temporales del dictado en vivo).
 """
 import json
@@ -29,7 +30,9 @@ def main():
                 emitir("progreso", id=o["id"], v=0.0, msg="Separando la voz de la música…")
                 rutas.TEMP.mkdir(parents=True, exist_ok=True)
                 temporal = rutas.TEMP / f"voz-separada-{os.getpid()}.wav"
-                audio = str(separacion.voz_a_wav(audio, temporal, lambda f: emitir(
+                destino = Path(o["guardar_voz"]) if o.get("guardar_voz") else temporal   # la voz aislada se puede conservar
+                temporal = None if o.get("guardar_voz") else temporal
+                audio = str(separacion.voz_a_wav(audio, destino, lambda f: emitir(
                     "progreso", id=o["id"], v=round(f, 3), msg=f"Separando la voz de la música… {f * 100:.0f} %")))
             # Voz cantada: sin filtro de silencios (la música lo confunde), sin arrastrar el texto
             # anterior (para que no «rellene» versos) y sin descartar de antemano los tramos que el

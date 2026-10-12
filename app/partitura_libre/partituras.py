@@ -35,6 +35,73 @@ def integrar(hechas, ultima, nuevas, a0, c0, c1):
     return hechas
 
 
+CORTE_S = 0.09   # una nota cantada más corta que esto es un resto de la detección, no una nota
+LEGATO_S = 0.2   # hueco entre dos notas cantadas por debajo del cual se unen (no se escribe silencio)
+
+
+def melodia(notas):
+    """Reduce lo detectado en una voz aislada a UNA línea melódica, como se canta: sin notas a la vez.
+    - Cuando dos notas se pisan, gana la más intensa (la otra suele ser un armónico o un eco).
+    - Si la que gana empieza después, la anterior se acorta hasta ese punto en vez de borrarse.
+    - Los trozos de la misma nota separados por un respiro mínimo (vibrato, consonantes) se unen.
+    - Se descartan los restos más cortos que CORTE_S, y los huecos menores que LEGATO_S se cierran."""
+    linea = []
+    for n in sorted((list(n) for n in notas), key=lambda n: (n[0], -n[3])):
+        if linea and n[0] < linea[-1][1] - 1e-6:                  # se pisa con la anterior
+            p = linea[-1]
+            if n[3] <= p[3]:                                       # la anterior es más fuerte: esta sobra
+                continue
+            if n[0] - p[0] >= CORTE_S:                             # la anterior se queda con su principio
+                p[1] = n[0]
+            else:
+                linea.pop()
+        if linea and linea[-1][2] == n[2] and n[0] - linea[-1][1] <= UNION_S + 0.04:
+            linea[-1][1], linea[-1][3] = max(linea[-1][1], n[1]), max(linea[-1][3], n[3])
+            continue
+        linea.append(n)
+    linea = [n for n in linea if n[1] - n[0] >= CORTE_S]
+    for a, b in zip(linea, linea[1:]):   # un respiro corto al cantar no es un silencio escrito: legato
+        if 0 < b[0] - a[1] <= LEGATO_S:
+            a[1] = b[0]
+    return linea
+
+
+SILABA_S = 0.25  # una nota solo se divide si cada trozo dura al menos esto
+SALTO_S = 0.7   # una palabra que no cabe en su nota puede pasar a la siguiente libre si empieza a menos de esto
+
+
+def letra_cantada(notas, palabras):
+    """Letra de una canción sobre su melodía: (notas, letra) con UNA palabra por nota.
+    El reconocedor da tiempos aproximados con el canto, así que varias palabras suelen caer en la misma
+    nota: cada una ocupa la nota que suena cuando se canta. Si ya está cogida y es larga, se divide (sílabas
+    seguidas a la misma altura); si es corta, la palabra pasa a la siguiente nota libre cercana."""
+    notas = sorted(list(n) for n in notas)
+    if not notas:
+        return [], []
+    grupos = [[] for _ in notas]                    # palabras de cada nota, en orden
+    for ini, fin, texto in sorted(palabras):
+        if not texto.strip():
+            continue
+        t = max(ini, fin - 0.5)                     # con el canto, el inicio que da el reconocedor suele adelantarse
+        dentro = [i for i, n in enumerate(notas) if n[0] - UNION_S <= t < n[1] - 0.02]
+        i = dentro[-1] if dentro else min(range(len(notas)), key=lambda i: min(abs(t - notas[i][0]), abs(t - notas[i][1])))
+        if not dentro and min(abs(t - notas[i][0]), abs(t - notas[i][1])) > LEJOS_S:
+            continue                                # lejos de toda nota: hablado, no cantado
+        j = i
+        cabe = (notas[i][1] - notas[i][0]) / (len(grupos[i]) + 1) >= SILABA_S   # nota larga: se puede dividir
+        while grupos[j] and not cabe and j + 1 < len(notas) and notas[j + 1][0] - t <= SALTO_S:
+            j += 1                                  # nota corta y ya cogida: a la siguiente libre
+        grupos[j if not grupos[j] else i].append(texto.strip())
+    salida, letra = [], []
+    for (ini, fin, tono, v), g in zip(notas, grupos):
+        k = max(1, len(g))
+        paso = (fin - ini) / k
+        for n in range(k):
+            salida.append([round(ini + n * paso, 4), round(ini + (n + 1) * paso, 4), tono, v])
+            letra.append(g[n] if n < len(g) else "")
+    return salida, letra
+
+
 def quitar_armonicos(notas):
     """Descarta notas «fantasma»: mucho más débiles que otra simultánea de la que son un armónico.
     Es conservador (exige casi todo el solape y menos de la mitad de intensidad)."""

@@ -25,14 +25,14 @@ Necesitas conexión a Internet solo la primera vez y unos **1,6 GB libres** (má
 ### Debian 13 / Ubuntu 24.04 (64 bits)
 
 ```sh
-tar -xzf PartituraLibre-1.2.2-linux-x64.tar.gz
+tar -xzf PartituraLibre-1.3.0-linux-x64.tar.gz
 cd PartituraLibre
 ./iniciar-linux.sh
 ```
 
 ### Windows 11 (64 bits)
 
-1. Descomprime `PartituraLibre-1.2.2-windows11-x64.zip` en una carpeta tuya (por ejemplo, Documentos).
+1. Descomprime `PartituraLibre-1.3.0-windows11-x64.zip` en una carpeta tuya (por ejemplo, Documentos).
 2. Doble clic en `iniciar-windows.bat`.
 
 ### Qué pasa en el primer arranque
@@ -70,7 +70,7 @@ La sección está organizada como un editor de partituras:
 
 Tres maneras de empezar:
 
-- **Desde un audio.** Elige la entrada de audio, *Probar nivel* y *Grabar* (con *Ver las notas mientras grabo* la partitura se dibuja en vivo como borrador), o importa un WAV, MP3, FLAC u OGG. Después, *Detectar notas y crear partitura*. Con *Añadir la letra bajo las notas* (activado por defecto) se reconoce además la voz y cada palabra va bajo su nota; hace falta un modelo de voz descargado. A una partitura ya creada se le pone la letra con el botón *Letra*, sin volver a detectar las notas.
+- **Desde un audio.** Elige la entrada de audio, *Probar nivel* y *Grabar* (con *Ver las notas mientras grabo* la partitura se dibuja en vivo como borrador), o importa un WAV, MP3, FLAC u OGG. Después, *Detectar notas y crear partitura*. Con *Canción: melodía de la voz cantada con su letra* (activado por defecto), en un solo paso se aísla la voz de los instrumentos, se escribe **la melodía que se canta** (una sola línea, en el registro de la voz) y se coloca **una palabra de la letra bajo cada nota**. La letra se reconoce con el modelo más preciso que tengas (`large-v3` si está). Hace falta un modelo de voz y el separador (64 MB; la app lo ofrece la primera vez). Si en el audio no se oye letra cantada, las notas salen de todo el audio, como en una pieza instrumental. La voz aislada queda guardada en el proyecto (`voz aislada.wav`). A una partitura ya creada se le pone la letra con el botón *Letra*, sin volver a detectar las notas.
 - **Desde una partitura existente.** *Abrir…* convierte un MusicXML, MXL o MIDI en una partitura editable; el archivo original se guarda en el proyecto.
 - **En blanco.** *Nueva* crea una hoja vacía con el modo *Introducir* activado.
 

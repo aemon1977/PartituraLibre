@@ -65,7 +65,7 @@ class PaginaPartituras(QWidget):
         self.tempo.setSpecialValueText("Automático")
         self.tempo.setSuffix(" pulsos/min")
         self.tempo.setToolTip("Tempo con el que se escribe la partitura. «Automático» lo estima del audio.")
-        self.con_letra = QCheckBox("Añadir la letra bajo las notas (voz a texto)")
+        self.con_letra = QCheckBox("Canción: melodía de la voz cantada con su letra")
         self.con_letra.setChecked(config.cargar().get("con_letra", True))
         self.con_letra.toggled.connect(self._guardar_con_letra)
         self.b_transcribir = tema.boton("Detectar notas y crear partitura", self.transcribir, "primario")
@@ -249,7 +249,9 @@ class PaginaPartituras(QWidget):
         modelo = config.cargar()["modelo"]
         self.con_letra.setEnabled(not analizando and letras.instalado(modelo))
         self.con_letra.setToolTip(
-            f"Reconoce la voz con el modelo «{modelo}» y el idioma elegidos en Letras (modo voz cantada) y escribe cada palabra bajo su nota."
+            "Para canciones: aísla la voz de los instrumentos, escribe la melodía que se canta (una sola línea) y pone "
+            f"cada palabra de la letra bajo su nota. Reconoce la letra con el modelo «{letras.para_canto(modelo)}». "
+            "Desmárcalo para piezas solo instrumentales: entonces las notas salen de todo el audio."
             if letras.instalado(modelo) else f"Primero descarga el modelo de voz «{modelo}» en la sección Letras.")
         fila = self.tabla.currentRow()
         elegida = hay and 0 <= fila < len(self.notas)
@@ -400,10 +402,24 @@ class PaginaPartituras(QWidget):
         orden = {"cmd": "transcribir", "audio": str(self._audio()), "carpeta": str(self.proyecto),
                  "nombre": self.proyecto.name, "bpm": self.tempo.value() or None, **self._notacion()}
         if self.con_letra.isChecked() and self.con_letra.isEnabled():
+            if not separacion.instalado():   # sin separador, las notas saldrían de toda la mezcla y no de la voz
+                return tema.descarga_con_dialogo(
+                    self, "Hace falta el separador de voz",
+                    "Para escribir la melodía que se CANTA (y no la de los instrumentos) primero hay que aislar la voz.\n\n"
+                    f"• Descarga: {separacion.MB} MB, una sola vez, a models/separacion\n• {separacion.CREDITO}\n\n"
+                    "Si es una pieza solo instrumental, cancela y desmarca «Canción»: las notas saldrán de todo el audio.",
+                    separacion.descargar, lambda ok: self.transcribir() if ok else None)
+            voz = rutas.ruta_unica(self.proyecto, "voz aislada", ".wav")
+
             def seguir(palabras, aviso):
                 orden["palabras"], self._sin_letra = palabras, aviso
+                if palabras and voz.is_file():   # canción: la melodía se saca de la voz aislada, no de la mezcla
+                    orden.update(audio=str(voz), melodia=True)
+                    return self._lanzar(orden, "Paso 2 de 2 · Escribiendo la melodía de la voz…")
+                voz.unlink(missing_ok=True)      # sin nada cantado no es una canción: notas de todo el audio
+                self._sin_letra = "No se oye letra cantada: las notas salen de todo el audio, como en una pieza instrumental."
                 self._lanzar(orden, "Paso 2 de 2 · Detectando las notas…")
-            return self._reconocer_letra(seguir, "Paso 1 de 2 · ")
+            return self._reconocer_letra(seguir, "Paso 1 de 2 · ", guardar_voz=voz)
         self._lanzar(orden, "Preparando el análisis…")
 
     def poner_letra(self):
@@ -423,10 +439,11 @@ class PaginaPartituras(QWidget):
             self._botones()
         self._reconocer_letra(colocar, "")
 
-    def _reconocer_letra(self, al_acabar, paso):
+    def _reconocer_letra(self, al_acabar, paso, guardar_voz=None):
         """Voz a texto con el tiempo de cada palabra, para colocar cada una bajo su nota. Al terminar llama a
         `al_acabar(palabras, aviso)`; el texto completo queda guardado en el proyecto."""
         a, carpeta, frases, fallo = config.cargar(), self.proyecto, [], []
+        modelo = letras.para_canto(a["modelo"])
         self.barra.setValue(0)
         self.e_estado.setText(paso + "Reconociendo la letra (voz a texto)…")
         tema.reclasificar(self.e_estado, "tenue")
@@ -450,7 +467,7 @@ class PaginaPartituras(QWidget):
                     segs = [{k: f[k] for k in ("inicio", "fin", "texto", "dudoso")} for f in frases]
                     f_json = rutas.ruta_unica(carpeta, carpeta.name, ".letra.json", (".txt",))
                     f_txt = f_json.with_name(f_json.name.replace(".letra.json", ".txt"))
-                    config.escribir_json(f_json, {"idioma": a["idioma"], "modelo": a["modelo"], "cantada": True, "segmentos": segs})
+                    config.escribir_json(f_json, {"idioma": a["idioma"], "modelo": modelo, "cantada": True, "segmentos": segs})
                     f_txt.write_text(exportar.txt(segs), encoding="utf-8")
                     proyectos.anotar_resultado(carpeta, "letra", segmentos=f_json.name, texto=f_txt.name)
                 self._botones()
@@ -467,10 +484,11 @@ class PaginaPartituras(QWidget):
             tema.reclasificar(self.e_estado, "tenue" if cancelada else "error")
             self._botones()
 
-        t = tareas.Tarea("partitura_libre.workers.voz", [str(letras.carpeta_modelo(a["modelo"]))], "app",
+        t = tareas.Tarea("partitura_libre.workers.voz", [str(letras.carpeta_modelo(modelo))], "app",
                          lambda ev: tema.en_ui(lambda: evento(ev)), lambda c, cancelada: tema.en_ui(lambda: cerrado(c, cancelada)))
         t.enviar(id=1, audio=str(self._audio()), idioma=a["idioma"], cantada=True, palabras=True,
-                 separar=a.get("separar", True) and separacion.instalado())
+                 separar=separacion.instalado() and (guardar_voz is not None or a.get("separar", True)),
+                 **({"guardar_voz": str(guardar_voz)} if guardar_voz else {}))
         self.tarea = t
         self._botones()
 

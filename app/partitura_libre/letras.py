@@ -31,6 +31,12 @@ def instalado(nombre):
     return (carpeta_modelo(nombre) / ".completo").is_file()
 
 
+def para_canto(elegido):
+    """Modelo con el que reconocer la letra de una canción: el más preciso que haya descargado
+    (con canto, large-v3 acierta claramente más), o el elegido si no hay uno mejor."""
+    return next((m for m in ("large-v3", "medium") if instalado(m)), elegido)
+
+
 def borrar_modelo(nombre):
     shutil.rmtree(carpeta_modelo(nombre), ignore_errors=True)
 

@@ -1,12 +1,12 @@
 # Informe de pruebas
 
-Fecha: 8 de octubre de 2026 · Versión 1.2.2
+Fecha: 8 de octubre de 2026 · Versión 1.3.0
 Equipo de pruebas: Debian 13 (trixie) x86_64 real, sesión Wayland con PipeWire, 24 hilos, 31 GB de RAM.
 **No se ha dispuesto de un Windows 11 ni de un Ubuntu 24.04.** Lo que no se pudo ejecutar se indica como tal.
 
 Cada prueba se clasifica como **superada**, **fallida** o **no ejecutable aquí**.
 
-## 1. Pruebas automatizadas — superadas (97 de 97, ninguna omitida)
+## 1. Pruebas automatizadas — superadas (102 de 102, ninguna omitida)
 
 Se ejecutan con `./herramientas/probar.sh`, siempre con el Python del paquete. Usan los motores reales, no simulacros.
 
@@ -117,6 +117,21 @@ Con la última toma de letra (pico del 13 %, señal apenas 3 dB sobre el ruido d
 ### «Sonido del equipo» elegía la salida equivocada (caso real) — corregido
 
 La lista ofrecía una entrada por cada salida de audio, y la del micrófono inalámbrico (que también tiene salida de auriculares) se confundía con el propio micrófono: al elegirla el nivel era 0 %. Ahora hay una única entrada que, al empezar, localiza la salida por la que está sonando algo (o la predeterminada si no suena nada), avisa antes de grabar si nada se está reproduciendo y da mensajes propios en vez de «acerca el micrófono». Verificado que se conecta a la salida correcta; **no ejecutable aquí** con música real, porque no sonaba nada durante la prueba.
+
+### Canción: melodía cantada con su letra a la vez (1.3) — superada con una canción real
+
+Captura del usuario de una canción con instrumentos (11 s, «¿Cuántas veces dijiste de ese agua no beberé…»), en la app, un solo clic:
+
+| | Antes (notas de la mezcla, letra aparte) | 1.3 |
+|---|---|---|
+| Letra | — | las 4 frases exactas |
+| Palabras bajo una nota | 14 de 17, varias amontonadas («no beberé» en una nota) | 17 de 17, una por nota |
+| Notas simultáneas | según la mezcla | ninguna: una sola línea |
+| Tiempo total | — | 17 s (separar, letra con `large-v3` y notas) |
+
+Pruebas nuevas: reducción a una línea, una palabra por nota (divide notas largas, pasa a la siguiente en las cortas), palabra en el borde entre dos notas, el modo canción por el motor real, y vuelta al camino normal cuando no hay letra. Dos fallos encontrados y corregidos al probar con la canción real: un `else` mal colocado que deshacía la colocación nueva, y que una pieza instrumental pasaba por la separación de voz.
+
+- **No ejecutable aquí:** comprobar nota a nota que la melodía escrita es la que se canta (no hay partitura de referencia de esa canción). Con voces muy adornadas, coros o dos voces a la vez, la línea saldrá simplificada.
 
 ### Actualización automática desde GitHub — superada en Linux, de punta a punta
 
