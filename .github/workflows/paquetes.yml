@@ -108,18 +108,26 @@ jobs:
           $ini = "$d\app\partitura_libre\__init__.py"
           (Get-Content $ini) -replace '__version__ = ".*"', '__version__ = "0.0.1"' | Set-Content $ini -Encoding utf8
           "versión vieja" | Out-File "$d\app\solo-en-la-vieja.txt"
+          $exe_nuevo = (Get-Item "$d\PartituraLibre.exe").Length
+          [IO.File]::AppendAllText("$d\PartituraLibre.exe", "lanzador viejo")   # un .exe «distinto» que sigue funcionando
           $py = (Get-ChildItem "$d\runtime\python" -Filter python.exe -Recurse -Depth 1 | Select-Object -First 1).FullName
           $env:PYTHONPATH = "$d\app"
           & $py -s -c "from partitura_libre import actualizar as a; i = a.consultar(); print(i['version'], i['url']); assert i['nueva']; a.preparar(i); print('preparada', a.pendiente())"
           if ($LASTEXITCODE -ne 0) { throw "No detectó o no descargó la versión nueva" }
           Remove-Item Env:PYTHONPATH
+          $env:QT_QPA_PLATFORM = "offscreen"
+          Start-Process -FilePath "$d\PartituraLibre.exe"          # como con doble clic: el .exe abre Python y se cierra
+          Start-Sleep -Seconds 45
+          Get-Process pythonw -ErrorAction SilentlyContinue | Stop-Process -Force
+          Start-Sleep -Seconds 3
+          if ((Get-Item "$d\PartituraLibre.exe").Length -ne $exe_nuevo) { throw "No se sustituyó PartituraLibre.exe" }
           Start-Process -FilePath "$d\PartituraLibre.exe" -ArgumentList "--diagnostico" -Wait -NoNewWindow -RedirectStandardOutput "$env:RUNNER_TEMP\act.txt"
           Get-Content "$env:RUNNER_TEMP\act.txt" -Encoding utf8
           if (-not (Select-String $ini -Pattern "__version__ = `"$v`"")) { throw "No se actualizó a $v" }
           if (Test-Path "$d\app\solo-en-la-vieja.txt") { throw "Quedó la versión vieja" }
           if (-not (Test-Path "$d\app.anterior\solo-en-la-vieja.txt")) { throw "No se guardó la versión anterior" }
           if (-not (Select-String "$env:RUNNER_TEMP\act.txt" -Pattern "Paquetes «app»: se importan" -Encoding utf8)) { throw "Tras actualizar no arranca" }
-          "Actualización de 0.0.1 a $v correcta"
+          "Actualización de 0.0.1 a $v correcta (programa y PartituraLibre.exe)"
 
   linux:
     runs-on: ubuntu-22.04   # glibc antigua: lo compilado aquí funciona en Debian 13, Ubuntu 22.04/24.04 y posteriores
