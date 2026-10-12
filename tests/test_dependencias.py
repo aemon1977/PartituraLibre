@@ -51,7 +51,7 @@ class MismoInterpreteYDependencias(unittest.TestCase):
         for modulo in ("partitura_libre", "partitura_libre.lanzar"):
             r = subprocess.run([shutil.which("python3"), "-m", modulo], env=entorno, capture_output=True, text=True, timeout=60)
             self.assertEqual(r.returncode, 2, r.stdout + r.stderr)
-            self.assertIn("iniciar-", r.stdout)
+            self.assertIn(rutas.LANZADOR.lstrip("./"), r.stdout)
 
     def test_el_diagnostico_no_filtra_rutas_personales(self):
         informe = diagnostico.informe(diagnostico.comprobar(probar_micro=False))
