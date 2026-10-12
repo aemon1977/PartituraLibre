@@ -208,6 +208,31 @@ def reproducir(notas, sr=22050):
         raise ErrorAudio(f"No se pudo reproducir por la salida de audio predeterminada. Detalle: {e}") from e
 
 
+def cargar_audio(ruta, desde=0.0, sr=44100):
+    """Audio de un archivo (cualquier formato que entienda FFmpeg) a partir de `desde` segundos, mono."""
+    import numpy as np
+    try:
+        import soundfile as sf
+        with sf.SoundFile(str(ruta)) as f:
+            f.seek(min(int(desde * f.samplerate), f.frames))
+            x = f.read(dtype="float32", always_2d=True).mean(axis=1)
+            return x, f.samplerate
+    except Exception:   # MP3, M4A, vídeo…: se decodifica con FFmpeg (PyAV)
+        from faster_whisper.audio import decode_audio
+        x = decode_audio(str(ruta), sampling_rate=sr)
+        return np.ascontiguousarray(x[int(desde * sr):], dtype="float32"), sr
+
+
+def reproducir_archivo(ruta, desde=0.0):
+    """Hace sonar un archivo de audio desde `desde` segundos por la salida predeterminada (sin esperar)."""
+    x, sr = cargar_audio(ruta, desde)
+    try:
+        sd().play(x, sr)
+    except Exception as e:
+        raise ErrorAudio(f"No se pudo reproducir por la salida de audio predeterminada. Detalle: {e}") from e
+    return len(x) / sr
+
+
 def parar_reproduccion():
     try:
         sd().stop()

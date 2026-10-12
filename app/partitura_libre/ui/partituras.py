@@ -114,7 +114,13 @@ class PaginaPartituras(QWidget):
                                       ayuda="Abrir un MusicXML, MXL o MIDI existente como partitura editable")
         self.b_deshacer = tema.boton("↶", lambda: self._deshacer(), ayuda="Deshacer (Ctrl+Z)")
         self.b_rehacer = tema.boton("↷", lambda: self._deshacer(True), ayuda="Rehacer (Ctrl+Y)")
-        self.b_reproducir = tema.boton("▶ Oír", self.reproducir, ayuda="Reproducir la partitura desde la nota elegida (Espacio)")
+        self.b_reproducir = tema.boton("▶ Oír", self.reproducir, ayuda="Reproducir desde la nota elegida (Espacio); la nota que suena se resalta")
+        self.oir_que = QComboBox()
+        self.oir_que.addItem("Partitura", None)
+        self.oir_que.setToolTip("Qué se oye: la partitura tal como está escrita, el audio original o la voz aislada de la canción")
+        self._seguir = QTimer(self)
+        self._seguir.setInterval(40)
+        self._seguir.timeout.connect(self._seguir_reproduccion)
         self.b_letra = tema.boton("Letra", self.poner_letra)
         self.b_carpeta = tema.boton("Carpeta", lambda: tema.abrir_en_sistema(self.proyecto), ayuda="Ver la carpeta del proyecto")
         self.b_panel_izq = tema.boton("Grabación", ayuda="Mostrar u ocultar el panel de grabación y análisis")
@@ -122,7 +128,7 @@ class PaginaPartituras(QWidget):
         for b in (self.b_panel_izq, self.b_panel_der):
             b.setCheckable(True)
         archivo = tema.herramientas(self.b_nueva, self.b_existente, self.b_regenerar, "|", self.b_deshacer, self.b_rehacer, "|",
-                                    self.b_reproducir, self.b_letra, "|", self.b_pdf, self.b_midi, self.b_xml, self.b_musescore, self.b_carpeta,
+                                    self.b_reproducir, self.oir_que, self.b_letra, "|", self.b_pdf, self.b_midi, self.b_xml, self.b_musescore, self.b_carpeta,
                                     None, self.b_panel_izq, self.b_panel_der)
 
         # -- barra de introducción de notas ---------------------------------------
@@ -390,6 +396,7 @@ class PaginaPartituras(QWidget):
             if not d.get("audio"):
                 self.version = {}             # partitura escrita a mano que aún no se ha guardado: se puede editar
             self._poner_notas([], 120)
+        self._actualizar_fuentes()
         self._botones()
 
     # -- análisis -------------------------------------------------------------
@@ -907,28 +914,68 @@ class PaginaPartituras(QWidget):
             n[0], n[1] = max(0.0, n[0] + paso), max(0.0, n[0] + paso) + (n[1] - n[0])
             self._nota_cambiada(i)
 
+    def _fuentes_de_sonido(self):
+        """Qué se puede oír: la partitura sintetizada y, si existen, el audio original y la voz aislada."""
+        fuentes = [("Partitura", None)]
+        if self._audio():
+            fuentes.append(("Audio original", self._audio()))
+        voz = self.proyecto / "voz aislada.wav" if self.proyecto else None
+        if voz and voz.is_file():
+            fuentes.append(("Voz aislada", voz))
+        return fuentes
+
+    def _actualizar_fuentes(self):
+        elegido = self.oir_que.currentText()
+        self.oir_que.blockSignals(True)
+        self.oir_que.clear()
+        for nombre, ruta in self._fuentes_de_sonido():
+            self.oir_que.addItem(nombre, str(ruta) if ruta else None)
+        self.oir_que.setCurrentIndex(max(0, self.oir_que.findText(elegido)))
+        self.oir_que.blockSignals(False)
+
     def reproducir(self):
-        """Hace sonar la partitura tal como está escrita (desde la nota elegida, si hay una)."""
+        """Hace sonar la partitura, el audio original o la voz aislada desde la nota elegida, y resalta la
+        nota que suena en cada momento."""
         if self._sonando:
-            audio.parar_reproduccion()
-            self._sonando = False
-        elif self.notas:
-            i = self.tabla.currentRow()
-            desde = self.notas[i][0] if i > 0 else 0.0
-            try:
+            return self._fin_reproduccion()
+        if not self.notas:
+            return
+        i = self.tabla.currentRow()
+        desde = self.notas[i][0] if i > 0 else 0.0
+        ruta = self.oir_que.currentData()
+        try:
+            if ruta:
+                duracion = audio.reproducir_archivo(ruta, desde)
+            else:
                 audio.reproducir([[n[0] - desde, n[1] - desde, n[2], n[3]] for n in self.notas if n[0] >= desde - 1e-6])
-            except audio.ErrorAudio as e:
-                return tema.error(self, "No se pudo reproducir", str(e))
-            self._sonando = True
-            QTimer.singleShot(int((max(n[1] for n in self.notas) - desde + 0.4) * 1000), self._fin_reproduccion)
-        self.b_reproducir.setText("■ Parar" if self._sonando else "▶ Oír")
+                duracion = max(n[1] for n in self.notas) - desde + 0.4
+        except (audio.ErrorAudio, OSError, ValueError) as e:
+            return tema.error(self, "No se pudo reproducir", str(e))
+        self._sonando, self._reproduccion = True, (time.monotonic(), desde, desde + duracion)
+        self._seguir.start()
+        self.b_reproducir.setText("■ Parar")
+
+    def _seguir_reproduccion(self):
+        """Cada pocos milisegundos: qué nota suena ahora; se resalta y se mantiene a la vista."""
+        inicio, desde, hasta = self._reproduccion
+        t = desde + time.monotonic() - inicio
+        if t >= hasta:
+            return self._fin_reproduccion()
+        i = next((k for k, n in enumerate(self.notas) if n[0] <= t < n[1]), -1)
+        if i >= 0 and i != self.vista.sonando:
+            self.vista.marcar_sonando(i)
+            r = self.vista.rect_de(i)
+            self.rollo.ensureVisible(r.center().x(), r.center().y(), 40, r.height() // 2 + 10)
 
     def _fin_reproduccion(self):
+        audio.parar_reproduccion()
+        self._seguir.stop()
         self._sonando = False
+        self.vista.marcar_sonando(-1)
         self.b_reproducir.setText("▶ Oír")
 
     def cerrar(self):
         self.captura.cerrar()
         self._parar_vivo()
         if self._sonando:
-            audio.parar_reproduccion()
+            self._fin_reproduccion()

@@ -12,6 +12,7 @@ from .. import partituras
 ESP = 10            # píxeles entre dos líneas del pentagrama con el zoom al 100 %
 TEXTO_Y = 6.0       # espacios bajo la línea inferior donde empieza el texto (deja sitio a las notas graves)
 NOMBRE = "#1d5fa8"   # color de los nombres de nota (la letra va en negro)
+SONANDO = "#d9822b"  # nota que está sonando al reproducir
 MESA, PAPEL, TINTA, ELEGIDA, TENUE = "#2f3948", "#fdfcf7", "#1b2433", "#0f9d8f", "#7a8494"
 A4_ANCHO, A4_ALTO = 1000, 1414   # hoja A4 en unidades de dibujo para el PDF
 # Símbolos SMuFL de Bravura
@@ -56,6 +57,7 @@ class Pentagrama(QWidget):
         super().__init__()
         self.notas, self.sel, self.bpm, self.clave, self.nombres, self.letra = [], -1, 120, "sol", True, []
         self.armadura, self.tonalidad = 0, "Do mayor"
+        self.sonando = -1    # índice de la nota que suena al reproducir (-1: ninguna)
         self.titulo, self.zoom, self.insertar = "", 1.0, False
         self.sistemas = []   # cada sistema: lista de piezas {'col': índices de notas (vacío = silencio), 'x', 'barra', 'ancho', 'compas', 'silencio'}
         self._sis_y = []     # y de la línea inferior de cada sistema
@@ -169,6 +171,14 @@ class Pentagrama(QWidget):
         e = ESP * self.zoom
         return QRectF(0, self._sis_y[s] - 9.5 * e, self.width(), self._alto_sistema(self.zoom) + 2 * e)
 
+    def marcar_sonando(self, indice):
+        """Resalta la nota que suena (y repinta solo lo que cambia)."""
+        if indice != self.sonando:
+            previa, self.sonando = self.sonando, indice
+            for i in (previa, indice):
+                if i >= 0:
+                    self.repintar_nota(i)
+
     def repintar_nota(self, indice):
         """Redibuja solo el sistema de esa nota: lo único que cambia al arrastrarla."""
         for s, piezas in enumerate(self.sistemas):
@@ -280,7 +290,7 @@ class Pentagrama(QWidget):
                     letra_n, alt, octava = partituras.deletrear(tono, self.armadura)
                     vigente = estado.get((letra_n, octava), arm.get(letra_n, 0))
                     estado[(letra_n, octava)] = alt
-                    color = QColor(ELEGIDA if i == sel else TINTA)
+                    color = QColor(ELEGIDA if i == sel else SONANDO if i == self.sonando and pantalla else TINTA)
                     g.setPen(QPen(color, max(1.0, 1.1 * z)))
                     for extra in [q for q in range(-2, pos - 1, -2)] + [q for q in range(10, pos + 1, 2)]:
                         g.drawLine(QPointF(x - 5 * z, y(extra)), QPointF(x + ancho + 5 * z, y(extra)))   # líneas adicionales

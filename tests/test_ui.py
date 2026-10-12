@@ -1,5 +1,6 @@
 """La interfaz real, sin pantalla (QT_QPA_PLATFORM=offscreen): estados de los botones y flujo completo."""
 import os
+from pathlib import Path
 import time
 import unittest
 
@@ -426,6 +427,44 @@ class Interfaz(Aislada):
         self.assertTrue(panel._ofrecer_sistema())
         self.assertEqual(len(self.dialogos), 3)
         PanelCaptura._prefiere_micro = False
+
+    def test_oir_el_audio_original_resalta_la_nota_que_suena(self):
+        import time as _t
+        from partitura_libre import audio
+        p = self.v.partituras
+        d = proyectos.crear("para oír", "partitura")
+        proyectos.importar_audio(d, escribir_wav(self.dir / "o.wav", [(60, 0.5)]))
+        p.abrir_proyecto(d)
+        p.version = {}
+        p._poner_notas([[0, 0.5, 60, .7], [0.5, 1.0, 62, .7], [1.0, 1.5, 64, .7]], 120)
+        (d / "voz aislada.wav").write_bytes((d / "o.wav").read_bytes())
+        p._actualizar_fuentes()
+        self.assertEqual([p.oir_que.itemText(i) for i in range(p.oir_que.count())], ["Partitura", "Audio original", "Voz aislada"])
+        sonado, reloj = [], [50.0]
+        originales = (audio.reproducir_archivo, audio.parar_reproduccion, _t.monotonic)
+        audio.reproducir_archivo = lambda ruta, desde: (sonado.append((Path(ruta).name, desde)), 1.5 - desde)[1]
+        audio.parar_reproduccion = lambda: sonado.append("parar")
+        _t.monotonic = lambda: reloj[0]
+        try:
+            p.oir_que.setCurrentIndex(1)
+            p.reproducir()
+            self.assertEqual(sonado, [("o.wav", 0.0)])
+            self.assertEqual(p.b_reproducir.text(), "■ Parar")
+            for t, esperada in ((0.1, 0), (0.7, 1), (1.2, 2)):   # la nota resaltada sigue al audio
+                reloj[0] = 50.0 + t
+                p._seguir_reproduccion()
+                self.assertEqual(p.vista.sonando, esperada)
+            reloj[0] = 52.0                                       # se acaba: deja de resaltar
+            p._seguir_reproduccion()
+            self.assertEqual((p.vista.sonando, p.b_reproducir.text(), sonado[-1]), (-1, "▶ Oír", "parar"))
+            p.oir_que.setCurrentIndex(2)                          # la voz aislada, desde la nota elegida
+            p.tabla.selectRow(1)
+            p.reproducir()
+            self.assertEqual(sonado[-1], ("voz aislada.wav", 0.5))
+            p.reproducir()                                        # segunda pulsación: parar
+            self.assertFalse(p._sonando)
+        finally:
+            audio.reproducir_archivo, audio.parar_reproduccion, _t.monotonic = originales
 
     def test_fallo_del_analisis_se_explica_y_conserva_el_audio(self):
         p = self.v.partituras
