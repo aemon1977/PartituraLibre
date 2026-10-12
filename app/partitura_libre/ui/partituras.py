@@ -83,6 +83,13 @@ class PaginaPartituras(QWidget):
         v2.addWidget(self.e_toma)
         v2.addLayout(tema.fila(tema.etiqueta("Tempo", "tenue", False), self.tempo, self.b_pulso, None, self.b_oir))
         v2.addWidget(self.con_letra)
+        self.modelo_letra = QComboBox()
+        self.modelo_letra.setToolTip("Modelo de voz con el que se reconoce la letra. Para canciones, «large-v3» acierta "
+                                     "claramente más; los pequeños son más rápidos. Se descargan en la sección Letras.")
+        self.modelo_letra.currentIndexChanged.connect(self._guardar_modelo_letra)
+        self.e_modelo_letra = tema.etiqueta("", "tenue")
+        v2.addLayout(tema.fila(tema.etiqueta("Letra con", "tenue", False), self.modelo_letra, estirar=self.modelo_letra))
+        v2.addWidget(self.e_modelo_letra)
         v2.addLayout(tema.fila(self.b_transcribir, self.b_cancelar, estirar=self.b_transcribir))
         v2.addWidget(self.barra)
         v2.addWidget(self.e_estado)
@@ -265,6 +272,10 @@ class PaginaPartituras(QWidget):
         self.tempo.setEnabled(not analizando)
         modelo = config.cargar()["modelo"]
         self.con_letra.setEnabled(not analizando and letras.instalado(modelo))
+        self._recargar_modelos_letra()
+        self.modelo_letra.setEnabled(not analizando and self.modelo_letra.count() > 0)
+        for w in (self.modelo_letra, self.e_modelo_letra):
+            w.setVisible(self.con_letra.isChecked())
         self.con_letra.setToolTip(
             "Para canciones: aísla la voz de los instrumentos, escribe la melodía que se canta (una sola línea) y pone "
             f"cada palabra de la letra bajo su nota. Reconoce la letra con el modelo «{letras.para_canto(modelo)}». "
@@ -415,6 +426,29 @@ class PaginaPartituras(QWidget):
         a = config.cargar()
         a["con_letra"] = si
         config.guardar(a)
+        self._botones()
+
+    def _recargar_modelos_letra(self):
+        """Lista los modelos de voz descargados; recuerda el elegido y, si no hay, propone el más preciso."""
+        puestos = [m for m in letras.MODELOS if letras.instalado(m)]
+        if [self.modelo_letra.itemData(i) for i in range(self.modelo_letra.count())] != puestos:
+            elegido = config.cargar().get("modelo_canto") or letras.para_canto(config.cargar()["modelo"])
+            self.modelo_letra.blockSignals(True)
+            self.modelo_letra.clear()
+            for m in puestos:
+                self.modelo_letra.addItem(m + ("  (recomendado para canciones)" if m == "large-v3" else ""), m)
+            self.modelo_letra.setCurrentIndex(max(0, self.modelo_letra.findData(elegido)))
+            self.modelo_letra.blockSignals(False)
+        m = self.modelo_letra.currentData()
+        sep = "separa la voz de los instrumentos" if separacion.instalado() else "sin separador de voz (se pedirá al empezar)"
+        self.e_modelo_letra.setText(
+            f"{letras.MODELOS[m][3]}. Se {sep}." if m else "No hay ningún modelo de voz descargado: descárgalo en la sección Letras.")
+
+    def _guardar_modelo_letra(self):
+        a = config.cargar()
+        a["modelo_canto"] = self.modelo_letra.currentData()
+        config.guardar(a)
+        self._recargar_modelos_letra()
 
     def transcribir(self):
         orden = {"cmd": "transcribir", "audio": str(self._audio()), "carpeta": str(self.proyecto),
@@ -461,7 +495,7 @@ class PaginaPartituras(QWidget):
         """Voz a texto con el tiempo de cada palabra, para colocar cada una bajo su nota. Al terminar llama a
         `al_acabar(palabras, aviso)`; el texto completo queda guardado en el proyecto."""
         a, carpeta, frases, fallo = config.cargar(), self.proyecto, [], []
-        modelo = letras.para_canto(a["modelo"])
+        modelo = self.modelo_letra.currentData() or letras.para_canto(a["modelo"])
         self.barra.setValue(0)
         self.e_estado.setText(paso + "Reconociendo la letra (voz a texto)…")
         tema.reclasificar(self.e_estado, "tenue")

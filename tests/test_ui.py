@@ -554,6 +554,11 @@ class Interfaz(Aislada):
         p.abrir_proyecto(d)
         self.assertTrue(p.con_letra.isEnabled())
         p.con_letra.setChecked(True)
+        self.assertTrue(p.modelo_letra.isVisible() or not p.isVisible())
+        modelos = [p.modelo_letra.itemData(i) for i in range(p.modelo_letra.count())]
+        self.assertEqual(modelos, [m for m in letras.MODELOS if letras.instalado(m)])   # solo los descargados
+        p.modelo_letra.setCurrentIndex(p.modelo_letra.findData(a["modelo"]))           # se usa el elegido aquí
+        self.assertEqual(config.cargar()["modelo_canto"], a["modelo"])
         p.transcribir()
         self.assertIn("Paso 1 de 2", p.e_estado.text())
         self.assertTrue(p.b_cancelar.isEnabled() and not p.b_transcribir.isEnabled())
