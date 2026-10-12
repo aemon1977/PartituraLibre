@@ -90,6 +90,31 @@ class Actualizacion(Aislada):
         self.assertFalse((rutas.APP / "nuevo.py").exists())
         self.assertEqual(actualizar.deshacer(), "")
 
+    def test_se_sustituye_el_lanzador_de_este_sistema(self):
+        lanzador = actualizar.OTROS[-1]
+        self.assertEqual(lanzador, "PartituraLibre.exe" if rutas.WINDOWS else "iniciar-linux.sh")
+        (rutas.RAIZ / lanzador).write_text("lanzador viejo")
+        actualizar.preparar(self.paquete("99.4.0", {f"PartituraLibre/{lanzador}": "lanzador nuevo"}))
+        self.assertEqual(actualizar.aplicar(), "99.4.0")
+        self.assertEqual((rutas.RAIZ / lanzador).read_text(), "lanzador nuevo")
+
+    def test_un_lanzador_en_uso_no_deja_la_actualizacion_a_medias(self):
+        destino, origen = self.dir / "en uso.exe", self.dir / "nuevo.exe"
+        destino.write_text("viejo")
+        origen.write_text("nuevo")
+        original = actualizar.os.replace
+        def bloqueado(a, b):
+            if Path(b) == destino:
+                raise PermissionError("en uso")
+            return original(a, b)
+        actualizar.os.replace = bloqueado
+        try:
+            self.assertFalse(actualizar._sustituir(origen, destino, intentos=2))
+        finally:
+            actualizar.os.replace = original
+        self.assertEqual(destino.read_text(), "viejo")                       # se queda el que había
+        self.assertFalse(destino.with_name(destino.name + ".nuevo").exists())   # sin restos
+
     def test_un_paquete_dañado_o_falso_no_cambia_nada(self):
         info = self.paquete("99.2.0")
         with self.assertRaises(OSError):                                     # suma de verificación incorrecta

@@ -6,7 +6,7 @@ from . import rutas
 
 ARCHIVO = rutas.CONFIG / "ajustes.json"
 DEFECTO = {"microfono": "", "modelo": "small", "idioma": "es", "marcas": True,
-           "carpeta_proyectos": "", "musescore": "", "externos": [], "clave": "", "nombres": True, "con_letra": True, "separar": True, "actualizaciones": True, "tonalidad": None, "modelo_canto": ""}
+           "carpeta_proyectos": "", "musescore": "", "externos": [], "clave": "", "nombres": True, "con_letra": True, "separar": True, "actualizaciones": True, "tonalidad": None, "modelo_canto": "", "actualizar_solo": True}
 
 
 def cargar():

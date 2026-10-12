@@ -71,11 +71,16 @@ class PaginaAjustes(QWidget):
         self.e_actualizacion = tema.etiqueta("", "tenue")
         self.b_actualizar = tema.boton("Buscar actualizaciones", lambda: self.buscar_actualizacion(True))
         self.auto = QCheckBox("Buscar actualizaciones al abrir el programa")
+        self.solo = QCheckBox("Descargarlas e instalarlas solo (sin preguntar)")
+        self.solo.setChecked(config.cargar().get("actualizar_solo", True))
+        self.solo.setToolTip("Cada instalación baja la versión de su sistema (Windows o Linux) en segundo plano y la "
+                             "instala al volver a abrir el programa. Tus grabaciones, modelos y ajustes no se tocan.")
+        self.solo.toggled.connect(lambda si: self._guardar_opcion("actualizar_solo", si))
         self.auto.setChecked(config.cargar().get("actualizaciones", True))
         self.auto.setToolTip("Al abrir, consulta en GitHub si hay una versión nueva. Solo se pregunta el número de versión: "
                              "no se envía ningún dato tuyo. Nada se instala sin que lo aceptes.")
         self.auto.toggled.connect(self._guardar_auto)
-        va.addLayout(tema.fila(self.b_actualizar, self.auto, None))
+        va.addLayout(tema.fila(self.b_actualizar, self.auto, self.solo, None))
         va.addWidget(self.e_actualizacion)
         va.addWidget(tema.etiqueta("Gratuito, sin cuentas ni cuotas. Tus grabaciones no salen de este equipo: Internet solo se usa "
                                    "cuando pulsas un botón de descarga y, si lo dejas activado, para consultar si hay una versión nueva.", "tenue"))
@@ -122,6 +127,11 @@ class PaginaAjustes(QWidget):
         self.b_ms_abrir.setEnabled(bool(exe))
 
     # -- actualizaciones ---------------------------------------------------------
+    def _guardar_opcion(self, clave, valor):
+        a = config.cargar()
+        a[clave] = valor
+        config.guardar(a)
+
     def _guardar_auto(self, si):
         a = config.cargar()
         a["actualizaciones"] = si
@@ -143,6 +153,11 @@ class PaginaAjustes(QWidget):
                                                  f"también puedes mirar en {actualizar.WEB}/releases")
             elif not info["nueva"]:
                 self.e_actualizacion.setText(f"Tienes la última versión ({__version__})." if a_mano else "")
+            elif not a_mano and self.solo.isChecked():   # sin preguntar: se baja en segundo plano
+                self.e_actualizacion.setText(f"Descargando la versión {info['version']} en segundo plano…")
+                tema.en_hilo(lambda: actualizar.preparar(info), lambda _r, e2: (
+                    self.e_actualizacion.setText(f"No se pudo descargar la versión {info['version']}: {e2}") if e2
+                    else self._preparada(True, info)))
             else:
                 self.e_actualizacion.setText(f"Hay una versión nueva: {info['version']}.")
                 self._ofrecer(info)

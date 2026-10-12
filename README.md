@@ -116,11 +116,15 @@ Modelos de voz, MuseScore portable, **Diagnóstico** (runtime, micrófonos, moto
 
 ## Actualizaciones
 
-Al abrirse, el programa consulta en GitHub si se ha publicado una versión nueva (solo pregunta el número de versión; no envía ningún dato tuyo). Si la hay, te muestra las novedades y, **si aceptas**, la descarga, la comprueba y te ofrece reiniciar. También puedes buscarla a mano en *Ajustes → Acerca de → Buscar actualizaciones*, o desactivar la consulta automática allí mismo.
+Cada instalación se actualiza sola con la versión **de su propio sistema**: una de Windows baja el paquete de Windows (con su `PartituraLibre.exe`) y una de Linux, el de Linux (con su `iniciar-linux.sh`).
 
-- Se cambia solo el programa (`app/`): tus grabaciones, partituras, modelos y ajustes no se tocan.
-- La versión anterior se guarda en `app.anterior/`. Para volver a ella: `./iniciar-linux.sh --deshacer-actualizacion` (o `PartituraLibre.exe --deshacer-actualizacion`).
-- Si una versión nueva necesita otros paquetes, el lanzador los descarga dentro de `runtime/` en ese arranque.
+1. Al abrirse, el programa pregunta a GitHub cuál es la última versión. Solo pide el número de versión: no envía ningún dato tuyo.
+2. Si hay una más nueva, la descarga en segundo plano y comprueba que llega íntegra y que es la versión anunciada.
+3. La próxima vez que abras el programa (o al pulsar «Reiniciar ahora») se sustituye: el programa y su lanzador. Si la versión nueva necesita otras bibliotecas, se ponen al día solas dentro de la carpeta.
+
+Tus grabaciones, partituras, modelos y ajustes no se tocan, y la versión anterior se guarda en `app.anterior/`. Para volver a ella: `./iniciar-linux.sh --deshacer-actualizacion` o `PartituraLibre.exe --deshacer-actualizacion`.
+
+En *Ajustes → Acerca de* puedes buscar a mano, desactivar la consulta al abrir o pedir que pregunte antes de descargar. Cada versión publicada se prueba en GitHub actualizando una instalación antigua en Windows y en Linux.
 
 ## Formatos de salida
 

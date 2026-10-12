@@ -23,7 +23,9 @@ API = f"https://api.github.com/repos/{REPO}/releases/latest"
 SUFIJO = "-windows11-x64.zip" if rutas.WINDOWS else "-linux-x64.tar.gz"
 RAIZ_PAQUETE = "PartituraLibre"
 # Lo que se renueva además de app/. El .bat no se toca en Windows: se está ejecutando mientras se actualiza.
-OTROS = ("README.md", "LICENSE", "docs") + (() if rutas.WINDOWS else ("iniciar-linux.sh",))
+# Lo que se renueva además de app/, cada sistema con su lanzador: el ejecutable en Windows (ya se ha
+# cerrado al arrancar Python: solo abre el programa y termina) y el guion en Linux.
+OTROS = ("README.md", "LICENSE", "docs") + (("PartituraLibre.exe",) if rutas.WINDOWS else ("iniciar-linux.sh",))
 
 
 def numero(version):
@@ -112,9 +114,27 @@ def aplicar():
             shutil.rmtree(destino, ignore_errors=True)
             shutil.copytree(origen, destino)
         elif origen.is_file():
-            shutil.copy2(origen, destino)
+            _sustituir(origen, destino)
     shutil.rmtree(_pendiente(), ignore_errors=True)
     return version
+
+
+def _sustituir(origen, destino, intentos=20):
+    """Copia un archivo encima de otro de forma atómica. Si está en uso (el .exe que acaba de abrir el
+    programa tarda un instante en cerrarse), lo reintenta; si no se puede, se queda el anterior, que sigue
+    sirviendo: no es motivo para dejar la actualización a medias."""
+    import time
+    temporal = destino.with_name(destino.name + ".nuevo")
+    shutil.copy2(origen, temporal)
+    for _ in range(intentos):
+        try:
+            os.replace(temporal, destino)
+            return True
+        except PermissionError:
+            time.sleep(0.25)
+    temporal.unlink(missing_ok=True)
+    print(f"AVISO: {destino.name} estaba en uso y se mantiene el anterior; se renovará en la próxima actualización.")
+    return False
 
 
 def deshacer():
