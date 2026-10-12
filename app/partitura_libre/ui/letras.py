@@ -1,5 +1,6 @@
 """Sección Letras: voz (hablada o cantada) a texto editable, con marcas de tiempo y exportación."""
 import json
+import time
 from pathlib import Path
 
 from PySide6.QtGui import QGuiApplication, QTextCursor, QTextDocument
@@ -305,6 +306,7 @@ class PaginaLetras(QWidget):
         self.e_estado.setText("Cargando el modelo y analizando el audio…")
         tema.reclasificar(self.e_estado, "tenue")
         self._separando = self.cantada.isChecked() and self.separar.isChecked() and separacion.instalado()
+        self._t0 = time.monotonic()
         self._final = self._pedir(self._audio())
         self._carpeta_final = self.proyecto
         self._botones()
@@ -332,7 +334,7 @@ class PaginaLetras(QWidget):
             return
         elif ev["t"] == "progreso":
             self.barra.setValue(int(ev["v"] * 500))        # la separación ocupa la primera mitad de la barra
-            self.e_estado.setText(ev["msg"])
+            self.e_estado.setText(ev["msg"] + tema.quedan(self._t0, self.barra.value() / 1000))
         elif ev["t"] == "idioma":
             self._idioma = ev["idioma"]
             self.e_estado.setText(f"Idioma: {letras.IDIOMAS.get(ev['idioma'], ev['idioma'])} "
@@ -342,6 +344,7 @@ class PaginaLetras(QWidget):
             mitad = 500 if self._separando else 0
             self.barra.setValue(mitad + int(ev["v"] * (1000 - mitad)))
             self._poner(self._nuevos)
+            self.e_estado.setText(f"Transcribiendo… {ev['fin']:.0f} s de audio hechos" + tema.quedan(self._t0, self.barra.value() / 1000))
         elif ev["t"] == "fin":
             self._final = None
             self.barra.setValue(1000)

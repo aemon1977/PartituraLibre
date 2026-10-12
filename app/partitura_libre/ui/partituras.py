@@ -33,6 +33,7 @@ class PaginaPartituras(QWidget):
         self.proyecto = None   # carpeta del proyecto abierto
         self.version = None    # resultado mostrado: {'midi', 'musicxml', 'notas', …}
         self._hist, self._rehechos, self._fig_nueva, self._sonando = [], [], "negra", False
+        self._t0, self._base_barra = 0.0, 0   # inicio del análisis en curso y desde dónde avanza la barra
         self._espera = 0.0     # silencios tecleados antes de la próxima nota, en segundos
         self.notas, self.bpm, self.tarea, self._cargando = [], 120, None, False
         self.letra = []        # texto cantado bajo cada nota (paralela a self.notas)
@@ -411,8 +412,12 @@ class PaginaPartituras(QWidget):
         self._botones()
 
     # -- análisis -------------------------------------------------------------
-    def _lanzar(self, orden, mensaje):
-        self.barra.setValue(0)
+    def _lanzar(self, orden, mensaje, seguir=False):
+        """`seguir`: es el segundo paso de un análisis (la barra continúa desde el 40 %)."""
+        if not seguir:
+            self._t0 = time.monotonic()
+        self._base_barra = 400 if seguir else 0
+        self.barra.setValue(self._base_barra)
         self.e_estado.setText(mensaje)
         tema.reclasificar(self.e_estado, "tenue")
         carpeta = self.proyecto
@@ -467,10 +472,10 @@ class PaginaPartituras(QWidget):
                 orden["palabras"], self._sin_letra = palabras, aviso
                 if palabras and voz.is_file():   # canción: la melodía se saca de la voz aislada, no de la mezcla
                     orden.update(audio=str(voz), melodia=True)
-                    return self._lanzar(orden, "Paso 2 de 2 · Escribiendo la melodía de la voz…")
+                    return self._lanzar(orden, "Paso 2 de 2 · Escribiendo la melodía de la voz…", seguir=True)
                 voz.unlink(missing_ok=True)      # sin nada cantado no es una canción: notas de todo el audio
                 self._sin_letra = "No se oye letra cantada: las notas salen de todo el audio, como en una pieza instrumental."
-                self._lanzar(orden, "Paso 2 de 2 · Detectando las notas…")
+                self._lanzar(orden, "Paso 2 de 2 · Detectando las notas…", seguir=True)
             return self._reconocer_letra(seguir, "Paso 1 de 2 · ", guardar_voz=voz)
         self._lanzar(orden, "Preparando el análisis…")
 
@@ -495,6 +500,7 @@ class PaginaPartituras(QWidget):
         """Voz a texto con el tiempo de cada palabra, para colocar cada una bajo su nota. Al terminar llama a
         `al_acabar(palabras, aviso)`; el texto completo queda guardado en el proyecto."""
         a, carpeta, frases, fallo = config.cargar(), self.proyecto, [], []
+        self._t0 = time.monotonic()
         modelo = self.modelo_letra.currentData() or letras.para_canto(a["modelo"])
         self.barra.setValue(0)
         self.e_estado.setText(paso + "Reconociendo la letra (voz a texto)…")
@@ -505,11 +511,11 @@ class PaginaPartituras(QWidget):
                 return
             if ev["t"] == "progreso":
                 self.barra.setValue(int(ev["v"] * 200))
-                self.e_estado.setText(paso + ev["msg"])
+                self.e_estado.setText(paso + ev["msg"] + tema.quedan(self._t0, self.barra.value() / 1000))
             elif ev["t"] == "segmento":
                 frases.append(ev)
-                self.barra.setValue(int(ev["v"] * 400))
-                self.e_estado.setText(f"{paso}Letra: «{ev['texto'][:60]}»")
+                self.barra.setValue(200 + int(ev["v"] * 200))
+                self.e_estado.setText(f"{paso}Letra: «{ev['texto'][:60]}»" + tema.quedan(self._t0, self.barra.value() / 1000))
             elif ev["t"] == "error":
                 fallo.append(ev["msg"])
             if ev["t"] in ("fin", "error"):
@@ -558,8 +564,8 @@ class PaginaPartituras(QWidget):
 
     def _evento(self, ev, carpeta):
         if ev["t"] == "progreso":
-            self.barra.setValue(int(ev["v"] * 1000))
-            self.e_estado.setText(ev["msg"])
+            self.barra.setValue(self._base_barra + int(ev["v"] * (1000 - self._base_barra)))
+            self.e_estado.setText(ev["msg"] + tema.quedan(self._t0, self.barra.value() / 1000))
         elif ev["t"] == "fin":
             self._resultado = ev
         elif ev["t"] == "error":

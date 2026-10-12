@@ -101,6 +101,16 @@ def en_hilo(trabajo, al_acabar):
     threading.Thread(target=correr, daemon=True).start()
 
 
+def quedan(inicio, fraccion, ahora=None):
+    """« · quedan ≈ 2 min» a partir de lo que se lleva hecho; vacío al principio, cuando aún no se sabe."""
+    import time
+    transcurrido = (ahora if ahora is not None else time.monotonic()) - inicio
+    if fraccion < 0.05 or transcurrido < 3 or fraccion >= 1:
+        return ""
+    falta = transcurrido * (1 - fraccion) / fraccion
+    return f" · quedan ≈ {round(falta / 5) * 5 or 5} s" if falta < 90 else f" · quedan ≈ {round(falta / 60)} min"
+
+
 def icono():
     p = QPixmap(128, 128)
     p.fill(Qt.transparent)

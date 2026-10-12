@@ -81,5 +81,16 @@ class TextoEditable(unittest.TestCase):
         self.assertTrue(letras.es_dudoso(-0.2, 0.05, 3.0))   # texto repetitivo (alucinación típica)
 
 
+
+class TiempoRestante(unittest.TestCase):
+    def test_estimacion_de_lo_que_queda(self):
+        from partitura_libre.ui.tema import quedan
+        self.assertEqual(quedan(0, 0.5, ahora=20), " · quedan ≈ 20 s")       # a medias en 20 s: otros 20
+        self.assertEqual(quedan(0, 0.25, ahora=60), " · quedan ≈ 3 min")      # 1 min para un cuarto: 3 más
+        self.assertEqual(quedan(0, 0.02, ahora=60), "")                       # demasiado pronto para saberlo
+        self.assertEqual(quedan(0, 0.5, ahora=1), "")
+        self.assertEqual(quedan(0, 1.0, ahora=30), "")
+
+
 if __name__ == "__main__":
     unittest.main()
