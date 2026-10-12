@@ -1,0 +1,54 @@
+# Instala Partitura Libre desde cero con sus lanzadores en Windows y en Linux (máquinas reales de
+# GitHub) y pasa todas las pruebas con el runtime portable. No hay micrófonos: las pruebas que los
+# necesitan se omiten solas y lo dicen.
+name: Pruebas en Windows y Linux
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - name: Primera preparación con el lanzador (descarga Python y paquetes dentro de la carpeta)
+        shell: cmd
+        continue-on-error: true   # el diagnóstico avisa de que no hay micrófonos; lo que importa son las pruebas
+        run: iniciar-windows.bat --si --diagnostico < NUL
+      - name: Modelos pequeños para las pruebas de voz y de separación
+        shell: pwsh
+        run: |
+          $py = (Get-ChildItem runtime/python -Filter python.exe -Recurse -Depth 1 | Select-Object -First 1).FullName
+          $env:PYTHONPATH = "$pwd\app;$pwd\runtime\site-app"
+          & $py -s -c "from partitura_libre import letras, separacion; letras.descargar_modelo('tiny'); separacion.descargar()"
+      - name: Pruebas
+        shell: pwsh
+        run: |
+          $py = (Get-ChildItem runtime/python -Filter python.exe -Recurse -Depth 1 | Select-Object -First 1).FullName
+          $env:PYTHONPATH = "$pwd\app;$pwd\runtime\site-app"
+          $env:PYTHONNOUSERSITE = "1"
+          $env:PYTHONUTF8 = "1"
+          $env:QT_QPA_PLATFORM = "offscreen"
+          $env:HF_HUB_OFFLINE = "1"
+          & $py -s -m unittest discover -v
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+  linux:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - name: Bibliotecas del sistema que el programa usa y no instala (audio y Qt en X11)
+        run: sudo apt-get update && sudo apt-get install -y libportaudio2 libxcb-cursor0 libegl1 libxkbcommon0 libfontconfig1
+      - name: Primera preparación con el lanzador
+        continue-on-error: true
+        run: ./iniciar-linux.sh --si --diagnostico
+      - name: Modelos pequeños para las pruebas de voz y de separación
+        run: |
+          PY=$(ls -d runtime/python/cpython-3.11*/bin/python3.11 | head -1)
+          PYTHONPATH="$PWD/app:$PWD/runtime/site-app" $PY -s -c "from partitura_libre import letras, separacion; letras.descargar_modelo('tiny'); separacion.descargar()"
+      - name: Pruebas
+        run: ./herramientas/probar.sh discover -v
