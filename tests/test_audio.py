@@ -259,6 +259,30 @@ class Windows(Aislada):
         self.assertGreaterEqual(len(x), 22 * BLOQUE + 48000)                    # y el hueco quedó escrito como silencio (≥ 1 s)
         self.assertTrue((x[21 * BLOQUE:21 * BLOQUE + 24000] == 0).all())
 
+    def test_en_windows_se_sabe_si_suena_algo_escuchando_un_instante(self):
+        modulo, registro = self.falso_pyaudio()
+        original = modulo.PyAudio.open
+
+        def abrir_con(nivel):
+            def abrir(motor, **kw):
+                f = original(motor, **kw)
+                inicio = f.start_stream
+                def empezar():   # al empezar, «Windows» entrega dos bloques con ese nivel (o ninguno si es 0)
+                    inicio()
+                    for _ in range(2 if nivel else 0):
+                        kw["stream_callback"]((np.ones(512, np.int16) * nivel).tobytes(), 256, None, 0)
+                f.start_stream = empezar
+                return f
+            return abrir
+        modulo.PyAudio.open = abrir_con(5000)
+        self.assertIs(audio.suena_algo(modulo, espera=0.01), True)
+        modulo.PyAudio.open = abrir_con(0)
+        self.assertIs(audio.suena_algo(modulo, espera=0.01), False)
+        self.assertTrue(registro.get("cerrado") and registro.get("terminado"))
+
+    def test_umbrales_de_nivel(self):
+        self.assertLess(audio.UMBRAL_SISTEMA, audio.UMBRAL_MICRO)   # una canción suave capturada del equipo no es «floja»
+
     def test_si_falta_la_captura_del_equipo_se_explica(self):
         with self.assertRaises(audio.ErrorAudio) as e:
             audio.FlujoDelEquipo(lambda *a: None)       # en Linux no existe pyaudiowpatch: mismo camino que si faltara en Windows

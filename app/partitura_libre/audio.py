@@ -62,10 +62,29 @@ def salida_que_suena():
         return ""
 
 
-def suena_algo():
-    """True si alguna aplicación está reproduciendo sonido en este momento; None si no se puede
-    saber (en Windows no hay forma sencilla de preguntarlo)."""
-    if rutas.WINDOWS or not shutil.which("pactl"):
+UMBRAL_MICRO = 0.1      # pico por debajo del cual una toma de micrófono es demasiado floja (−20 dB)
+UMBRAL_SISTEMA = 0.02   # en la captura directa del equipo no hay ruido de sala: basta con mucho menos (−34 dB)
+
+
+def suena_algo(pa=None, espera=0.4):
+    """True si alguna aplicación está reproduciendo sonido en este momento; None si no se puede saber.
+    En Windows se escucha un instante la salida predeterminada: si no suena nada, Windows no entrega audio."""
+    if rutas.WINDOWS or pa is not None:
+        if (pa or captura_del_equipo_windows()) is None:
+            return None
+        oido = []
+        try:
+            f = FlujoDelEquipo(lambda datos, *_: oido.append(int(abs(datos).max())), pa)
+            try:
+                f.start()
+                time.sleep(espera)
+                f.stop()
+            finally:
+                f.close()
+        except Exception:
+            return None
+        return any(v > 30 for v in oido)   # bloques con algo más que silencio digital
+    if not shutil.which("pactl"):
         return None
     try:
         return any(c.get("Corked") == "no" for c in _bloques(_pactl("list", "sink-inputs")))

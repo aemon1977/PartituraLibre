@@ -246,7 +246,7 @@ class PanelCaptura(QWidget):
             self._decir("Toma guardada, pero INCOMPLETA. " + " ".join(g.avisos()), "error")
             tema.dialogo(self, "Grabación incompleta", "La toma se ha guardado, pero no está completa:\n\n• "
                          + "\n• ".join(g.avisos()), tipo="aviso")
-        elif sistema and (g.muda or g.floja):
+        elif sistema and (g.muda or g.pico < audio.UMBRAL_SISTEMA):
             self._decir("Toma guardada, pero " + ("sin sonido." if g.muda else f"con el equipo sonando muy bajo (pico del {g.pico * 100:.0f} %)."), "aviso")
             tema.dialogo(self, "No se grabó sonido del equipo" if g.muda else "El equipo sonaba muy bajo",
                          ("Durante la toma no sonó nada por la salida de audio.\n\n" if g.muda else "El sonido llegó muy flojo.\n\n")
@@ -298,7 +298,8 @@ class PanelCaptura(QWidget):
         db = 20 * math.log10(max(g.nivel, 1e-4))            # -80..0 dB
         self.nivel.setValue(int(max(0, min(100, (db + 60) / 60 * 100))))
         flojo = g.frames > 2 * g.sr or (not self.grabando and self._fin_prueba < 8_000 // self._tic.interval())
-        if flojo and g.pico < 0.1 and not g.pausada and self.texto.property("clase") != "error":   # aviso en directo, antes de perder la toma
+        umbral = audio.UMBRAL_SISTEMA if self._es_sistema() else audio.UMBRAL_MICRO   # la captura directa es limpia aunque suene suave
+        if flojo and g.pico < umbral and not g.pausada and self.texto.property("clase") != "error":   # aviso en directo, antes de perder la toma
             if self._es_sistema():   # no hay micrófono que acercar: o no suena nada, o suena muy bajo
                 self._decir("No llega sonido del equipo: pon en marcha la música o el vídeo (y que no esté silenciado)." if g.pico < 0.001
                             else f"El equipo suena muy bajo (pico del {g.pico * 100:.0f} %): sube el volumen de la aplicación que reproduce.", "aviso")
@@ -308,9 +309,9 @@ class PanelCaptura(QWidget):
             else:
                 self._decir(f"Nivel muy bajo (pico del {g.pico * 100:.0f} %): acerca el micrófono o sube su ganancia"
                             + (". No se guarda nada." if not self.grabando else "; así el reconocimiento puede fallar."), "aviso")
-        elif g.pico >= 0.1 and self.texto.text().startswith("Nivel muy bajo"):   # la señal ya llega bien
+        elif g.pico >= umbral and self.texto.text().startswith(("Nivel muy bajo", "El equipo suena muy bajo")):   # la señal ya llega bien
             self._decir("Grabando…" if self.grabando else "Probando: el nivel es correcto. No se guarda nada.", "aviso" if self.grabando else "tenue")
-        clase = "alto" if g.nivel > 0.97 else "bajo" if flojo and g.pico < 0.1 else ""
+        clase = "alto" if g.nivel > 0.97 else "bajo" if flojo and g.pico < umbral else ""
         if self.nivel.property("clase") != clase:
             tema.reclasificar(self.nivel, clase)
         if not self.grabando:
