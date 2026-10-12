@@ -17,6 +17,11 @@ fi
 python3 herramientas/empaquetar.py
 git tag -a "v$VERSION" -m "Partitura Libre $VERSION"
 git push origin main "v$VERSION"
+# Además de los paquetes con número de versión, copias con nombre fijo: así los enlaces
+# …/releases/latest/download/PartituraLibre-windows11-x64.zip siempre dan la última versión.
+cp "dist/PartituraLibre-$VERSION-windows11-x64.zip" dist/PartituraLibre-windows11-x64.zip
+cp "dist/PartituraLibre-$VERSION-linux-x64.tar.gz" dist/PartituraLibre-linux-x64.tar.gz
 gh release create "v$VERSION" --title "Partitura Libre $VERSION" --notes "$1" \
-    "dist/PartituraLibre-$VERSION-linux-x64.tar.gz" "dist/PartituraLibre-$VERSION-windows11-x64.zip"
+    "dist/PartituraLibre-$VERSION-linux-x64.tar.gz" "dist/PartituraLibre-$VERSION-windows11-x64.zip" \
+    dist/PartituraLibre-windows11-x64.zip dist/PartituraLibre-linux-x64.tar.gz
 echo "Publicada la versión $VERSION."

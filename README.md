@@ -12,6 +12,15 @@ Creado por **aemon1977** · [github.com/aemon1977/PartituraLibre](https://github
 ![Partituras](docs/vista-previa-partituras.png)
 ![Letras](docs/vista-previa-letras.png)
 
+## Descargar
+
+| Sistema | Descarga (siempre la última versión) |
+|---|---|
+| **Windows 11** (64 bits) | [PartituraLibre-windows11-x64.zip](https://github.com/aemon1977/PartituraLibre/releases/latest/download/PartituraLibre-windows11-x64.zip) |
+| **Debian 13 / Ubuntu 24.04** (64 bits) | [PartituraLibre-linux-x64.tar.gz](https://github.com/aemon1977/PartituraLibre/releases/latest/download/PartituraLibre-linux-x64.tar.gz) |
+
+Descomprime y abre `iniciar-windows.bat` (Windows) o `./iniciar-linux.sh` (Linux). La primera vez descarga lo que necesita dentro de esa misma carpeta; después el programa se actualiza solo cuando se publica una versión nueva. Todas las versiones: [Releases](https://github.com/aemon1977/PartituraLibre/releases).
+
 ## Es portable: una carpeta y nada más
 
 Todo lo que el programa instala o descarga queda **dentro de su carpeta** (`runtime/`, `models/`, `data/`, `config/`, `logs/`, `temp/`). No pide contraseña de administrador y no toca el sistema, el registro ni tu perfil. **Para desinstalarlo, borra la carpeta** (o usa *Ajustes → Desinstalar*).
@@ -32,7 +41,7 @@ cd PartituraLibre
 
 ### Windows 11 (64 bits)
 
-1. Descomprime `PartituraLibre-1.4.0-windows11-x64.zip` en una carpeta tuya (por ejemplo, Documentos).
+1. Descarga [PartituraLibre-windows11-x64.zip](https://github.com/aemon1977/PartituraLibre/releases/latest/download/PartituraLibre-windows11-x64.zip) y descomprímelo en una carpeta tuya (por ejemplo, Documentos). Si Windows avisa de que el archivo viene de Internet, elige «Ejecutar de todas formas»: el programa no está firmado.
 2. Doble clic en `iniciar-windows.bat`.
 
 ### Qué pasa en el primer arranque
