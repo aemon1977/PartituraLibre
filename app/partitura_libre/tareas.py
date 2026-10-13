@@ -1,5 +1,6 @@
 """Ejecuta los procesos de análisis sin bloquear la interfaz y permite cancelarlos."""
 import json
+import os
 import subprocess
 import sys
 import threading
@@ -23,7 +24,13 @@ class Tarea:
         self.p = subprocess.Popen(
             [sys.executable, "-s", "-m", modulo, *args], env=rutas.entorno(conjunto), cwd=str(rutas.RAIZ),
             stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=self._log, text=True, encoding="utf-8",
-            errors="replace", creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+            errors="replace", creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0)
+            | getattr(subprocess, "BELOW_NORMAL_PRIORITY_CLASS", 0))
+        if not rutas.WINDOWS:   # los análisis ceden el procesador a la ventana: así no se traba
+            try:
+                os.setpriority(os.PRIO_PROCESS, self.p.pid, 10)
+            except OSError:
+                pass
         VIVAS.add(self)
         threading.Thread(target=self._leer, daemon=True).start()
 

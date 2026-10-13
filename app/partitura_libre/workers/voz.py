@@ -17,9 +17,17 @@ from .. import letras, rutas, separacion
 from . import emitir
 
 
+HAZ, TEMPERATURAS = 5, (0.0, 0.4)   # se ajustan al equipo en main()
+
+
 def main():
     from faster_whisper import WhisperModel
-    modelo = WhisperModel(sys.argv[1], device="cpu", compute_type="int8", local_files_only=True)
+    from .. import equipo
+    global HAZ, TEMPERATURAS
+    if equipo.modesto():
+        HAZ, TEMPERATURAS = 1, (0.0,)
+    modelo = WhisperModel(sys.argv[1], device="cpu", compute_type="int8", local_files_only=True,
+                          cpu_threads=equipo.hilos_de_calculo())   # un núcleo libre para la ventana
     emitir("listo")
     for linea in sys.stdin:
         o = json.loads(linea)
@@ -37,7 +45,11 @@ def main():
             # Voz cantada: sin filtro de silencios (la música lo confunde), sin arrastrar el texto
             # anterior (para que no «rellene» versos) y sin descartar de antemano los tramos que el
             # modelo cree sin voz: se muestran marcados como dudosos, salvo los que son puro relleno.
-            segs, info = modelo.transcribe(audio, language=o.get("idioma") or None, beam_size=5,
+            # Sin reintentos a temperaturas altas: con música, el modelo cae en bucles («¡Aaaaah!») y cada
+            # reintento repite el tramo; medido con 4 hilos, 454 s -> 26 s por minuto de canción, misma letra.
+            # En equipos modestos, además, un solo candidato (beam 1).
+            segs, info = modelo.transcribe(audio, language=o.get("idioma") or None, beam_size=HAZ,
+                                           temperature=TEMPERATURAS,
                                            vad_filter=not cantada, condition_on_previous_text=not cantada,
                                            word_timestamps=bool(o.get("palabras")),
                                            **({"no_speech_threshold": None} if cantada else {}))

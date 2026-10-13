@@ -429,7 +429,7 @@ class Interfaz(Aislada):
         self.assertEqual(len(self.dialogos), 3)
         PanelCaptura._prefiere_micro = False
 
-    def test_oir_el_audio_original_resalta_la_nota_que_suena(self):
+    def test_reproductor_la_partitura_y_la_letra_siguen_a_la_cancion(self):
         import time as _t
         from partitura_libre import audio
         p = self.v.partituras
@@ -437,33 +437,46 @@ class Interfaz(Aislada):
         proyectos.importar_audio(d, escribir_wav(self.dir / "o.wav", [(60, 0.5)]))
         p.abrir_proyecto(d)
         p.version = {}
+        p.letra = ["can-", "ta", "re"]
         p._poner_notas([[0, 0.5, 60, .7], [0.5, 1.0, 62, .7], [1.0, 1.5, 64, .7]], 120)
         (d / "voz aislada.wav").write_bytes((d / "o.wav").read_bytes())
         p._actualizar_fuentes()
         self.assertEqual([p.oir_que.itemText(i) for i in range(p.oir_que.count())], ["Partitura", "Audio original", "Voz aislada"])
+        self.assertEqual(p.oir_que.currentText(), "Audio original")       # por defecto se oye la canción
         sonado, reloj = [], [50.0]
         originales = (audio.reproducir_archivo, audio.parar_reproduccion, _t.monotonic)
         audio.reproducir_archivo = lambda ruta, desde: (sonado.append((Path(ruta).name, desde)), 1.5 - desde)[1]
         audio.parar_reproduccion = lambda: sonado.append("parar")
         _t.monotonic = lambda: reloj[0]
         try:
-            p.oir_que.setCurrentIndex(1)
             p.reproducir()
-            self.assertEqual(sonado, [("o.wav", 0.0)])
-            self.assertEqual(p.b_reproducir.text(), "■ Parar")
-            for t, esperada in ((0.1, 0), (0.7, 1), (1.2, 2)):   # la nota resaltada sigue al audio
+            self.assertEqual((sonado, p.b_reproducir.text()), ([("o.wav", 0.0)], "⏸"))
+            for t, esperada in ((0.1, 0), (0.7, 1), (1.2, 2)):              # nota, sílaba y cursor siguen a la música
                 reloj[0] = 50.0 + t
                 p._seguir_reproduccion()
                 self.assertEqual(p.vista.sonando, esperada)
-            reloj[0] = 52.0                                       # se acaba: deja de resaltar
+                self.assertAlmostEqual(p.vista.cursor, t)
+                self.assertEqual(p.e_tiempo.text(), f"0:{int(t):02d} / 0:01")
+            x1 = p.vista.lugar_de(0.1)[1]
+            self.assertLess(x1, p.vista.lugar_de(0.7)[1])                    # la línea avanza hacia la derecha
+            p.vista.grab()                                                   # se dibuja con cursor y sílaba resaltada
+            p.reproducir()                                                   # ⏸: pausa donde iba
+            self.assertEqual((p.b_reproducir.text(), sonado[-1], round(p._pos, 2)), ("▶", "parar", 1.2))
+            reloj[0] = 60.0
+            p.reproducir()                                                   # ▶: sigue desde ahí
+            self.assertEqual((sonado[-1][0], round(sonado[-1][1], 2)), ("o.wav", 1.2))
+            reloj[0] = 60.5                                                  # se acaba: vuelve al principio
             p._seguir_reproduccion()
-            self.assertEqual((p.vista.sonando, p.b_reproducir.text(), sonado[-1]), (-1, "▶ Oír", "parar"))
-            p.oir_que.setCurrentIndex(2)                          # la voz aislada, desde la nota elegida
+            self.assertEqual((p.vista.sonando, p.vista.cursor, p.b_reproducir.text(), p._pos), (-1, None, "▶", 0.0))
+            p.oir_que.setCurrentIndex(2)                                     # la voz aislada, desde la nota elegida
             p.tabla.selectRow(1)
             p.reproducir()
             self.assertEqual(sonado[-1], ("voz aislada.wav", 0.5))
-            p.reproducir()                                        # segunda pulsación: parar
-            self.assertFalse(p._sonando)
+            p.posicion.setValue(10)                                          # saltar con la barra a 1,0 s
+            p._saltar()
+            self.assertEqual(sonado[-1], ("voz aislada.wav", 1.0))
+            p.detener()                                                      # ⏹
+            self.assertEqual((p._sonando, p._pos, p.vista.cursor), (False, 0.0, None))
         finally:
             audio.reproducir_archivo, audio.parar_reproduccion, _t.monotonic = originales
 

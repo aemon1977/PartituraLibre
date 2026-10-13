@@ -5,10 +5,10 @@ import time
 from pathlib import Path
 
 from PySide6.QtCore import QEvent, Qt, QTimer, Signal
-from PySide6.QtWidgets import (QAbstractItemView, QCheckBox, QComboBox, QFileDialog, QFrame, QHBoxLayout, QHeaderView, QLineEdit, QProgressBar,
+from PySide6.QtWidgets import (QAbstractItemView, QCheckBox, QComboBox, QMenu, QSlider, QFileDialog, QFrame, QHBoxLayout, QHeaderView, QLineEdit, QProgressBar,
                                QScrollArea, QSpinBox, QTableWidget, QTableWidgetItem, QVBoxLayout, QWidget)
 
-from .. import audio, config, editor, exportar, lanzar, letras, partituras, proyectos, rutas, separacion, tareas
+from .. import audio, config, editor, equipo, exportar, lanzar, letras, partituras, proyectos, rutas, separacion, tareas
 from . import tema
 from .captura import PanelCaptura
 from .pentagrama import Pentagrama, fuente_musical
@@ -122,10 +122,21 @@ class PaginaPartituras(QWidget):
                                       ayuda="Abrir un MusicXML, MXL o MIDI existente como partitura editable")
         self.b_deshacer = tema.boton("↶", lambda: self._deshacer(), ayuda="Deshacer (Ctrl+Z)")
         self.b_rehacer = tema.boton("↷", lambda: self._deshacer(True), ayuda="Rehacer (Ctrl+Y)")
-        self.b_reproducir = tema.boton("▶ Oír", self.reproducir, ayuda="Reproducir desde la nota elegida (Espacio); la nota que suena se resalta")
+        self.b_reproducir = tema.boton("▶", self.reproducir, "primario",
+                                       "Reproducir o pausar (Espacio). La partitura y la letra siguen a la música")
+        self.b_reproducir.setFixedWidth(46)
+        self.b_detener = tema.boton("⏹", lambda: self.detener(), ayuda="Parar y volver al principio")
+        self.posicion = QSlider(Qt.Horizontal)
+        self.posicion.setMinimumWidth(140)
+        self.posicion.setToolTip("Posición: arrastra para ir a otro punto de la canción")
+        self.posicion.sliderReleased.connect(self._saltar)
+        self.posicion.sliderMoved.connect(lambda v: self.e_tiempo.setText(f"{v // 600}:{v // 10 % 60:02d}"))
+        self.e_tiempo = tema.etiqueta("0:00 / 0:00", "tenue", False)
         self.oir_que = QComboBox()
         self.oir_que.addItem("Partitura", None)
-        self.oir_que.setToolTip("Qué se oye: la partitura tal como está escrita, el audio original o la voz aislada de la canción")
+        self.oir_que.setToolTip("Qué se oye: la canción original, la voz aislada o la partitura tal como está escrita")
+        self.oir_que.activated.connect(lambda _: self._elegir_fuente())
+        self._fuente_a_mano, self._pos, self._duracion, self._reproduccion = False, 0.0, 0.0, (0.0, 0.0)
         self._seguir = QTimer(self)
         self._seguir.setInterval(40)
         self._seguir.timeout.connect(self._seguir_reproduccion)
@@ -137,8 +148,29 @@ class PaginaPartituras(QWidget):
         self.b_panel_der = tema.boton("Lista de notas", ayuda="Mostrar u ocultar la tabla con los valores exactos de cada nota")
         for b in (self.b_panel_izq, self.b_panel_der):
             b.setCheckable(True)
+        # Exportar agrupa PDF, MIDI, MusicXML, MuseScore y carpeta en un menú: la barra cabe en pantallas de 1366 px
+        def desplegable(texto, ayuda, botones, nombres):
+            """Botón con menú: cada opción pulsa uno de los botones (que conservan su estado activo o no)."""
+            boton = tema.boton(texto, ayuda=ayuda)
+            menu = QMenu(boton)
+            for b, nombre in zip(botones, nombres):
+                accion = menu.addAction(nombre)
+                accion.triggered.connect(b.click)
+                accion.setData(b)
+            menu.aboutToShow.connect(lambda: [a.setEnabled(a.data().isEnabled()) for a in menu.actions()])
+            boton.setMenu(menu)
+            return boton
+        self.b_letras = desplegable("Letra ▾", "Reconocer la letra del audio o escribirla a mano", (self.b_letra, self.b_escribir_letra),
+                                    ("Reconocer la letra del audio", "Escribir la letra a mano…"))
+        self.b_exportar = desplegable("Exportar ▾", "PDF, MIDI, MusicXML, abrir en MuseScore o ver la carpeta",
+                                      (self.b_pdf, self.b_midi, self.b_xml, self.b_musescore, self.b_carpeta),
+                                      ("PDF…", "MIDI…", "MusicXML…", "Abrir en MuseScore", "Ver la carpeta del proyecto"))
+        self.oir_que.setSizeAdjustPolicy(QComboBox.AdjustToMinimumContentsLengthWithIcon)
+        self.oir_que.setMinimumContentsLength(14)
+        self.posicion.setMinimumWidth(110)
         archivo = tema.herramientas(self.b_nueva, self.b_existente, self.b_regenerar, "|", self.b_deshacer, self.b_rehacer, "|",
-                                    self.b_reproducir, self.oir_que, self.b_letra, self.b_escribir_letra, "|", self.b_pdf, self.b_midi, self.b_xml, self.b_musescore, self.b_carpeta,
+                                    self.b_reproducir, self.b_detener, self.posicion, self.e_tiempo, self.oir_que, "|",
+                                    self.b_letras, self.b_exportar,
                                     None, self.b_panel_izq, self.b_panel_der)
 
         # -- barra de introducción de notas ---------------------------------------
@@ -204,7 +236,7 @@ class PaginaPartituras(QWidget):
         self.tabla.setSelectionBehavior(QAbstractItemView.SelectRows)
         self.tabla.setAlternatingRowColors(True)
         self.tabla.itemChanged.connect(self._celda_editada)
-        self.tabla.itemSelectionChanged.connect(lambda: (setattr(self, "_espera", 0.0), self._dibujar(), self._botones()))
+        self.tabla.itemSelectionChanged.connect(lambda: (setattr(self, "_espera", 0.0), self._desde_nota_elegida(), self._dibujar(), self._botones()))
         t3, v3 = tema.tarjeta("Lista de notas")
         v3.addWidget(tema.etiqueta("Inicio y duración en segundos. Doble clic en una celda para cambiarla.", "tenue"))
         v3.addWidget(self.tabla, 1)
@@ -307,6 +339,8 @@ class PaginaPartituras(QWidget):
         self.b_deshacer.setEnabled(hay and bool(self._hist))
         self.b_rehacer.setEnabled(hay and bool(self._rehechos))
         self.b_reproducir.setEnabled(bool(self.notas) and not grabando)
+        for w in (self.b_detener, self.posicion):
+            w.setEnabled(bool(self.notas) and not grabando)
         self.b_letra.setEnabled(hay and bool(self.notas) and audio and letras.instalado(modelo))
         self.b_escribir_letra.setEnabled(hay and bool(self.notas))
         self.b_letra.setToolTip(
@@ -444,7 +478,10 @@ class PaginaPartituras(QWidget):
             self.modelo_letra.blockSignals(True)
             self.modelo_letra.clear()
             for m in puestos:
-                self.modelo_letra.addItem(m + ("  (recomendado para canciones)" if m == "large-v3" else ""), m)
+                recomendado = letras.para_canto(m)
+                nota = ("  (recomendado en este equipo)" if m == recomendado else
+                        "  (muy lento en este equipo)" if m in ("large-v3", "medium") and equipo.modesto() else "")
+                self.modelo_letra.addItem(m + nota, m)
             self.modelo_letra.setCurrentIndex(max(0, self.modelo_letra.findData(elegido)))
             self.modelo_letra.blockSignals(False)
         m = self.modelo_letra.currentData()
@@ -1003,54 +1040,113 @@ class PaginaPartituras(QWidget):
         return fuentes
 
     def _actualizar_fuentes(self):
-        elegido = self.oir_que.currentText()
+        """Fuentes de sonido del proyecto. Mientras no elijas otra, se oye la canción (el audio original)."""
+        elegido = self.oir_que.currentText() if self._fuente_a_mano else "Audio original"
         self.oir_que.blockSignals(True)
         self.oir_que.clear()
         for nombre, ruta in self._fuentes_de_sonido():
             self.oir_que.addItem(nombre, str(ruta) if ruta else None)
         self.oir_que.setCurrentIndex(max(0, self.oir_que.findText(elegido)))
         self.oir_que.blockSignals(False)
+        self._pos, self._duracion = 0.0, max((n[1] for n in self.notas), default=0.0)
+        self._mostrar_posicion(0.0)
 
+    def _elegir_fuente(self):
+        self._fuente_a_mano = True
+        if self._sonando:             # cambiar de fuente mientras suena: sigue desde el mismo punto
+            self.reproducir()
+            self.reproducir()
+
+    # -- reproductor: ▶/⏸, ⏹, barra de posición; la partitura y la letra siguen a la música --
     def reproducir(self):
-        """Hace sonar la partitura, el audio original o la voz aislada desde la nota elegida, y resalta la
-        nota que suena en cada momento."""
+        """▶ empieza (o sigue) desde la posición actual; ⏸ pausa ahí."""
         if self._sonando:
-            return self._fin_reproduccion()
+            self._pos = self._ahora()
+            return self._parar_sonido("⏸ En pausa")
         if not self.notas:
             return
-        i = self.tabla.currentRow()
-        desde = self.notas[i][0] if i > 0 else 0.0
         ruta = self.oir_que.currentData()
+        desde = self._pos
         try:
             if ruta:
-                duracion = audio.reproducir_archivo(ruta, desde)
+                self._duracion = desde + audio.reproducir_archivo(ruta, desde)
             else:
-                audio.reproducir([[n[0] - desde, n[1] - desde, n[2], n[3]] for n in self.notas if n[0] >= desde - 1e-6])
-                duracion = max(n[1] for n in self.notas) - desde + 0.4
+                audio.reproducir([[n[0] - desde, n[1] - desde, n[2], n[3]] for n in self.notas if n[1] > desde])
+                self._duracion = max(n[1] for n in self.notas) + 0.4
         except (audio.ErrorAudio, OSError, ValueError) as e:
             return tema.error(self, "No se pudo reproducir", str(e))
-        self._sonando, self._reproduccion = True, (time.monotonic(), desde, desde + duracion)
+        self._sonando, self._reproduccion = True, (time.monotonic(), desde)
+        self.posicion.setRange(0, int(self._duracion * 10))
         self._seguir.start()
-        self.b_reproducir.setText("■ Parar")
+        self.b_reproducir.setText("⏸")
 
-    def _seguir_reproduccion(self):
-        """Cada pocos milisegundos: qué nota suena ahora; se resalta y se mantiene a la vista."""
-        inicio, desde, hasta = self._reproduccion
-        t = desde + time.monotonic() - inicio
-        if t >= hasta:
-            return self._fin_reproduccion()
-        i = next((k for k, n in enumerate(self.notas) if n[0] <= t < n[1]), -1)
-        if i >= 0 and i != self.vista.sonando:
-            self.vista.marcar_sonando(i)
-            r = self.vista.rect_de(i)
-            self.rollo.ensureVisible(r.center().x(), r.center().y(), 40, r.height() // 2 + 10)
+    def detener(self):
+        """⏹ para y vuelve al principio."""
+        if self._sonando:
+            self._parar_sonido("")
+        self._pos = 0.0
+        self.vista.poner_cursor(None)
+        self.vista.marcar_sonando(-1)
+        self._mostrar_posicion(0.0)
 
-    def _fin_reproduccion(self):
+    def _ahora(self):
+        inicio, desde = self._reproduccion
+        return desde + time.monotonic() - inicio
+
+    def _parar_sonido(self, texto):
         audio.parar_reproduccion()
         self._seguir.stop()
         self._sonando = False
-        self.vista.marcar_sonando(-1)
-        self.b_reproducir.setText("▶ Oír")
+        self.b_reproducir.setText("▶")
+        self._mostrar_posicion(self._pos)
+
+    def _mostrar_posicion(self, t):
+        reloj = lambda x: f"{int(x // 60)}:{int(x % 60):02d}"
+        self.e_tiempo.setText(f"{reloj(t)} / {reloj(self._duracion)}")
+        if not self.posicion.isSliderDown():
+            self.posicion.blockSignals(True)
+            self.posicion.setRange(0, max(1, int(self._duracion * 10)))
+            self.posicion.setValue(int(t * 10))
+            self.posicion.blockSignals(False)
+
+    def _saltar(self):
+        """Al soltar la barra de posición: se va a ese punto (y sigue sonando si sonaba)."""
+        self._pos = self.posicion.value() / 10
+        if self._sonando:
+            self._parar_sonido("")
+            self.reproducir()
+        else:
+            self._seguir_a(self._pos)
+
+    def _desde_nota_elegida(self):
+        """Elegir una nota (sin reproducir) coloca ahí el punto de partida."""
+        i = self.tabla.currentRow()
+        if not self._sonando and 0 <= i < len(self.notas):
+            self._pos = self.notas[i][0]
+            self._mostrar_posicion(self._pos)
+
+    def _seguir_reproduccion(self):
+        t = self._ahora()
+        if t >= self._duracion:
+            self._pos = 0.0
+            self._parar_sonido("")
+            self.vista.poner_cursor(None)
+            self.vista.marcar_sonando(-1)
+            return self._mostrar_posicion(0.0)
+        self._seguir_a(t)
+
+    def _seguir_a(self, t):
+        """Lleva la partitura al segundo t: línea de reproducción, nota y sílaba resaltadas, y vista que acompaña."""
+        self._mostrar_posicion(t)
+        i = next((k for k, n in enumerate(self.notas) if n[0] <= t < n[1]), -1)
+        self.vista.marcar_sonando(i)
+        lugar = self.vista.poner_cursor(t)
+        if lugar:
+            y = int(self.vista._sis_y[lugar[0]])
+            self.rollo.ensureVisible(int(lugar[1]), y, 120, int(self.vista._alto_sistema(self.vista.zoom)))
+
+    def _fin_reproduccion(self):
+        self.detener()
 
     def cerrar(self):
         self.captura.cerrar()

@@ -31,9 +31,13 @@ def instalado(nombre):
     return (carpeta_modelo(nombre) / ".completo").is_file()
 
 
-def para_canto(elegido):
-    """Modelo con el que reconocer la letra de una canción: el más preciso que haya descargado
-    (con canto, large-v3 acierta claramente más), o el elegido si no hay uno mejor."""
+def para_canto(elegido, modesto=None):
+    """Modelo con el que reconocer la letra de una canción. En un equipo potente, el más preciso que haya
+    descargado (con canto, large-v3 acierta claramente más). En uno modesto, «small»: large-v3 pide casi
+    5 GB de memoria y en 4 núcleos tarda varias veces lo que dura la canción."""
+    from . import equipo
+    if equipo.modesto() if modesto is None else modesto:
+        return "small" if instalado("small") else elegido
     return next((m for m in ("large-v3", "medium") if instalado(m)), elegido)
 
 

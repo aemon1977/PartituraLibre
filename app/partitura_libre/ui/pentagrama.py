@@ -58,6 +58,7 @@ class Pentagrama(QWidget):
         self.notas, self.sel, self.bpm, self.clave, self.nombres, self.letra = [], -1, 120, "sol", True, []
         self.armadura, self.tonalidad = 0, "Do mayor"
         self.sonando = -1    # índice de la nota que suena al reproducir (-1: ninguna)
+        self.cursor = None   # segundo por el que va la reproducción: se dibuja una línea que avanza
         self.titulo, self.zoom, self.insertar = "", 1.0, False
         self.sistemas = []   # cada sistema: lista de piezas {'col': índices de notas (vacío = silencio), 'x', 'barra', 'ancho', 'compas', 'silencio'}
         self._sis_y = []     # y de la línea inferior de cada sistema
@@ -113,7 +114,7 @@ class Pentagrama(QWidget):
             inicio = partituras.pulso(self.notas[col[0]][0], self.bpm)
             hueco = fin_previo
             for fig in partituras.silencios(inicio - fin_previo):       # el silencio entre dos notas
-                piezas.append({"col": [], "ancho": 34 * z, "compas": int(hueco // 4), "silencio": fig})
+                piezas.append({"col": [], "ancho": 34 * z, "compas": int(hueco // 4), "silencio": fig, "t": hueco * 60 / self.bpm})
                 hueco += partituras.NEGRAS[fig]
             final = max(max(partituras.pulso(self.notas[i][1], self.bpm) for i in col), inicio + 0.25)
             ancho = max(46 * z, medir.horizontalAdvance(self._cantado(col)) + 16 * z)
@@ -123,7 +124,8 @@ class Pentagrama(QWidget):
             for k, t in enumerate(tramos):
                 fin_tramo = tramos[k + 1] if k + 1 < len(tramos) else final
                 piezas.append({"col": col, "ancho": ancho if k == 0 else 46 * z, "compas": int(t // 4), "silencio": None,
-                               "negras": fin_tramo - t if len(tramos) > 1 else None, "ligada": k > 0})
+                               "negras": fin_tramo - t if len(tramos) > 1 else None, "ligada": k > 0,
+                               "t": self.notas[col[0]][0] if k == 0 else t * 60 / self.bpm})   # segundo en que suena
             fin_previo = max(fin_previo, final)
 
         sistemas, actual, corte, previo = [], [], 0, None
@@ -179,6 +181,32 @@ class Pentagrama(QWidget):
                 if i >= 0:
                     self.repintar_nota(i)
 
+    def lugar_de(self, t):
+        """(n.º de sistema, x) del instante t en la hoja, interpolando entre las notas y silencios que lo rodean."""
+        anterior = None
+        for s, piezas in enumerate(self.sistemas):
+            for p in piezas:
+                if p["t"] > t:
+                    if anterior is None:
+                        return s, p["x"]
+                    s0, p0 = anterior
+                    fin_x = p["x"] if s0 == s else p0["x"] + p0["ancho"]
+                    fraccion = (t - p0["t"]) / max(p["t"] - p0["t"], 1e-6)
+                    return s0, p0["x"] + (fin_x - p0["x"]) * min(1.0, fraccion)
+                anterior = (s, p)
+        return (anterior[0], anterior[1]["x"] + anterior[1]["ancho"]) if anterior else None
+
+    def poner_cursor(self, t):
+        """Lleva la línea de reproducción al segundo t (None la quita). Solo se repinta lo que cambia."""
+        for lugar in (self.lugar_de(self.cursor) if self.cursor is not None else None, None):
+            if lugar:
+                self.update(self._banda(lugar[0]).toAlignedRect())
+        self.cursor = t
+        lugar = self.lugar_de(t) if t is not None else None
+        if lugar:
+            self.update(self._banda(lugar[0]).toAlignedRect())
+        return lugar
+
     def repintar_nota(self, indice):
         """Redibuja solo el sistema de esa nota: lo único que cambia al arrastrarla."""
         for s, piezas in enumerate(self.sistemas):
@@ -204,6 +232,11 @@ class Pentagrama(QWidget):
         visibles = [s for s in range(len(self.sistemas)) if self._banda(s).intersects(QRectF(ev.rect()))]   # solo lo que se ve
         self._pintar(g, self._papel, [self.sistemas[s] for s in visibles], [self._sis_y[s] for s in visibles], self.zoom,
                      True, visibles, len(self.sistemas), True, self.sel)
+        lugar = self.lugar_de(self.cursor) if self.cursor is not None and self.sistemas else None
+        if lugar:   # la línea de reproducción, de arriba abajo del pentagrama
+            e, base = ESP * self.zoom, self._sis_y[lugar[0]]
+            g.setPen(QPen(QColor(SONANDO), max(2.0, 2.4 * self.zoom)))
+            g.drawLine(QPointF(lugar[1], base - 11 * e / 2 - 8 * e / 2), QPointF(lugar[1], base + 3 * e))
 
     def _pintar(self, g, papel, sistemas, bases, z, cabecera, numeros, total, pantalla, sel):
         """Dibuja en `papel` los `sistemas` dados; `numeros` es el n.º de orden de cada uno dentro de un total de `total`."""
@@ -278,8 +311,10 @@ class Pentagrama(QWidget):
                     continue
                 cantado = "" if p.get("ligada") else self._cantado(col)   # el tramo ligado no repite la sílaba
                 if cantado:   # la letra, bajo el pentagrama y empezando en su nota; los nombres bajan una línea
+                    canta_ya = pantalla and self.sonando in col          # la sílaba que se está cantando, resaltada
+                    f_letra.setBold(canta_ya)
                     g.setFont(f_letra)
-                    g.setPen(QColor(TINTA))
+                    g.setPen(QColor(SONANDO if canta_ya else TINTA))
                     g.drawText(QPointF(x - 2, base + TEXTO_Y * e + 13 * z), cantado)
                 for k, i in enumerate(col):
                     ini, final, tono, _v = self.notas[i]

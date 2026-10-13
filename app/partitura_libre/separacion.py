@@ -32,7 +32,12 @@ def separar(x, progreso=None, modelo=None):
     import numpy as np
     import onnxruntime as ort
 
-    sesion = ort.InferenceSession(str(modelo or ARCHIVO), providers=["CPUExecutionProvider"])
+    from . import equipo
+    opciones = ort.SessionOptions()
+    opciones.intra_op_num_threads = equipo.hilos_de_calculo()   # un núcleo libre para la ventana
+    opciones.enable_cpu_mem_arena = False   # sin reserva anticipada: 1,6 GB en vez de 2,9 GB, igual de rápido
+    opciones.enable_mem_pattern = False
+    sesion = ort.InferenceSession(str(modelo or ARCHIVO), opciones, providers=["CPUExecutionProvider"])
     entrada = sesion.get_inputs()[0]
     _, _, dim_f, dim_t = entrada.shape
     n_fft, salto = {2048: 6144, 3072: 7680}[dim_f], 1024

@@ -354,3 +354,34 @@ class Dispositivos(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class EquipoModesto(unittest.TestCase):
+    def test_que_cuenta_como_equipo_modesto(self):
+        from partitura_libre import equipo
+        self.assertTrue(equipo.modesto(4, 16))      # Ryzen 3 de 4 hilos
+        self.assertTrue(equipo.modesto(8, 8))       # poca memoria
+        self.assertFalse(equipo.modesto(12, 16))
+        self.assertFalse(equipo.modesto(8, 0))      # memoria desconocida: decide el procesador
+        self.assertGreaterEqual(equipo.hilos_de_calculo(), 1)
+        self.assertLess(equipo.hilos_de_calculo(), max(2, equipo.nucleos() + 1))
+
+    def test_en_un_equipo_modesto_la_letra_de_una_cancion_usa_small(self):
+        from partitura_libre import letras
+        if not letras.instalado("small"):
+            self.skipTest("modelo small no descargado")
+        self.assertEqual(letras.para_canto("tiny", modesto=True), "small")
+        if letras.instalado("large-v3"):
+            self.assertEqual(letras.para_canto("small", modesto=False), "large-v3")
+
+    @unittest.skipIf(audio.rutas.WINDOWS, "en Windows se usa la clase de prioridad «por debajo de lo normal»")
+    def test_los_analisis_ceden_el_procesador_a_la_ventana(self):
+        import os
+        from partitura_libre import tareas
+        t = tareas.Tarea("timeit", ["-n", "1", "import time; time.sleep(3)"])
+        try:
+            time.sleep(0.3)
+            self.assertEqual(os.getpriority(os.PRIO_PROCESS, t.p.pid), os.getpriority(os.PRIO_PROCESS, 0) + 10)
+        finally:
+            t.cancelar()
+

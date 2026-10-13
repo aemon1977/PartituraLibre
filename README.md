@@ -87,9 +87,11 @@ Con el ratón: clic elige una nota, arrastrarla arriba o abajo cambia su altura 
 
 **Tonalidad y ritmo.** La tonalidad se detecta sola y se escribe su armadura; las notas se nombran según ella (Si♭ en Fa mayor, no La♯) y las alteraciones valen hasta el final del compás, con becuadro cuando hace falta. Puedes fijarla a mano en la barra inferior. Una nota que cruza la barra de compás se escribe ligada. Si el tempo detectado no encaja, pulsa *Marcar pulso* al ritmo de la canción (4 veces o más) y se fija solo.
 
-**Oír.** Junto a *▶ Oír* eliges qué suena: la partitura tal como está escrita, el **audio original** o la **voz aislada**. Suena desde la nota elegida y la nota que está sonando se resalta en naranja, así es fácil comparar y corregir.
+**Reproductor.** Arriba: ▶/⏸ (también Espacio), ⏹, una barra para ir a cualquier punto y el tiempo. Por defecto suena la **canción original**; también puedes oír la **voz aislada** o la partitura tal como está escrita. Mientras suena, una **línea naranja avanza sobre la partitura** y se resaltan la nota y **la sílaba** que se están cantando. Si eliges una nota, empieza desde ahí.
 
 Los análisis largos muestran cuánto tiempo queda.
+
+**Equipos modestos** (4 hilos o menos, o menos de 12 GB de memoria, como un mini PC con Ryzen 3): la letra de las canciones se reconoce con `small` y un solo candidato, y los análisis van con prioridad baja dejando un núcleo libre para que la ventana no se trabe. Medido con 4 hilos: un minuto de canción tarda ≈ 1 min 45 s en total (separar la voz, reconocer la letra y sacar las notas) y usa ≈ 1,8 GB de memoria.
 
 Guardar y exportar: *Guardar versión* crea MIDI y MusicXML nuevos con tus cambios, sin pisar los anteriores. *PDF…* escribe en A4 la partitura tal como la ves, con clave, nombres y letra. MuseScore es opcional: si lo tienes, aparece un botón para abrir en él el MusicXML guardado.
 
