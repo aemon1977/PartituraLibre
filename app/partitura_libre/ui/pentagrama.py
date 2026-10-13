@@ -10,7 +10,6 @@ from PySide6.QtWidgets import QToolTip, QWidget
 from .. import partituras
 
 ESP = 10            # píxeles entre dos líneas del pentagrama con el zoom al 100 %
-TEXTO_Y = 6.0       # espacios bajo la línea inferior donde empieza el texto (deja sitio a las notas graves)
 NOMBRE = "#1d5fa8"   # color de los nombres de nota (la letra va en negro)
 SONANDO = "#d9822b"  # nota que está sonando al reproducir
 MESA, PAPEL, TINTA, ELEGIDA, TENUE = "#2f3948", "#fdfcf7", "#1b2433", "#0f9d8f", "#7a8494"
@@ -295,6 +294,11 @@ class Pentagrama(QWidget):
                 g.setPen(QColor(TENUE))
                 g.drawText(QPointF(izq + 2, y(8) - 6 * z), str(piezas[0]["compas"] + 1))   # n.º de compás
 
+            # la letra va justo bajo lo más bajo del sistema (cabezas o plicas hacia abajo), como en MuseScore,
+            # y no a una distancia fija: si no, parece la letra del sistema siguiente
+            graves = [partituras.posicion(self.notas[i][2], self.clave, self.armadura)[0]
+                      for p in piezas if not p["silencio"] for i in p["col"]]
+            texto_y = (max([1.4] + [0.5 - max(-10, q) / 2 for q in graves]) + 1.0) * e
             compas_actual, estado = None, {}
             for p in piezas:
                 x, col = p["x"], p["col"]
@@ -315,7 +319,7 @@ class Pentagrama(QWidget):
                     f_letra.setBold(canta_ya)
                     g.setFont(f_letra)
                     g.setPen(QColor(SONANDO if canta_ya else TINTA))
-                    g.drawText(QPointF(x - 2, base + TEXTO_Y * e + 13 * z), cantado)
+                    g.drawText(QPointF(x - 2, base + texto_y + 13 * z), cantado)
                 for k, i in enumerate(col):
                     ini, final, tono, _v = self.notas[i]
                     pos, _ = partituras.posicion(tono, self.clave, self.armadura)
@@ -360,7 +364,7 @@ class Pentagrama(QWidget):
                     if self.nombres and k < 2 and not p.get("ligada"):              # nombres bajo el pentagrama; en acordes, del grave al agudo
                         g.setFont(f_nombre)
                         g.setPen(color if i == sel else QColor(NOMBRE))   # azul: nunca se confunde con la letra
-                        g.drawText(QRectF(x - 20 * z, base + TEXTO_Y * e + (19 * z if hay_letra else 0) + 14 * z * k, ancho + 40 * z, 16 * z),
+                        g.drawText(QRectF(x - 20 * z, base + texto_y + (19 * z if hay_letra else 0) + 14 * z * k, ancho + 40 * z, 16 * z),
                                    Qt.AlignCenter, partituras.solfeo(tono, self.armadura))
         if not self.notas and cabecera and pantalla and bases:
             g.setFont(self._fuente(13, z))
