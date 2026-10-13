@@ -129,14 +129,16 @@ class PaginaPartituras(QWidget):
         self._seguir = QTimer(self)
         self._seguir.setInterval(40)
         self._seguir.timeout.connect(self._seguir_reproduccion)
-        self.b_letra = tema.boton("Letra", self.poner_letra)
+        self.b_letra = tema.boton("Reconocer letra", self.poner_letra)
+        self.b_escribir_letra = tema.boton("Escribir letra…", self.escribir_letra,
+                                           ayuda="Escribe o pega la letra completa: se reparte en sílabas, una por nota")
         self.b_carpeta = tema.boton("Carpeta", lambda: tema.abrir_en_sistema(self.proyecto), ayuda="Ver la carpeta del proyecto")
         self.b_panel_izq = tema.boton("Grabación", ayuda="Mostrar u ocultar el panel de grabación y análisis")
         self.b_panel_der = tema.boton("Lista de notas", ayuda="Mostrar u ocultar la tabla con los valores exactos de cada nota")
         for b in (self.b_panel_izq, self.b_panel_der):
             b.setCheckable(True)
         archivo = tema.herramientas(self.b_nueva, self.b_existente, self.b_regenerar, "|", self.b_deshacer, self.b_rehacer, "|",
-                                    self.b_reproducir, self.oir_que, self.b_letra, "|", self.b_pdf, self.b_midi, self.b_xml, self.b_musescore, self.b_carpeta,
+                                    self.b_reproducir, self.oir_que, self.b_letra, self.b_escribir_letra, "|", self.b_pdf, self.b_midi, self.b_xml, self.b_musescore, self.b_carpeta,
                                     None, self.b_panel_izq, self.b_panel_der)
 
         # -- barra de introducción de notas ---------------------------------------
@@ -306,6 +308,7 @@ class PaginaPartituras(QWidget):
         self.b_rehacer.setEnabled(hay and bool(self._rehechos))
         self.b_reproducir.setEnabled(bool(self.notas) and not grabando)
         self.b_letra.setEnabled(hay and bool(self.notas) and audio and letras.instalado(modelo))
+        self.b_escribir_letra.setEnabled(hay and bool(self.notas))
         self.b_letra.setToolTip(
             "Reconoce la voz del audio de este proyecto y escribe cada palabra bajo su nota, sin volver a detectar las notas"
             if letras.instalado(modelo) else f"Primero descarga el modelo de voz «{modelo}» en la sección Letras")
@@ -495,6 +498,41 @@ class PaginaPartituras(QWidget):
                 self.e_estado.setText(aviso or "No se reconoció ninguna palabra en el audio.")
             self._botones()
         self._reconocer_letra(colocar, "")
+
+    def escribir_letra(self):
+        """Letra escrita a mano: se reparte en sílabas, una por nota, sin tocar las notas."""
+        from PySide6.QtWidgets import QDialog, QPlainTextEdit, QRadioButton
+        d = QDialog(self)
+        d.setWindowTitle("Escribir la letra")
+        d.setMinimumSize(560, 420)
+        v = QVBoxLayout(d)
+        v.setContentsMargins(20, 18, 20, 16)
+        v.addWidget(tema.etiqueta("<b>Escribe o pega la letra</b>"))
+        v.addWidget(tema.etiqueta("Se divide sola en sílabas y se pone una bajo cada nota, en orden. Si una palabra se canta "
+                                  "con otra división, escríbela con guiones (por ejemplo «be-be-ré»). Las notas no cambian.", "tenue"))
+        texto = QPlainTextEdit(partituras.juntar([t for t in self.letra if t]))
+        v.addWidget(texto, 1)
+        fila = self.tabla.currentRow()
+        desde_primera = QRadioButton("Desde la primera nota (sustituye toda la letra)")
+        desde_elegida = QRadioButton(f"Desde la nota elegida (n.º {fila + 1})" if fila >= 0 else "Desde la nota elegida")
+        desde_primera.setChecked(fila <= 0)
+        desde_elegida.setChecked(fila > 0)
+        desde_elegida.setEnabled(fila >= 0)
+        v.addWidget(desde_primera)
+        v.addWidget(desde_elegida)
+        aceptar = tema.boton("Poner bajo las notas", d.accept, "primario")
+        v.addLayout(tema.fila(None, tema.boton("Cancelar", d.reject), aceptar))
+        if d.exec() != QDialog.Accepted:
+            return
+        desde = fila if desde_elegida.isChecked() and fila >= 0 else 0
+        asignadas, sobran = partituras.repartir_texto(texto.toPlainText(), len(self.notas), desde)
+        self._recordar()
+        self.letra = (self.letra[:desde] if desde else []) + asignadas
+        self.letra += [""] * (len(self.notas) - len(self.letra))
+        self._poner_notas(self.notas, self.bpm, desde)
+        self.e_estado.setText(f"Letra puesta bajo {len(asignadas)} nota(s)"
+                              + (f"; sobraban {sobran} sílaba(s), escritas juntas en la última." if sobran else ".")
+                              + " Pulsa «Guardar versión» para guardarla en el MusicXML.")
 
     def _reconocer_letra(self, al_acabar, paso, guardar_voz=None):
         """Voz a texto con el tiempo de cada palabra, para colocar cada una bajo su nota. Al terminar llama a

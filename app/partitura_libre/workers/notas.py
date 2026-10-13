@@ -88,29 +88,6 @@ def en_vivo():
     return 0
 
 
-def afinacion(audio):
-    """Sigue la altura de una voz aislada (pYIN) y devuelve `tono_en(a, b)`: la nota que se canta entre
-    a y b segundos, o None si en ese tramo casi no hay voz con afinación clara."""
-    try:
-        import librosa
-        import numpy as np
-        y, sr = librosa.load(str(audio), sr=16000, mono=True)
-        salto = 256
-        f0, sonora, _prob = librosa.pyin(y, fmin=65, fmax=1050, sr=sr, frame_length=1024, hop_length=salto)
-    except Exception as e:   # sin afinación no se crean notas nuevas: se sigue con las detectadas
-        print("No se pudo seguir la afinación de la voz:", e)
-        return None
-    por_trama = salto / sr
-
-    def tono_en(a, b):
-        tramo = f0[int(a / por_trama):max(int(a / por_trama) + 1, int(b / por_trama))]
-        validas = tramo[~np.isnan(tramo)]
-        if len(validas) < 0.3 * max(len(tramo), 1):
-            return None
-        return int(round(float(librosa.hz_to_midi(np.median(validas)))))
-    return tono_en
-
-
 def importar(ruta):
     """Lee una partitura existente (MusicXML, MXL o MIDI) y la convierte en notas editables:
     (notas, bpm, letra). Las notas ligadas se unen en una sola."""
@@ -174,6 +151,7 @@ def escribir(notas, bpm, carpeta, nombre, titulo, clave="", nombres=False, letra
     # interpretación real son casi siempre ruido y además hacen que MuseScore 4.7 se cierre al abrirlos.
     partitura = converter.parse(str(p_mid), format="midi", quarterLengthDivisors=(4,))
     partitura.metadata = metadata.Metadata(title=titulo, composer="Transcripción automática · Partitura Libre")
+    clave = clave or partituras.clave_adecuada(notas)   # automática: la misma que elige el editor
     elegida = {"sol": clef.TrebleClef, "fa": clef.BassClef, "do3": clef.AltoClef, "do4": clef.TenorClef}.get(clave)
     for parte in partitura.parts:
         if elegida:
@@ -232,8 +210,7 @@ def main():
             notas, bpm = detectar(o["audio"], o.get("trozo_s", TROZO_S), VOZ if o.get("melodia") else None)
             bpm = o.get("bpm") or bpm
             if o.get("melodia"):   # voz aislada: una sola línea, como se canta, y una sílaba por nota
-                emitir("progreso", v=0.9, msg="Siguiendo la afinación de la voz")
-                notas, letra = partituras.letra_cantada(partituras.melodia(notas), o.get("palabras") or [], afinacion(o["audio"]))
+                notas, letra = partituras.letra_cantada(partituras.melodia(notas), o.get("palabras") or [])
             else:
                 letra = partituras.asignar_letra(notas, o.get("palabras") or [])
             if not notas:

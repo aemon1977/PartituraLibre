@@ -467,6 +467,35 @@ class Interfaz(Aislada):
         finally:
             audio.reproducir_archivo, audio.parar_reproduccion, _t.monotonic = originales
 
+    def test_escribir_la_letra_a_mano_de_una_vez(self):
+        from PySide6.QtWidgets import QDialog, QPlainTextEdit, QRadioButton
+        p = self.v.partituras
+        p.nueva()
+        p._poner_notas([[i * 0.5, i * 0.5 + 0.5, 60 + i, .7] for i in range(6)], 120)
+        notas = [list(n) for n in p.notas]
+        original = QDialog.exec
+
+        def responder(texto, desde_elegida=False):
+            def exec_(dialogo):
+                dialogo.findChild(QPlainTextEdit).setPlainText(texto)
+                dialogo.findChildren(QRadioButton)[1 if desde_elegida else 0].setChecked(True)
+                return QDialog.Accepted
+            return exec_
+        try:
+            QDialog.exec = responder("Can-ta-re so-la-men-te")             # 7 sílabas para 6 notas
+            p.escribir_letra()
+            self.assertEqual(p.letra, ["Can-", "ta-", "re", "so-", "la-", "mente"])   # la que sobra, junto a la última
+            self.assertEqual(p.notas, notas)                              # las notas no cambian
+            self.assertIn("sobraban 1", p.e_estado.text())
+            p.tabla.selectRow(3)
+            QDialog.exec = responder("mar", desde_elegida=True)
+            p.escribir_letra()
+            self.assertEqual(p.letra, ["Can-", "ta-", "re", "mar", "", ""])
+            p._atajo("deshacer")
+            self.assertEqual(p.letra, ["Can-", "ta-", "re", "so-", "la-", "mente"])
+        finally:
+            QDialog.exec = original
+
     def test_fallo_del_analisis_se_explica_y_conserva_el_audio(self):
         p = self.v.partituras
         d = proyectos.crear("rota", "partitura")

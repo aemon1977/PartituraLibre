@@ -1,6 +1,6 @@
 # Informe de pruebas
 
-Fecha: 8 de octubre de 2026 · Versión 1.6.0
+Fecha: 8 de octubre de 2026 · Versión 1.7.0
 Equipo de pruebas: Debian 13 (trixie) x86_64 real, sesión Wayland con PipeWire, 24 hilos, 31 GB de RAM.
 **No se ha dispuesto de un Windows 11 ni de un Ubuntu 24.04.** Lo que no se pudo ejecutar se indica como tal.
 
@@ -117,6 +117,13 @@ Con la última toma de letra (pico del 13 %, señal apenas 3 dB sobre el ruido d
 ### «Sonido del equipo» elegía la salida equivocada (caso real) — corregido
 
 La lista ofrecía una entrada por cada salida de audio, y la del micrófono inalámbrico (que también tiene salida de auriculares) se confundía con el propio micrófono: al elegirla el nivel era 0 %. Ahora hay una única entrada que, al empezar, localiza la salida por la que está sonando algo (o la predeterminada si no suena nada), avisa antes de grabar si nada se está reproduciendo y da mensajes propios en vez de «acerca el micrófono». Verificado que se conecta a la salida correcta; **no ejecutable aquí** con música real, porque no sonaba nada durante la prueba.
+
+### La partitura manda sobre la letra; clave Sol/Fa/Do; letra a mano (1.7)
+
+- La letra ya no divide, crea ni quita notas: se adapta a las detectadas (pruebas: notas idénticas antes y después, palabras que comparten una nota que sigue sonando, ninguna palabra perdida, nunca retrocede).
+- Clave automática entre Sol, Fa, Do en 3.ª y Do en 4.ª según las líneas adicionales: violín en Sol, contrabajo en Fa, Re3–Re4 en Fa, viola (Mi3–La4) en Do en 3.ª.
+- «Escribir letra…»: reparte en sílabas un texto escrito o pegado, desde la primera nota o desde la elegida, respetando la división con guiones; se deshace con Ctrl+Z (prueba en la ventana real).
+- Con «Barcelona ciudad» (60 s): 60 notas intactas y 26 con letra; vuelven a verse notas sueltas en la introducción, que antes se borraban por estar lejos de la letra.
 
 ### Windows real en GitHub y paquetes autónomos (1.5)
 

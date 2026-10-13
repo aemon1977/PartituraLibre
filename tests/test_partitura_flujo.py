@@ -72,10 +72,9 @@ class Flujo(Aislada):
         self.assertEqual(codigo, 0, eventos)
         _, notas = partituras.leer_notas(self.dir / eventos[-1]["notas"])
         letra = partituras.leer_letra(self.dir / eventos[-1]["notas"])
-        self.assertEqual([t for t in letra if t], ["no", "be", "re", "sí", "ya"])          # cada palabra, en su nota
-        self.assertFalse(any(" " in t for t in letra))
+        self.assertEqual([t for t in letra if t], ["no be re", "sí", "ya"])   # la partitura manda: el Sol largo no se divide
         self.assertEqual(sum(1 for a, b in zip(notas, notas[1:]) if b[0] < a[1] - 1e-3), 0)   # una sola línea
-        self.assertEqual([n[2] for n, t in zip(notas, letra) if t], [67, 67, 67, 69, 71])
+        self.assertEqual([n[2] for n, t in zip(notas, letra) if t], [67, 69, 71])
 
     def test_la_clave_elegida_y_los_nombres_de_nota_llegan_al_musicxml(self):
         wav = escribir_wav(self.dir / "escala.wav", [(m, 0.5) for m in ESCALA])
@@ -270,6 +269,14 @@ class Notacion(unittest.TestCase):
         self.assertEqual(partituras.tono_cercano("G", 60), 55)     # Sol más cercano al Do4: el de abajo (una cuarta), no el de arriba (una quinta)
         self.assertEqual(partituras.tono_cercano("c", 61), 60)
 
+    def test_clave_automatica_entre_sol_fa_y_do(self):
+        clave = lambda tonos: partituras.clave_adecuada([[i, i + 0.5, t, .7] for i, t in enumerate(tonos)])
+        self.assertEqual(clave([67, 72, 76, 79, 84]), "sol")             # violín, flauta, voz de soprano
+        self.assertEqual(clave([40, 43, 45, 48, 50]), "fa")              # contrabajo, voz de bajo
+        self.assertEqual(clave([50, 52, 55, 57, 60, 62]), "fa")         # Re3–Re4: Fa, con solo una línea adicional
+        self.assertEqual(clave([52, 55, 57, 60, 64, 67, 69]), "do3")    # Mi3–La4 (viola): ni Sol ni Fa caben; Do en 3.ª
+        self.assertEqual(clave([]), "sol")
+
     def test_nombres_figuras_acordes_y_clave_automatica(self):
         self.assertEqual([partituras.solfeo(m) for m in (60, 62, 64, 65, 67, 69, 71, 73)], ["Do", "Re", "Mi", "Fa", "Sol", "La", "Si", "Do♯"])
         self.assertEqual([partituras.figura(s, 120) for s in (2.0, 1.0, 0.5, 0.25, 0.12)], ["redonda", "blanca", "negra", "corchea", "semicorchea"])
@@ -291,60 +298,46 @@ class MelodiaCantada(unittest.TestCase):
         self.assertEqual(partituras.melodia([[0.0, 0.5, 60, 0.7], [1.0, 1.5, 62, 0.7]]),          # un silencio de verdad se respeta
                          [[0.0, 0.5, 60, 0.7], [1.0, 1.5, 62, 0.7]])
 
-    def test_una_silaba_por_nota_en_una_cancion(self):
+    def test_la_partitura_manda_las_notas_no_cambian(self):
         notas = [[0.0, 1.5, 67, 0.7], [1.5, 2.0, 69, 0.7], [2.0, 2.4, 71, 0.7], [5.0, 5.5, 72, 0.7]]
-        # «no» y «beré» en un Sol largo (se parte donde empieza «beré» y otra vez para sus dos sílabas);
-        # «la» y «to» en el La (se parte donde empieza «to»); «mas» en el Si; «hola», lejos de toda nota, fuera;
-        # el Do, lejos de toda letra cantada, es un resto de los instrumentos y se quita
+        # «beré» se canta mientras sigue el Sol de «no»: lo comparten. Igual «la» y «to» en el La.
+        # «hola» no suena con ninguna nota: se añade a la sílaba anterior para no perderla.
         palabras = [[0.0, 0.3, "no"], [1.0, 1.3, "beré"], [1.55, 1.7, "la"], [1.7, 1.9, "to"], [2.05, 2.3, "mas"], [8.0, 8.3, "hola"]]
         notas2, letra = partituras.letra_cantada(notas, palabras)
-        self.assertEqual(letra, ["no", "be-", "ré", "la", "to", "mas"])
-        self.assertEqual([n[2] for n in notas2], [67, 67, 67, 69, 69, 71])
-        self.assertEqual([n[0] for n in notas2], [0.0, 1.0, 1.25, 1.5, 1.7, 2.0])
+        self.assertEqual(notas2, notas)                                  # ni divididas, ni creadas, ni quitadas
+        self.assertEqual(letra, ["no beré", "la to", "mas hola", ""])
         self.assertEqual(partituras.letra_cantada(notas, []), (notas, ["", "", "", ""]))
         self.assertEqual(partituras.letra_cantada([], palabras), ([], []))
 
     def test_las_silabas_ocupan_las_notas_que_suenan_y_las_libres_que_siguen(self):
         notas = [[0, 0.4, 60, .7], [0.4, 0.6, 62, .7], [0.6, 0.8, 64, .7], [0.8, 1.0, 65, .7], [3, 3.2, 67, .7]]
         self.assertEqual(partituras.letra_cantada(notas, [[0, 0.3, "todavía"], [3, 3.1, "me"]])[1], ["to-", "da-", "ví-", "a", "me"])
-        corta = [[0, 0.3, 60, .7], [0.3, 0.5, 62, .7]]           # sin sitio para todas las sílabas: la palabra va entera
+        corta = [[0, 0.3, 60, .7], [0.3, 0.5, 62, .7]]           # sin sitio para todas las sílabas: van juntas
         self.assertEqual(partituras.letra_cantada(corta, [[0, 0.2, "tomaste"], [0.3, 0.4, "sin"]])[1], ["tomaste", "sin"])
-
-    def test_una_nota_larga_se_divide_entre_las_silabas_de_su_palabra(self):
-        notas, letra = partituras.letra_cantada([[0.0, 1.2, 64, 0.7]], [[0.0, 1.2, "ciudad"]])
-        self.assertEqual((letra, [n[0] for n in notas]), (["ciu-", "dad"], [0.0, 0.6]))
 
     def test_notas_de_sobra_en_una_palabra_quedan_sin_texto_melisma(self):
         notas = [[0.0, 0.3, 60, .7], [0.3, 0.6, 62, .7], [0.6, 0.9, 64, .7]]
         self.assertEqual(partituras.letra_cantada(notas, [[0.0, 0.9, "sol"]])[1], ["sol", "", ""])
 
-    def test_las_silabas_sin_nota_detectada_reciben_una_con_la_altura_cantada(self):
-        notas = [[0.0, 0.4, 60, .7]]                              # el detector solo encontró la primera
-        cantado = lambda a, b: 64 if a >= 0.4 else 60              # la voz canta Mi después
-        notas2, letra = partituras.letra_cantada(notas, [[0.0, 0.4, "tu"], [0.4, 1.6, "oportunidad"]], cantado)
-        self.assertEqual(letra, ["tu", "o-", "por-", "tu-", "ni-", "dad"])
-        self.assertEqual([n[2] for n in notas2], [60, 64, 64, 64, 64, 64])
-        self.assertEqual(notas2[-1][1], 1.6)
-        sin_voz = lambda a, b: None                                # donde no hay voz no se inventa nada
-        self.assertEqual(partituras.letra_cantada(notas, [[0.0, 0.4, "tu"], [0.4, 1.6, "oportunidad"]], sin_voz)[1], ["tu"])
-
-    def test_la_letra_nunca_retrocede(self):
+    def test_la_letra_nunca_retrocede_ni_se_pierde(self):
         notas = [[0.0, 0.4, 60, .7], [0.5, 0.9, 62, .7], [1.0, 1.4, 64, .7], [1.5, 1.9, 65, .7]]
-        # «per» y «dió» ocupan las dos primeras; «juventud» no suena a la vez que ninguna libre: sigue adelante, no atrás
         _, letra = partituras.letra_cantada(notas, [[0.0, 0.4, "se"], [0.5, 0.9, "perdió"], [0.6, 0.8, "juventud"]])
-        texto = [t for t in letra if t]
-        self.assertEqual(texto[:2], ["se", "per-"])
-        self.assertTrue(" ".join(texto).replace("- ", "").startswith("se perdió"), letra)
+        self.assertEqual(letra, ["se", "perdió juventud", "", ""])
 
-    def test_en_una_nota_corta_ya_cogida_la_palabra_sigue_en_la_siguiente(self):
-        notas = [[3.86, 4.22, 54, 0.6], [4.23, 4.45, 55, 0.4], [4.59, 5.0, 54, 0.6]]   # caso real: «no beberé y»
+    def test_caso_real_no_bebere(self):
+        notas = [[3.86, 4.22, 54, 0.6], [4.23, 4.45, 55, 0.4], [4.59, 5.0, 54, 0.6]]
         notas2, letra = partituras.letra_cantada(notas, [[3.86, 4.0, "no"], [4.0, 4.3, "beberé"], [4.6, 4.8, "y"]])
-        self.assertEqual(letra, ["no", "be-", "beré", "y"])   # «be-beré»: la sílaba que no cabe va junto a la última
-        self.assertEqual([n[2] for n in notas2], [54, 54, 55, 54])
+        self.assertEqual((notas2, letra), (notas, ["no", "beberé", "y"]))
 
-    def test_la_palabra_que_empieza_en_el_borde_va_a_la_nota_que_empieza(self):
-        notas = [[0.0, 0.5, 60, 0.7], [0.5, 1.0, 62, 0.7]]
-        self.assertEqual(partituras.letra_cantada(notas, [[0.0, 0.3, "a"], [0.5, 0.8, "b"]])[1], ["a", "b"])
+
+class LetraEscritaAMano(unittest.TestCase):
+    def test_se_reparte_en_silabas_una_por_nota(self):
+        self.assertEqual(partituras.unidades("¿Cuántas veces dijiste?"), ["¿Cuán-", "tas", "ve-", "ces", "di-", "jis-", "te?"])
+        self.assertEqual(partituras.unidades("no be-be-ré"), ["no", "be-", "be-", "ré"])      # la división escrita manda
+        self.assertEqual(partituras.repartir_texto("can-ta-re sol", 6), (["can-", "ta-", "re", "sol"], 0))
+        self.assertEqual(partituras.repartir_texto("a la mar", 5, desde=3), (["a", "la mar"], 1))   # sobran: juntas en la última
+        self.assertEqual(partituras.repartir_texto("hola", 3, desde=3), ([], 2))
+        self.assertEqual(partituras.juntar(["be-", "be-", "ré", "sí"]), "beberé sí")
 
 
 class LetraBajoLasNotas(unittest.TestCase):
