@@ -89,6 +89,8 @@ Con el ratón: clic elige una nota, arrastrarla arriba o abajo cambia su altura 
 
 **Reproductor.** Arriba: ▶/⏸ (también Espacio), ⏹, una barra para ir a cualquier punto y el tiempo. Por defecto suena la **canción original**; también puedes oír la **voz aislada** o la partitura tal como está escrita. Mientras suena, una **línea naranja avanza sobre la partitura** y se resaltan la nota y **la sílaba** que se están cantando. Si eliges una nota, empieza desde ahí.
 
+**Acordes.** Al convertir una canción se reconocen sus acordes (mayores y menores, con preferencia por los de la tonalidad) y se escriben encima del pentagrama, como en un cancionero: Do, Lam, Fa♯m… Se guardan con la partitura, no se pierden al editar y van al MusicXML (MuseScore los muestra como cifrado). Las partituras hechas antes de la versión 1.9 no los tienen: vuelve a convertir la canción.
+
 Los análisis largos muestran cuánto tiempo queda.
 
 **Equipos modestos** (4 hilos o menos, o menos de 12 GB de memoria, como un mini PC con Ryzen 3): la letra de las canciones se reconoce con `small` y un solo candidato, y los análisis van con prioridad baja dejando un núcleo libre para que la ventana no se trabe. Medido con 4 hilos: un minuto de canción tarda ≈ 1 min 45 s en total (separar la voz, reconocer la letra y sacar las notas) y usa ≈ 1,8 GB de memoria.

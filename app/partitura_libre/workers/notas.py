@@ -112,6 +112,20 @@ def importar(ruta):
     return [f[0] for f in filas], bpm, [f[1] for f in filas]
 
 
+def detectar_acordes(audio, bpm, armadura=0):
+    """Acordes de la canción (con todos sus instrumentos), uno cada dos pulsos como mucho.
+    ponytail: la voz también cuenta en el cromagrama; restar la voz aislada si confunde acordes."""
+    import librosa
+    import numpy as np
+    sr, salto = 22050, 2048
+    y, _ = librosa.load(audio, sr=sr, mono=True)
+    croma = librosa.feature.chroma_cqt(y=y, sr=sr, hop_length=salto, norm=None)   # 12 × tramos de ~0,09 s
+    trozo_s = 2 * 60 / bpm
+    bordes = [int(round(k * trozo_s * sr / salto)) for k in range(int(croma.shape[1] * salto / sr / trozo_s) + 2)]   # sin deriva
+    cromas = [croma[:, a:max(b, a + 1)].mean(axis=1).tolist() for a, b in zip(bordes, bordes[1:]) if a < croma.shape[1]]
+    return partituras.acordes(cromas, trozo_s, armadura)
+
+
 def estimar_bpm(x, sr):
     try:
         import librosa
@@ -129,10 +143,10 @@ def estimar_bpm(x, sr):
         return 120
 
 
-def escribir(notas, bpm, carpeta, nombre, titulo, clave="", nombres=False, letra=(), armadura=None):
+def escribir(notas, bpm, carpeta, nombre, titulo, clave="", nombres=False, letra=(), armadura=None, acordes=()):
     """Escribe nombre.notas.json, nombre.mid y nombre.musicxml sin pisar nada."""
     import pretty_midi
-    from music21 import clef, converter, key, metadata, pitch
+    from music21 import clef, converter, harmony, key, metadata, pitch
 
     carpeta = Path(carpeta)
     base = rutas.ruta_unica(carpeta, nombre, ".mid", (".musicxml", ".notas.json")).with_suffix("")
@@ -168,6 +182,14 @@ def escribir(notas, bpm, carpeta, nombre, titulo, clave="", nombres=False, letra
                 p.accidental = (pitch.Accidental({1: "sharp", -1: "flat", 0: "natural"}[alt])
                                 if alt or en_armadura.get(letra_n) else None)
         parte.makeAccidentals(inPlace=True, overrideStatus=True)   # alteraciones visibles según armadura y compás
+        compases = {m.number: m for m in parte.getElementsByClass("Measure")}
+        for t, raiz, tipo in acordes:   # cifrado americano encima del pentagrama (MuseScore puede mostrarlo en Do-Re-Mi)
+            q = round(t * bpm / 60 * 4) / 4
+            m = compases.get(int(q // 4) + 1)   # por número de compás (4/4): con voces, el offset de music21 se desplaza
+            if m is not None:
+                letra_r, alt_r, _ = partituras.deletrear(60 + raiz, arm)
+                m.insert(q % 4, harmony.ChordSymbol(root="CDEFGAB"[letra_r] + {1: "#", -1: "-", 0: ""}[alt_r],
+                                                           kind="minor" if tipo == "m" else "major"))
         libres = {i for i, texto in enumerate(letra) if texto}
         sigue = False   # la sílaba anterior continúa en esta nota (acababa en guion)
         for n in parte.recurse().notes:
@@ -192,11 +214,11 @@ def escribir(notas, bpm, carpeta, nombre, titulo, clave="", nombres=False, letra
                            lyricIdentifier=NOMBRES_ID)
                 n.lyrics[-1].style.color = COLOR_NOMBRES   # en azul, para distinguirlos de la letra
     partitura.write("musicxml", fp=str(p_xml))
-    partituras.guardar_notas(p_notas, bpm, notas, letra)
+    partituras.guardar_notas(p_notas, bpm, notas, letra, acordes)
     for p, f in ((p_notas, f_notas), (p_mid, f_mid), (p_xml, f_xml)):
         reemplazar(p, f)
     return {"midi": f_mid.name, "musicxml": f_xml.name, "notas": f_notas.name, "bpm": bpm, "n": len(notas),
-            "con_letra": sum(bool(t) for t in letra)}
+            "con_letra": sum(bool(t) for t in letra), "acordes": len(acordes)}
 
 
 def main():
@@ -213,6 +235,10 @@ def main():
                 notas, letra = partituras.letra_cantada(partituras.melodia(notas), o.get("palabras") or [])
             else:
                 letra = partituras.asignar_letra(notas, o.get("palabras") or [])
+            acordes = []
+            if notas and o.get("acordes_de"):
+                emitir("progreso", v=0.9, msg="Buscando los acordes")
+                acordes = detectar_acordes(o["acordes_de"], bpm, partituras.tonalidad(notas)[0] if o.get("armadura") is None else o["armadura"])
             if not notas:
                 emitir("error", msg="No se detectó ninguna nota. Comprueba que el audio tiene una melodía audible; "
                                     "la grabación original se conserva.")
@@ -220,14 +246,16 @@ def main():
         elif o["cmd"] == "importar":
             emitir("progreso", v=0.2, msg="Leyendo la partitura")
             notas, bpm, letra = importar(o["partitura"])
+            acordes = []
             if not notas:
                 emitir("error", msg="Ese archivo no contiene notas que se puedan editar.")
                 return 1
         else:
             d = json.loads(Path(o["notas"]).read_text(encoding="utf-8"))
             notas, bpm, letra = d["notas"], o.get("bpm") or d.get("bpm", 120), d.get("letra") or []
+            acordes = d.get("acordes") or []
         emitir("fin", **escribir(notas, bpm, o["carpeta"], o["nombre"], o.get("titulo", o["nombre"]),
-                                 o.get("clave", ""), o.get("nombres", False), letra, o.get("armadura")))
+                                 o.get("clave", ""), o.get("nombres", False), letra, o.get("armadura"), acordes))
         return 0
     except Exception as e:
         import traceback

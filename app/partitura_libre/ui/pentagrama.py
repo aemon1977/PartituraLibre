@@ -55,6 +55,7 @@ class Pentagrama(QWidget):
     def __init__(self):
         super().__init__()
         self.notas, self.sel, self.bpm, self.clave, self.nombres, self.letra = [], -1, 120, "sol", True, []
+        self.acordes = []   # [[segundo, raíz, tipo], …] encima del pentagrama
         self.armadura, self.tonalidad = 0, "Do mayor"
         self.sonando = -1    # índice de la nota que suena al reproducir (-1: ninguna)
         self.cursor = None   # segundo por el que va la reproducción: se dibuja una línea que avanza
@@ -69,10 +70,11 @@ class Pentagrama(QWidget):
         self.setMinimumWidth(560)
 
     # -- contenido ----------------------------------------------------------
-    def poner(self, notas, sel=-1, bpm=120, clave="", nombres=True, letra=(), titulo="", armadura=None):
+    def poner(self, notas, sel=-1, bpm=120, clave="", nombres=True, letra=(), titulo="", armadura=None, acordes=()):
         """`letra` es el texto bajo cada nota (paralela a `notas`). `armadura` en quintas (+ sostenidos,
         − bemoles); None la detecta de las notas."""
         self.notas, self.sel, self.bpm, self.nombres, self.letra = notas, sel, bpm or 120, nombres, list(letra)
+        self.acordes = list(acordes)
         self.clave, self.titulo = clave or partituras.clave_adecuada(notas, voz=any(self.letra)), titulo
         detectada = partituras.tonalidad(notas)
         self.armadura = detectada[0] if armadura is None else armadura
@@ -103,7 +105,11 @@ class Pentagrama(QWidget):
         return f
 
     def _alto_sistema(self, z):
-        return 15 * ESP * z + (19 * z if any(self.letra) else 0) + (30 * z if self.nombres else 0)
+        return 15 * ESP * z + (19 * z if any(self.letra) else 0) + (30 * z if self.nombres else 0) + (22 * z if self.acordes else 0)
+
+    def _sobre(self, z):
+        """Espacio de un sistema por encima de su línea inferior (notas agudas y, si hay, acordes)."""
+        return 8.5 * ESP * z + (22 * z if self.acordes else 0)
 
     def _repartir(self, izq, der, z):
         """Reparte notas y silencios en sistemas entre `izq` y `der`, cortando por compases cuando se puede."""
@@ -150,6 +156,12 @@ class Pentagrama(QWidget):
             previo = p["compas"]
         if actual or not sistemas:
             sistemas.append(actual)
+        todas = [p for s in sistemas for p in s]
+        for t, raiz, tipo in self.acordes:   # cada acorde, sobre lo que suena cuando empieza
+            p = next((p for p in reversed(todas) if p["t"] <= t + 0.05), todas[0] if todas else None)
+            if p is not None:
+                nombre = partituras.nombre_acorde(raiz, tipo, self.armadura)
+                p["acorde"] = f'{p["acorde"]}  {nombre}' if p.get("acorde") else nombre
         return sistemas
 
     def _componer(self):
@@ -157,7 +169,7 @@ class Pentagrama(QWidget):
         self._papel = QRectF(26, 22, max(self.width() - 52, 500), 0)
         self.sistemas = self._repartir(self._papel.left() + 34 * z, self._papel.right() - 30 * z, z)
         cabecera, alto = 96 * z, self._alto_sistema(z)
-        self._sis_y = [self._papel.top() + cabecera + 8.5 * e + s * alto for s in range(len(self.sistemas))]
+        self._sis_y = [self._papel.top() + cabecera + self._sobre(z) + s * alto for s in range(len(self.sistemas))]
         self._papel.setHeight(cabecera + len(self.sistemas) * alto + 40 * z)
         self.setMinimumHeight(int(self._papel.bottom() + 26))
         self._cajas = []   # zona sensible de cada nota; se calcula aquí y no al pintar, porque solo se pinta lo visible
@@ -170,7 +182,7 @@ class Pentagrama(QWidget):
     def _banda(self, s):
         """Franja de la hoja que ocupa un sistema, con sus notas más agudas y graves y su texto."""
         e = ESP * self.zoom
-        return QRectF(0, self._sis_y[s] - 9.5 * e, self.width(), self._alto_sistema(self.zoom) + 2 * e)
+        return QRectF(0, self._sis_y[s] - self._sobre(self.zoom) - e, self.width(), self._alto_sistema(self.zoom) + 2 * e)
 
     def marcar_sonando(self, indice):
         """Resalta la nota que suena (y repinta solo lo que cambia)."""
@@ -247,6 +259,8 @@ class Pentagrama(QWidget):
         musica = QFont(familia)
         musica.setPixelSize(round(4 * e))                 # en SMuFL, 1 em = 4 espacios
         f_nombre, f_letra, f_peque = self._fuente(12, z), self._fuente(14, z, cursiva=True), self._fuente(10, z)
+        f_acorde = self._fuente(15, z)
+        f_acorde.setBold(True)
         linea = QPen(QColor(TINTA), max(1.0, 1.1 * z))
         izq, der = papel.left() + 34 * z, papel.right() - 30 * z
         hay_letra = any(self.letra)
@@ -299,9 +313,14 @@ class Pentagrama(QWidget):
             graves = [partituras.posicion(self.notas[i][2], self.clave, self.armadura)[0]
                       for p in piezas if not p["silencio"] for i in p["col"]]
             texto_y = (max([1.4] + [0.5 - max(-10, q) / 2 for q in graves]) + 1.0) * e
+            acorde_y = min(10.5, max([6.2] + [min(17, q) / 2 + 1.7 for q in graves])) * e   # sobre la nota más aguda
             compas_actual, estado = None, {}
             for p in piezas:
                 x, col = p["x"], p["col"]
+                if p.get("acorde"):
+                    g.setFont(f_acorde)
+                    g.setPen(QColor(TINTA))
+                    g.drawText(QPointF(x - 2, base - acorde_y), p["acorde"])
                 if p["compas"] != compas_actual:           # las alteraciones valen hasta el final del compás
                     compas_actual, estado = p["compas"], {}
                 if p["barra"]:
@@ -404,7 +423,7 @@ class Pentagrama(QWidget):
                 if n:
                     pdf.newPage()
                 arriba = papel.top() + (96 if n == 0 else 0)
-                bases = [arriba + 8.5 * e + k * alto for k in range(len(pagina))]
+                bases = [arriba + self._sobre(1.0) + k * alto for k in range(len(pagina))]
                 self._pintar(g, papel, pagina, bases, 1.0, n == 0, range(hechos, hechos + len(pagina)), total, False, -1)
                 hechos += len(pagina)
                 g.setFont(self._fuente(10, 1.0))

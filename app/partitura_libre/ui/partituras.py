@@ -37,6 +37,7 @@ class PaginaPartituras(QWidget):
         self._espera = 0.0     # silencios tecleados antes de la próxima nota, en segundos
         self.notas, self.bpm, self.tarea, self._cargando = [], 120, None, False
         self.letra = []        # texto cantado bajo cada nota (paralela a self.notas)
+        self.acordes = []      # [[segundo, raíz, tipo], …] de la canción, encima del pentagrama
         self.vivo = None       # motor del borrador en vivo mientras se graba
         self._ultima, self._grababa, self._hubo_vivo, self._auto = {}, False, False, False
 
@@ -396,7 +397,7 @@ class PaginaPartituras(QWidget):
         if grabando and not self._grababa:      # empieza una toma: lienzo en blanco y motor en marcha
             self._hubo_vivo = self.en_vivo.isChecked() and lanzar.instalado("partituras")
             self.proyecto = self.version = None
-            self._ultima, self.letra = {}, []
+            self._ultima, self.letra, self.acordes = {}, [], []
             self._poner_notas([], 120)
             self.e_toma.setText("Grabando una toma nueva…")
             self.e_estado.setText("Preparando el borrador en vivo: las primeras notas tardan unos segundos." if self._hubo_vivo else "")
@@ -441,7 +442,7 @@ class PaginaPartituras(QWidget):
         if versiones:
             self._mostrar(versiones[-1])
         else:
-            self.letra = []
+            self.letra, self.acordes = [], []
             if not d.get("audio"):
                 self.version = {}             # partitura escrita a mano que aún no se ha guardado: se puede editar
             self._poner_notas([], 120)
@@ -496,7 +497,7 @@ class PaginaPartituras(QWidget):
         self._recargar_modelos_letra()
 
     def transcribir(self):
-        orden = {"cmd": "transcribir", "audio": str(self._audio()), "carpeta": str(self.proyecto),
+        orden = {"cmd": "transcribir", "audio": str(self._audio()), "acordes_de": str(self._audio()), "carpeta": str(self.proyecto),
                  "nombre": self.proyecto.name, "bpm": self.tempo.value() or None, **self._notacion()}
         if self.con_letra.isChecked() and self.con_letra.isEnabled():
             if not separacion.instalado():   # sin separador, las notas saldrían de toda la mezcla y no de la voz
@@ -628,7 +629,7 @@ class PaginaPartituras(QWidget):
     def regenerar(self):
         edicion = rutas.TEMP / "edicion.notas.json"
         rutas.TEMP.mkdir(exist_ok=True)
-        partituras.guardar_notas(edicion, self.tempo.value() or self.bpm, self.notas, self.letra)
+        partituras.guardar_notas(edicion, self.tempo.value() or self.bpm, self.notas, self.letra, self.acordes)
         self._lanzar({"cmd": "regenerar", "notas": str(edicion), "carpeta": str(self.proyecto),
                       "nombre": self.proyecto.name, "bpm": self.tempo.value() or None, **self._notacion()}, "Creando la nueva versión…")
 
@@ -676,6 +677,7 @@ class PaginaPartituras(QWidget):
         self.version = version
         bpm, notas = partituras.leer_notas(self.proyecto / version["notas"])
         self.letra = partituras.leer_letra(self.proyecto / version["notas"])
+        self.acordes = partituras.leer_acordes(self.proyecto / version["notas"])
         self._poner_notas(notas, bpm)
 
     def _poner_notas(self, notas, bpm, sel=-1):
@@ -734,7 +736,7 @@ class PaginaPartituras(QWidget):
         sel = self.tabla.currentRow()
         titulo = self.proyecto.name if self.proyecto else ""
         self.vista.poner(self.notas, sel, self.tempo.value() or self.bpm, self.clave.currentData(), self.nombres.isChecked(), self.letra,
-                         titulo, self.tonalidad.currentData())
+                         titulo, self.tonalidad.currentData(), self.acordes)
         if sel >= 0:  # la nota elegida queda a la vista en la partitura
             r = self.vista.rect_de(sel)
             self.rollo.ensureVisible(r.center().x(), r.center().y(), 40, r.height() // 2 + 10)

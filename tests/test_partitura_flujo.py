@@ -89,6 +89,26 @@ class Flujo(Aislada):
         sin, _ = ejecutar({"cmd": "regenerar", "notas": str(self.dir / eventos[-1]["notas"]), "carpeta": str(self.dir), "nombre": "sin nombres"})
         self.assertEqual(list(ET.parse(self.dir / sin[-1]["musicxml"]).getroot().iter("lyric")), [])
 
+    def test_los_acordes_de_la_cancion_se_reconocen_y_llegan_al_musicxml(self):
+        import numpy as np
+        import soundfile as sf
+        sr, progresion = 22050, [(48, 52, 55), (45, 48, 52), (41, 45, 48), (43, 47, 50)]   # Do, Lam, Fa, Sol
+        t = np.arange(2 * sr) / sr
+        sonar = lambda tonos: sum(np.sin(2 * np.pi * 440 * 2 ** ((m + o - 69) / 12) * t) for m in tonos for o in (0, 12)) * 0.08
+        wav = self.dir / "acordes.wav"
+        sf.write(wav, np.concatenate([sonar(a) for a in progresion]).astype("float32"), sr)
+        eventos, codigo = ejecutar({"cmd": "transcribir", "audio": str(wav), "acordes_de": str(wav), "carpeta": str(self.dir),
+                                    "nombre": "acordes", "bpm": 120, "armadura": 0})
+        self.assertEqual(codigo, 0, eventos)
+        acordes = partituras.leer_acordes(self.dir / eventos[-1]["notas"])
+        self.assertEqual([partituras.nombre_acorde(r, tipo) for _t, r, tipo in acordes], ["Do", "Lam", "Fa", "Sol"])
+        self.assertEqual([round(a[0]) for a in acordes], [0, 2, 4, 6])
+        raiz = ET.parse(self.dir / eventos[-1]["musicxml"]).getroot()
+        self.assertEqual([(h.findtext("root/root-step"), h.findtext("kind")) for h in raiz.iter("harmony")],
+                         [("C", "major"), ("A", "minor"), ("F", "major"), ("G", "major")])
+        otra, _ = ejecutar({"cmd": "regenerar", "notas": str(self.dir / eventos[-1]["notas"]), "carpeta": str(self.dir), "nombre": "editada"})
+        self.assertEqual(partituras.leer_acordes(self.dir / otra[-1]["notas"]), acordes)   # editar no los pierde
+
     def test_ritmos_irregulares_no_generan_tresillos(self):
         """Regresión: los tresillos que deducía la conversión hacían que MuseScore se cerrase al abrir el archivo."""
         notas = [[i / 3 * 0.5, (i + 1) / 3 * 0.5, 60 + i % 5, 0.7] for i in range(24)] + [[4.1, 4.37, 72, 0.7], [4.43, 5.0, 74, 0.7]]
@@ -276,6 +296,17 @@ class Notacion(unittest.TestCase):
         self.assertEqual(clave([50, 52, 55, 57, 60, 62]), "fa")         # Re3–Re4: Fa, con solo una línea adicional
         self.assertEqual(clave([52, 55, 57, 60, 64, 67, 69]), "do3")    # Mi3–La4 (viola): ni Sol ni Fa caben; Do en 3.ª
         self.assertEqual(clave([]), "sol")
+
+    def test_acorde_de_un_cromagrama(self):
+        croma = lambda *pcs: [1.0 if i in pcs else 0.05 for i in range(12)]
+        self.assertEqual(partituras.acorde(croma(0, 4, 7)), (0, ""))                # Do mayor
+        self.assertEqual(partituras.acorde(croma(9, 0, 4)), (9, "m"))               # La menor
+        self.assertIsNone(partituras.acorde([1.0] * 12))                            # ruido: ningún acorde
+        self.assertEqual(partituras.nombre_acorde(10, "", -2), "Si♭")
+        self.assertEqual(partituras.nombre_acorde(6, "m", 2), "Fa♯m")
+        # un trozo suelto distinto entre dos iguales es ruido; el silencio no lleva acorde
+        trozos = [croma(0, 4, 7), croma(0, 4, 7), croma(2, 5, 9), croma(0, 4, 7), [0.0] * 12, croma(7, 11, 2)]
+        self.assertEqual(partituras.acordes(trozos, 1.0), [[0.0, 0, ""], [5.0, 7, ""]])
         voz = lambda tonos: partituras.clave_adecuada([[i, i + 0.5, t, .7] for i, t in enumerate(tonos)], voz=True)
         self.assertEqual(voz([45, 48, 50, 51, 53, 55]), "sol8")           # voz grave cantando: Sol 8ª baja, nunca Fa
         self.assertEqual(voz([62, 64, 67, 69, 72]), "sol")                # voz aguda: Sol

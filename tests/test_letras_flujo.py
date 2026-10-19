@@ -38,8 +38,10 @@ class Voz(unittest.TestCase):
         self.assertEqual(idioma["idioma"], "es")
         segs = [{k: e[k] for k in ("inicio", "fin", "texto", "dudoso")} for e in ev if e["t"] == "segmento"]
         texto = " ".join(s["texto"] for s in segs).lower()
-        self.assertIn("desambig", texto)                     # el modelo «tiny» escribe a veces «desambigüación»
+        # «tiny» con un solo candidato (equipos de 4 hilos, como los de GitHub) oye «de sanviuación»: se comprueba
+        # el texto que reconoce siempre y que lo ha entendido como español
         self.assertIn("wikipedia", texto)
+        self.assertIn("libre", texto)
         for a, b in zip(segs, segs[1:]):   # marcas de tiempo crecientes y dentro del audio
             self.assertLessEqual(a["inicio"], b["inicio"])
         self.assertTrue(all(0 <= s["inicio"] < s["fin"] <= 26 for s in segs), segs)

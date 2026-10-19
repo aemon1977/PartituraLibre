@@ -335,6 +335,51 @@ def solfeo(midi, armadura=0):
     return _LETRAS[letra] + {1: "♯", -1: "♭", 0: ""}[alt]
 
 
+# Acordes: tríadas mayores y menores (los que se escriben en un cancionero). Cada trozo de audio se
+# compara con sus plantillas; los de la tonalidad ganan ante la duda y un acorde suelto de un solo
+# trozo entre dos iguales se toma por ruido (en la canción, casi siempre es una nota de paso).
+INTERVALOS_ACORDE = {"": (0, 4, 7), "m": (0, 3, 7)}
+DE_LA_TONALIDAD = 0.06   # ventaja de los acordes de la tonalidad
+PARECIDO_MIN = 0.6       # por debajo no se escribe acorde (silencio, ruido o un solo instrumento)
+SILENCIO = 0.08          # un trozo con menos energía que esto (respecto a la mediana) no lleva acorde
+
+
+def acorde(croma, armadura=0):
+    """(raíz 0–11, "" mayor | "m" menor) que mejor explica un cromagrama de 12 valores, o None."""
+    norma = sum(c * c for c in croma) ** 0.5
+    if not norma:
+        return None
+    tonica = (armadura * 7) % 12
+    diatonicos = {((tonica + d) % 12, "") for d in (0, 5, 7)} | {((tonica + d) % 12, "m") for d in (2, 4, 9)}
+    def parecido(raiz, tipo):
+        return (sum(croma[(raiz + i) % 12] for i in INTERVALOS_ACORDE[tipo]) / (norma * 3 ** 0.5)
+                + (DE_LA_TONALIDAD if (raiz, tipo) in diatonicos else 0))
+    mejor = max(((r, t) for r in range(12) for t in INTERVALOS_ACORDE), key=lambda a: parecido(*a))
+    return mejor if parecido(*mejor) >= PARECIDO_MIN else None
+
+
+def acordes(cromas, trozo_s, armadura=0):
+    """Acordes de una canción a partir de un cromagrama por trozo (`trozo_s` segundos cada uno, desde 0):
+    [[segundo, raíz, tipo], …] solo donde cambia el acorde."""
+    energias = sorted(sum(c) for c in cromas)
+    mediana = energias[len(energias) // 2] if energias else 0
+    lista = [acorde(c, armadura) if sum(c) > SILENCIO * mediana else None for c in cromas]
+    for k in range(1, len(lista) - 1):              # uno suelto entre dos iguales: ruido
+        if lista[k - 1] == lista[k + 1] and lista[k] != lista[k - 1] and lista[k - 1] is not None:
+            lista[k] = lista[k - 1]
+    salida, previo = [], None
+    for k, a in enumerate(lista):
+        if a is not None and a != previo:
+            salida.append([round(k * trozo_s, 3), *a])
+        previo = a
+    return salida
+
+
+def nombre_acorde(raiz, tipo, armadura=0):
+    """«Do», «Lam», «Fa♯m», «Si♭»: la raíz, deletreada según la tonalidad, y «m» si es menor."""
+    return solfeo(60 + raiz, armadura) + tipo
+
+
 def descripcion(nota, bpm, letra=""):
     """Todo lo que es una nota, en una línea: «Sol4 · negra con puntillo · empieza en 1,20 s · dura 0,75 s · "sol"»."""
     ini, fin, tono, _v = nota
@@ -379,10 +424,17 @@ def leer_letra(ruta):
     return json.loads(Path(ruta).read_text(encoding="utf-8")).get("letra") or []
 
 
-def guardar_notas(ruta, bpm, notas, letra=()):
+def leer_acordes(ruta):
+    """[[segundo, raíz, tipo], …] guardados con la partitura (lista vacía si no lleva acordes)."""
+    return json.loads(Path(ruta).read_text(encoding="utf-8")).get("acordes") or []
+
+
+def guardar_notas(ruta, bpm, notas, letra=(), acordes=()):
     letra = list(letra) + [""] * (len(notas) - len(letra))
     filas = sorted(([round(float(a), 4), round(float(b), 4), int(t), float(v)], letra[i]) for i, (a, b, t, v) in enumerate(notas))
     datos = {"bpm": bpm, "notas": [f[0] for f in filas]}
     if any(letra):
         datos["letra"] = [f[1] for f in filas]
+    if acordes:
+        datos["acordes"] = [list(a) for a in acordes]
     Path(ruta).write_text(json.dumps(datos, ensure_ascii=False), encoding="utf-8")
