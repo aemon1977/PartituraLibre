@@ -5,8 +5,9 @@ import time
 from pathlib import Path
 
 from PySide6.QtCore import QEvent, Qt, QTimer, Signal
+from PySide6.QtGui import QKeySequence, QShortcut
 from PySide6.QtWidgets import (QAbstractItemView, QCheckBox, QComboBox, QMenu, QSlider, QFileDialog, QFrame, QHBoxLayout, QHeaderView, QLineEdit, QProgressBar,
-                               QScrollArea, QSpinBox, QTableWidget, QTableWidgetItem, QVBoxLayout, QWidget)
+                               QProxyStyle, QScrollArea, QSpinBox, QStyle, QTableWidget, QTableWidgetItem, QVBoxLayout, QWidget)
 
 from .. import audio, config, editor, equipo, exportar, lanzar, letras, partituras, proyectos, rutas, separacion, tareas
 from . import tema
@@ -24,6 +25,15 @@ ATAJOS = ("Atajos, iguales a los de MuseScore:\n"
 SEGMENTO_VIVO_S = 3  # cada cuánto se analiza lo recién grabado para el borrador en vivo
 
 
+class _BarraAbsoluta(QProxyStyle):
+    """Barra de posición: un clic lleva justo a ese punto (no un paso hacia allí, como hace Qt por defecto)."""
+
+    def styleHint(self, pista, opcion=None, widget=None, retorno=None):
+        if pista == QStyle.SH_Slider_AbsoluteSetButtons:
+            return Qt.LeftButton.value
+        return super().styleHint(pista, opcion, widget, retorno)
+
+
 class PaginaPartituras(QWidget):
     cambio = Signal()  # se creó o modificó un proyecto
 
@@ -39,6 +49,7 @@ class PaginaPartituras(QWidget):
         self.letra = []        # texto cantado bajo cada nota (paralela a self.notas)
         self.acordes = []      # [[segundo, raíz, tipo], …] de la canción, encima del pentagrama
         self.tempos = []       # [[segundo, bpm, indicación], …]: tempo inicial y sus cambios
+        self._editor_tempo = None   # cuadro de texto abierto sobre una marca de tempo
         self._parando = False  # se pidió parar: el análisis termina con lo que lleve hecho
         self._hasta = None     # segundo en que se paró la letra (paso 1), para escribir la partitura hasta ahí
         self.vivo = None       # motor del borrador en vivo mientras se graba
@@ -109,6 +120,7 @@ class PaginaPartituras(QWidget):
         self.vista.tecla.connect(self._atajo)
         self.vista.arrastrada.connect(self._arrastrar)
         self.vista.insertada.connect(self._insertar)
+        self.vista.tempo_pedido.connect(lambda t: self.renombrar_tempo(t) if self.b_tempo.isEnabled() else None)
         rollo = self.rollo = QScrollArea()
         rollo.setWidget(self.vista)
         rollo.setWidgetResizable(True)
@@ -135,6 +147,12 @@ class PaginaPartituras(QWidget):
         self.posicion.setMinimumWidth(140)
         self.posicion.setToolTip("Posición: arrastra para ir a otro punto de la canción")
         self.posicion.sliderReleased.connect(self._saltar)
+        self.posicion.valueChanged.connect(lambda _v: None if self.posicion.isSliderDown() else self._saltar())   # clic en la barra
+        self.posicion.setStyle(_BarraAbsoluta())
+        self.b_atras = tema.boton("⏪", lambda: self._saltar_segundos(-5), ayuda="5 segundos atrás")
+        self.b_adelante = tema.boton("⏩", lambda: self._saltar_segundos(5), ayuda="5 segundos adelante")
+        for b in (self.b_atras, self.b_adelante):
+            b.setFixedWidth(34)
         self.posicion.sliderMoved.connect(lambda v: self.e_tiempo.setText(f"{v // 600}:{v // 10 % 60:02d}"))
         self.e_tiempo = tema.etiqueta("0:00 / 0:00", "tenue", False)
         self.oir_que = QComboBox()
@@ -171,10 +189,10 @@ class PaginaPartituras(QWidget):
                                       (self.b_pdf, self.b_midi, self.b_xml, self.b_musescore, self.b_carpeta),
                                       ("PDF…", "MIDI…", "MusicXML…", "Abrir en MuseScore", "Ver la carpeta del proyecto"))
         self.oir_que.setSizeAdjustPolicy(QComboBox.AdjustToMinimumContentsLengthWithIcon)
-        self.oir_que.setMinimumContentsLength(14)
-        self.posicion.setMinimumWidth(110)
+        self.oir_que.setMinimumContentsLength(9)
+        self.posicion.setMinimumWidth(80)
         archivo = tema.herramientas(self.b_nueva, self.b_existente, self.b_regenerar, "|", self.b_deshacer, self.b_rehacer, "|",
-                                    self.b_reproducir, self.b_detener, self.posicion, self.e_tiempo, self.oir_que, "|",
+                                    self.b_atras, self.b_reproducir, self.b_adelante, self.b_detener, self.posicion, self.e_tiempo, self.oir_que, "|",
                                     self.b_letras, self.b_exportar,
                                     None, self.b_panel_izq, self.b_panel_der)
 
@@ -346,7 +364,7 @@ class PaginaPartituras(QWidget):
         self.b_deshacer.setEnabled(hay and bool(self._hist))
         self.b_rehacer.setEnabled(hay and bool(self._rehechos))
         self.b_reproducir.setEnabled(bool(self.notas) and not grabando)
-        for w in (self.b_detener, self.posicion):
+        for w in (self.b_detener, self.posicion, self.b_atras, self.b_adelante):
             w.setEnabled(bool(self.notas) and not grabando)
         self.b_letra.setEnabled(hay and bool(self.notas) and audio and letras.instalado(modelo))
         self.b_escribir_letra.setEnabled(hay and bool(self.notas))
@@ -556,12 +574,50 @@ class PaginaPartituras(QWidget):
         """Tempo inicial (el del selector si se puso a mano) y los cambios a lo largo de la partitura."""
         return partituras.tempos_de(self.tempo.value() or self.bpm, self.tempos)
 
-    def editar_tempo(self):
-        """Tempo desde el compás de la nota elegida: pulsos por minuto e indicación (o quitar ese cambio)."""
+    def renombrar_tempo(self, t):
+        """Pulsar una marca de tempo la vuelve editable ahí mismo: «Con brío», «Allegro 120»… Intro la guarda;
+        Esc (o dejarla igual) no cambia nada."""
+        caja = self.vista._marcas.get(t)
+        if caja is None:
+            return
+        tempos = self._tempos()
+        actual = next(x for x in reversed(tempos) if x[0] <= t + 0.01)
+        editor_ = QLineEdit(partituras.marca_tempo(actual[1], actual[2]), self.vista)
+        editor_.setToolTip("Escribe la indicación y, si quieres, la velocidad: «Con brío», «Allegro 120». Intro para guardar, Esc para dejarlo")
+        editor_.setGeometry(caja.toAlignedRect().adjusted(-4, -4, 160, 4))
+        editor_.selectAll()
+        editor_.show()
+        editor_.setFocus()
+        self._editor_tempo = editor_
+
+        def aplicar():
+            if self._editor_tempo is not editor_:
+                return
+            self._editor_tempo = None
+            texto = editor_.text()
+            editor_.deleteLater()
+            if texto.strip() and texto != partituras.marca_tempo(actual[1], actual[2]):
+                nombre, bpm = partituras.leer_marca(texto, actual[1])
+                self.tempos = partituras.poner_tempo(tempos, actual[0], bpm, nombre)
+                if actual[0] <= 0.01:
+                    self.tempo.setValue(bpm)   # el tempo del principio es el del selector
+                self.e_estado.setText(f"Tempo: {partituras.marca_tempo(bpm, nombre)}. Pulsa «Guardar versión» para escribirlo en el MusicXML.")
+            self._dibujar()
+
+        def cancelar():
+            self._editor_tempo = None
+            editor_.deleteLater()
+        editor_.editingFinished.connect(aplicar)
+        QShortcut(QKeySequence(Qt.Key_Escape), editor_, cancelar, context=Qt.WidgetShortcut)
+
+    def editar_tempo(self, t=None):
+        """Tempo desde el compás de la nota elegida (o del segundo t: la marca pulsada en la hoja): pulsos por
+        minuto e indicación, o quitar ese cambio."""
         from PySide6.QtWidgets import QDialog, QSpinBox
         fila = self.tabla.currentRow()
         tempos = self._tempos()
-        t = self.notas[fila][0] if 0 <= fila < len(self.notas) else 0.0
+        if t is None:
+            t = self.notas[fila][0] if 0 <= fila < len(self.notas) else 0.0
         inicio = partituras.a_compas(t, tempos)
         vigente = next(x for x in reversed(tempos) if x[0] <= inicio + 0.01)
         cambio_aqui = inicio > 0.01 and abs(vigente[0] - inicio) <= 0.01
@@ -571,7 +627,8 @@ class PaginaPartituras(QWidget):
         v.setContentsMargins(20, 18, 20, 16)
         compas = int(partituras.negras_en(inicio, tempos) // 4) + 1
         v.addWidget(tema.etiqueta(f"<b>Tempo desde el compás {compas}</b>" if inicio > 0.01 else "<b>Tempo del principio</b>"))
-        v.addWidget(tema.etiqueta("Para poner un cambio de tempo más adelante, elige antes una nota de ese compás.", "tenue"))
+        v.addWidget(tema.etiqueta("Para poner un cambio de tempo más adelante, elige antes una nota de ese compás y pulsa "
+                                  "«Tempo…». Para cambiar uno que ya está, pulsa su marca en la partitura.", "tenue"))
         pulsos = QSpinBox()
         pulsos.setRange(20, 300)
         pulsos.setSuffix(" pulsos/min (♩)")
@@ -1193,6 +1250,15 @@ class PaginaPartituras(QWidget):
     def _saltar(self):
         """Al soltar la barra de posición: se va a ese punto (y sigue sonando si sonaba)."""
         self._pos = self.posicion.value() / 10
+        if self._sonando:
+            self._parar_sonido("")
+            self.reproducir()
+        else:
+            self._seguir_a(self._pos)
+
+    def _saltar_segundos(self, segundos):
+        """⏪/⏩: unos segundos atrás o adelante, sonando o en pausa."""
+        self._pos = max(0.0, min((self._ahora() if self._sonando else self._pos) + segundos, max(self._duracion - 0.5, 0.0)))
         if self._sonando:
             self._parar_sonido("")
             self.reproducir()

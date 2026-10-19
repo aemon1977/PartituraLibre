@@ -317,6 +317,17 @@ def marca_tempo(bpm, texto=""):
     return f"{texto or indicacion(bpm)} ♩ = {int(round(bpm))}"
 
 
+def leer_marca(texto, bpm):
+    """Lo escrito sobre la partitura -> (indicación, bpm): «Con brío» cambia solo el texto; «Allegro 120» o
+    «Allegro ♩ = 120», también la velocidad; «♩ = 120» o «120», solo la velocidad. Si el texto es el que ya
+    corresponde a esa velocidad, se deja automático ("")."""
+    import re
+    m = re.fullmatch(r"\s*(.*?)[\s♩=]*(\d{2,3})?\s*", texto)
+    nombre = m.group(1).strip(" =♩")
+    numero = max(20, min(300, int(m.group(2)))) if m.group(2) else bpm
+    return ("" if nombre == indicacion(numero) else nombre), numero
+
+
 def tempos_de(bpm, tempos=None):
     """Lista de tempos completa: sin cambios, un solo tempo; con `bpm`, ese manda al principio."""
     tempos = sorted([list(t) + [""] * (3 - len(t)) for t in (tempos or [])], key=lambda t: t[0])
@@ -374,6 +385,8 @@ def cambios_de_tempo(valores, bpm, seccion_s=SECCION_TEMPO_S):
             v *= 2
         return v
     lista = [plegar(v) for v in valores if v > 0]
+    if lista:   # el tempo de la canción es el de su principio (medido en la mezcla, no el que se supuso)
+        bpm = int(round(sorted(lista[:3])[len(lista[:3]) // 2]))
     tempos, actual = [[0.0, bpm, ""]], bpm
     for k in range(1, len(lista) - 1):
         v = round((lista[k] + lista[k + 1]) / 2)

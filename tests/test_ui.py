@@ -429,6 +429,43 @@ class Interfaz(Aislada):
         self.assertEqual(len(self.dialogos), 3)
         PanelCaptura._prefiere_micro = False
 
+    def test_ir_atras_y_adelante_y_pulsar_la_marca_de_tempo(self):
+        from PySide6.QtCore import QPointF, Qt
+        from PySide6.QtGui import QMouseEvent
+        p = self.v.partituras
+        d = proyectos.crear("atrás", "partitura")
+        proyectos.importar_audio(d, escribir_wav(self.dir / "a.wav", [(60, 0.5)]))
+        p.abrir_proyecto(d)
+        p.version = {}
+        p._poner_notas([[i * 0.5, i * 0.5 + 0.5, 60 + i % 5, .7] for i in range(40)], 120)   # 20 s
+        p._duracion = 20.0
+        p._pos = 12.0
+        p._saltar_segundos(-5)
+        self.assertEqual(p._pos, 7.0)                                     # ⏪ en pausa: 5 s atrás
+        p._saltar_segundos(-10)
+        self.assertEqual(p._pos, 0.0)                                     # no antes del principio
+        p._saltar_segundos(5)
+        self.assertEqual(p._pos, 5.0)
+        p.posicion.setValue(30)                                           # clic en la barra: va a 3,0 s
+        self.assertEqual(p._pos, 3.0)
+        p.tempos = [[0.0, 120, ""], [8.0, 90, "Andante"]]
+        p._dibujar()
+        p.vista.grab()                                                    # se dibujan las marcas de tempo
+        self.assertEqual(sorted(p.vista._marcas), [0.0, 8.0])
+        centro = p.vista._marcas[8.0].center()
+        p.vista.mousePressEvent(QMouseEvent(QMouseEvent.MouseButtonPress, QPointF(centro), Qt.LeftButton, Qt.LeftButton, Qt.NoModifier))
+        editor_ = p._editor_tempo                                         # pulsar la marca la vuelve editable ahí mismo
+        self.assertEqual(editor_.text(), "Andante ♩ = 90")
+        editor_.setText("Con brío 100")
+        editor_.editingFinished.emit()
+        self.assertEqual(p.tempos[-1], [8.0, 100, "Con brío"])
+        p.vista.grab()
+        p.vista.mousePressEvent(QMouseEvent(QMouseEvent.MouseButtonPress, QPointF(p.vista._marcas[0.0].center()), Qt.LeftButton,
+                                            Qt.LeftButton, Qt.NoModifier))
+        p._editor_tempo.setText("Allegretto")                             # el del principio: también el selector de tempo
+        p._editor_tempo.editingFinished.emit()
+        self.assertEqual((p._tempos()[0], p.tempo.value()), ([0.0, 120, "Allegretto"], 120))
+
     def test_reproductor_la_partitura_y_la_letra_siguen_a_la_cancion(self):
         import time as _t
         from partitura_libre import audio

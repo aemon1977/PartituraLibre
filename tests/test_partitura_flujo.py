@@ -352,6 +352,12 @@ class Notacion(unittest.TestCase):
         self.assertEqual([partituras.indicacion(b) for b in (50, 70, 99, 110, 130, 190)],
                          ["Largo", "Adagio", "Andante", "Moderato", "Allegro", "Presto"])
         self.assertEqual(partituras.marca_tempo(130, "Con brío"), "Con brío ♩ = 130")
+        # lo que se escribe sobre la marca: texto, velocidad o las dos cosas
+        self.assertEqual(partituras.leer_marca("Con brío", 99), ("Con brío", 99))
+        self.assertEqual(partituras.leer_marca("Allegro 130", 99), ("", 130))          # «Allegro» es el de 130: automático
+        self.assertEqual(partituras.leer_marca("Lento ♩ = 60", 99), ("Lento", 60))
+        self.assertEqual(partituras.leer_marca("♩ = 120", 99), ("", 120))
+        self.assertEqual(partituras.leer_marca("Andante ♩ = 99", 99), ("", 99))
 
     def test_acorde_de_un_cromagrama(self):
         croma = lambda *pcs: [1.0 if i in pcs else 0.05 for i in range(12)]

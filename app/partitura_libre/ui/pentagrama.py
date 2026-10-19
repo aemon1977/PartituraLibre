@@ -46,6 +46,7 @@ class Pentagrama(QWidget):
     arrastrada = Signal(int, int, bool)   # (nota, nuevo tono, es el primer paso del arrastre)
     insertada = Signal(int, int)          # modo introducir: (nota tras la que va, o -1 al principio; tono)
     tecla = Signal(str)                   # atajos de edición
+    tempo_pedido = Signal(float)          # clic en una marca de tempo: (segundo en que empieza)
 
     # Mismas teclas que MuseScore: N introducir, 3-7 figura, A-G nota, 0 silencio, . puntillo, Ctrl+L letra
     TECLAS = {Qt.Key_Up: "arriba", Qt.Key_Down: "abajo", Qt.Key_Left: "anterior", Qt.Key_Right: "siguiente",
@@ -57,6 +58,7 @@ class Pentagrama(QWidget):
         self.notas, self.sel, self.bpm, self.clave, self.nombres, self.letra = [], -1, 120, "sol", True, []
         self.acordes = []   # [[segundo, raíz, tipo], …] encima del pentagrama
         self.tempos = [[0.0, 120, ""]]   # [[segundo, bpm, indicación], …]: el primero es el tempo inicial
+        self._marcas = {}
         self.armadura, self.tonalidad = 0, "Do mayor"
         self.sonando = -1    # índice de la nota que suena al reproducir (-1: ninguna)
         self.cursor = None   # segundo por el que va la reproducción: se dibuja una línea que avanza
@@ -108,11 +110,11 @@ class Pentagrama(QWidget):
 
     def _alto_sistema(self, z):
         return 15 * ESP * z + (19 * z if any(self.letra) else 0) + (30 * z if self.nombres else 0) + (22 * z if self.acordes else 0) \
-            + (20 * z if len(self.tempos) > 1 else 0)
+            + (20 * z if self.notas else 0)
 
     def _sobre(self, z):
         """Espacio de un sistema por encima de su línea inferior (notas agudas y, si hay, acordes)."""
-        return 8.5 * ESP * z + (22 * z if self.acordes else 0) + (20 * z if len(self.tempos) > 1 else 0)
+        return 8.5 * ESP * z + (22 * z if self.acordes else 0) + (20 * z if self.notas else 0)
 
     def _negras(self, t):
         """Pulso (en negras, ajustado a la semicorchea) del segundo t, con los cambios de tempo."""
@@ -169,10 +171,10 @@ class Pentagrama(QWidget):
             if p is not None:
                 nombre = partituras.nombre_acorde(raiz, tipo, self.armadura)
                 p["acorde"] = f'{p["acorde"]}  {nombre}' if p.get("acorde") else nombre
-        for t, bpm, texto in self.tempos[1:]:   # cada cambio de tempo, en su compás (el inicial va en la cabecera)
-            p = next((p for p in todas if p["t"] >= t - 0.05), None)
+        for k, (t, bpm, texto) in enumerate(self.tempos):   # el tempo inicial y cada cambio, sobre su compás
+            p = todas[0] if k == 0 and todas else next((p for p in todas if p["t"] >= t - 0.05), None)
             if p is not None:
-                p["tempo"] = partituras.marca_tempo(bpm, texto)
+                p["tempo"], p["tempo_t"] = partituras.marca_tempo(bpm, texto), t
         return sistemas
 
     def _componer(self):
@@ -183,6 +185,7 @@ class Pentagrama(QWidget):
         self._sis_y = [self._papel.top() + cabecera + self._sobre(z) + s * alto for s in range(len(self.sistemas))]
         self._papel.setHeight(cabecera + len(self.sistemas) * alto + 40 * z)
         self.setMinimumHeight(int(self._papel.bottom() + 26))
+        self._marcas = {}  # zona de cada marca de tempo dibujada (segundo -> rectángulo): pulsarla la edita
         self._cajas = []   # zona sensible de cada nota; se calcula aquí y no al pintar, porque solo se pinta lo visible
         for piezas, base in zip(self.sistemas, self._sis_y):
             for p in piezas:
@@ -285,7 +288,7 @@ class Pentagrama(QWidget):
             g.setFont(self._fuente(11, z, serif=True))
             g.drawText(QRectF(izq, papel.top() + 60 * z, der - izq, 18 * z), Qt.AlignRight, "Partitura Libre")
             g.drawText(QRectF(izq, papel.top() + 60 * z, der - izq, 18 * z), Qt.AlignLeft,
-                       f"{partituras.CLAVES[self.clave][0]}  ·  {self.tonalidad}  ·  {partituras.marca_tempo(*self.tempos[0][1:])}" if self.notas else partituras.CLAVES[self.clave][0])
+                       f"{partituras.CLAVES[self.clave][0]}  ·  {self.tonalidad}" if self.notas else partituras.CLAVES[self.clave][0])
         arm = partituras.alteraciones(self.armadura)
         ancho_arm = abs(self.armadura) * ANCHO_ALTERACION * z
         ligaduras = {}                                    # id de la columna -> (x, sistema) de su tramo anterior
@@ -333,7 +336,11 @@ class Pentagrama(QWidget):
                 if p.get("tempo"):
                     g.setFont(f_tempo)
                     g.setPen(QColor(TINTA))
-                    g.drawText(QPointF(x - 2, base - acorde_y - (22 * z if self.acordes else 0)), p["tempo"])
+                    y_tempo = base - acorde_y - (22 * z if self.acordes else 0)
+                    x_tempo = x - 2
+                    g.drawText(QPointF(x_tempo, y_tempo), p["tempo"])
+                    if pantalla:   # se puede pulsar para cambiarlo
+                        self._marcas[p["tempo_t"]] = QRectF(x_tempo - 4, y_tempo - 16 * z, QFontMetrics(f_tempo).horizontalAdvance(p["tempo"]) + 8, 22 * z)
                 if p.get("acorde"):
                     g.setFont(f_acorde)
                     g.setPen(QColor(TINTA))
@@ -461,6 +468,9 @@ class Pentagrama(QWidget):
 
     def mousePressEvent(self, ev):
         self.setFocus()
+        for t, caja in self._marcas.items():
+            if caja.contains(ev.position()):
+                return self.tempo_pedido.emit(t)
         for caja, i in self._cajas:
             if caja.contains(ev.position()):
                 self._arrastre = [i, ev.position().y(), partituras.posicion(self.notas[i][2], self.clave)[0], 0, True]

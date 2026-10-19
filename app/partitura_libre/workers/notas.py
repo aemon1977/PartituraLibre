@@ -293,6 +293,7 @@ def main():
             if notas and not o.get("bpm"):   # tempo automático: también sus cambios a lo largo de la canción
                 emitir("progreso", v=0.88, msg="Midiendo el tempo")
                 tempos = [t for t in detectar_tempos(o.get("acordes_de") or o["audio"], bpm) if t[0] < final]
+                bpm = tempos[0][1]
             acordes = []
             if notas and o.get("acordes_de"):
                 emitir("progreso", v=0.9, msg="Buscando los acordes")
