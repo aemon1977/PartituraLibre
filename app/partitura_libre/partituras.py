@@ -299,6 +299,90 @@ def midi_de(pos, clave):
     return max(0, min(127, (grado // 7 + 1) * 12 + _SEMITONO[grado % 7]))
 
 
+# Tempo: [[segundo, pulsos/min, indicación], …], ordenado y empezando en 0. La indicación vacía se escribe
+# sola según la velocidad. Los cambios empiezan siempre al principio de un compás.
+INDICACIONES = [(40, "Grave"), (60, "Largo"), (66, "Larghetto"), (76, "Adagio"), (108, "Andante"), (120, "Moderato"),
+                (156, "Allegro"), (176, "Vivace"), (200, "Presto"), (10**6, "Prestissimo")]
+CAMBIO_TEMPO = 0.04   # un cambio de menos del 4 % es la oscilación normal de quien toca, no un cambio de tempo
+SECCION_TEMPO_S = 15  # el tempo se mide por tramos de esta duración
+
+
+def indicacion(bpm):
+    """Andante, Allegro…: el nombre italiano habitual para esa velocidad."""
+    return next(nombre for limite, nombre in INDICACIONES if bpm < limite)
+
+
+def marca_tempo(bpm, texto=""):
+    """«Andante ♩ = 99»: la indicación escrita (o la que corresponde a la velocidad) y el metrónomo."""
+    return f"{texto or indicacion(bpm)} ♩ = {int(round(bpm))}"
+
+
+def tempos_de(bpm, tempos=None):
+    """Lista de tempos completa: sin cambios, un solo tempo; con `bpm`, ese manda al principio."""
+    tempos = sorted([list(t) + [""] * (3 - len(t)) for t in (tempos or [])], key=lambda t: t[0])
+    if not tempos or tempos[0][0] > 0:
+        tempos.insert(0, [0.0, bpm, ""])
+    tempos[0][1] = bpm or tempos[0][1]
+    return tempos
+
+
+def negras_en(t, tempos):
+    """Pulsos (negras) que han pasado en el segundo t, con esos cambios de tempo."""
+    q, t0, bpm = 0.0, 0.0, tempos[0][1]
+    for ti, b, *_ in tempos[1:]:
+        if t <= ti:
+            break
+        q += (ti - t0) * bpm / 60
+        t0, bpm = ti, b
+    return q + (t - t0) * bpm / 60
+
+
+def segundos_en(q, tempos):
+    """Lo contrario de `negras_en`: el segundo en que se llega al pulso q."""
+    q0, t0, bpm = 0.0, 0.0, tempos[0][1]
+    for ti, b, *_ in tempos[1:]:
+        qi = q0 + (ti - t0) * bpm / 60
+        if q <= qi:
+            break
+        q0, t0, bpm = qi, ti, b
+    return t0 + (q - q0) * 60 / bpm
+
+
+def a_compas(t, tempos, pulsos=4):
+    """El principio del compás en que cae el segundo t (ahí se escribe un cambio de tempo)."""
+    return segundos_en(negras_en(t, tempos) // pulsos * pulsos, tempos)
+
+
+def poner_tempo(tempos, t, bpm, texto=""):
+    """Cambio de tempo desde el compás del segundo t (bpm 0: quitar el cambio de ese compás)."""
+    previos = [x for x in tempos if x[0] < 1e-6] + [x for x in tempos[1:] if x[0] > 1e-6]
+    inicio = a_compas(t, previos)
+    resto = [x for x in previos if abs(x[0] - inicio) > 0.01]
+    if inicio < 0.01:                              # en el primer compás se cambia el tempo inicial
+        return [[0.0, bpm, texto]] + resto if bpm else previos
+    return sorted(resto + ([[round(inicio, 3), bpm, texto]] if bpm else []), key=lambda x: x[0])
+
+
+def cambios_de_tempo(valores, bpm, seccion_s=SECCION_TEMPO_S):
+    """Tempos de una canción a partir del tempo medido en cada tramo de `seccion_s` segundos. Solo cuentan los
+    cambios de más de CAMBIO_TEMPO que se mantienen al menos dos tramos; los dobles y mitades (error típico de
+    los detectores de pulso) se pliegan al tempo de la canción."""
+    def plegar(v):
+        while v > bpm * 1.5:
+            v /= 2
+        while v < bpm / 1.5:
+            v *= 2
+        return v
+    lista = [plegar(v) for v in valores if v > 0]
+    tempos, actual = [[0.0, bpm, ""]], bpm
+    for k in range(1, len(lista) - 1):
+        v = round((lista[k] + lista[k + 1]) / 2)
+        if all(abs(x - actual) / actual >= CAMBIO_TEMPO for x in lista[k:k + 2]) and abs(lista[k] - lista[k + 1]) / v < CAMBIO_TEMPO:
+            tempos = poner_tempo(tempos, k * seccion_s, v)
+            actual = v
+    return tempos
+
+
 def pulso(t, bpm):
     """Instante en negras, ajustado a la semicorchea."""
     return round(t * bpm / 60 * 4) / 4
@@ -424,12 +508,18 @@ def leer_letra(ruta):
     return json.loads(Path(ruta).read_text(encoding="utf-8")).get("letra") or []
 
 
+def leer_tempos(ruta):
+    """Tempos guardados con la partitura ([[segundo, bpm, indicación], …]); sin cambios, el tempo único."""
+    d = json.loads(Path(ruta).read_text(encoding="utf-8"))
+    return tempos_de(d.get("bpm", 120), d.get("tempos"))
+
+
 def leer_acordes(ruta):
     """[[segundo, raíz, tipo], …] guardados con la partitura (lista vacía si no lleva acordes)."""
     return json.loads(Path(ruta).read_text(encoding="utf-8")).get("acordes") or []
 
 
-def guardar_notas(ruta, bpm, notas, letra=(), acordes=()):
+def guardar_notas(ruta, bpm, notas, letra=(), acordes=(), tempos=()):
     letra = list(letra) + [""] * (len(notas) - len(letra))
     filas = sorted(([round(float(a), 4), round(float(b), 4), int(t), float(v)], letra[i]) for i, (a, b, t, v) in enumerate(notas))
     datos = {"bpm": bpm, "notas": [f[0] for f in filas]}
@@ -437,4 +527,6 @@ def guardar_notas(ruta, bpm, notas, letra=(), acordes=()):
         datos["letra"] = [f[1] for f in filas]
     if acordes:
         datos["acordes"] = [list(a) for a in acordes]
+    if tempos and (len(tempos) > 1 or tempos[0][2]):
+        datos["tempos"] = [list(t) for t in tempos]
     Path(ruta).write_text(json.dumps(datos, ensure_ascii=False), encoding="utf-8")

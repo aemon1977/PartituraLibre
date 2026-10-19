@@ -91,6 +91,8 @@ Con el ratón: clic elige una nota, arrastrarla arriba o abajo cambia su altura 
 
 **Parar.** «Parar (conserva lo hecho)» termina el análisis y crea la partitura con lo que lleve: si estaba reconociendo la letra, hasta donde llegó; si estaba sacando las notas, hasta el trozo en curso. Pulsándolo otra vez se cancela del todo.
 
+**Tempo.** Al convertir con el tempo en «Automático», además del tempo de la canción se detectan sus **cambios de tempo** (solo los claros y que se mantienen) y se escriben en el compás donde empiezan, con su indicación: «Andante ♩ = 99», «Allegro ♩ = 130»… Con el botón **Tempo…** (abajo) cambias el tempo y la indicación desde el compás de la nota elegida, o el del principio si no hay ninguna elegida, o quitas un cambio. Al guardar la versión van al MusicXML.
+
 **Acordes.** Al convertir una canción se reconocen sus acordes (mayores y menores, con preferencia por los de la tonalidad) y se escriben encima del pentagrama, como en un cancionero: Do, Lam, Fa♯m… Se guardan con la partitura, no se pierden al editar y van al MusicXML (MuseScore los muestra como cifrado). Las partituras hechas antes de la versión 1.9 no los tienen: vuelve a convertir la canción.
 
 Los análisis largos muestran cuánto tiempo queda.

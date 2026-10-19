@@ -38,6 +38,7 @@ class PaginaPartituras(QWidget):
         self.notas, self.bpm, self.tarea, self._cargando = [], 120, None, False
         self.letra = []        # texto cantado bajo cada nota (paralela a self.notas)
         self.acordes = []      # [[segundo, raíz, tipo], …] de la canción, encima del pentagrama
+        self.tempos = []       # [[segundo, bpm, indicación], …]: tempo inicial y sus cambios
         self._parando = False  # se pidió parar: el análisis termina con lo que lleve hecho
         self._hasta = None     # segundo en que se paró la letra (paso 1), para escribir la partitura hasta ahí
         self.vivo = None       # motor del borrador en vivo mientras se graba
@@ -261,7 +262,9 @@ class PaginaPartituras(QWidget):
         self.b_atajos = tema.boton("Atajos de teclado", lambda: tema.dialogo(self, "Atajos de teclado", ATAJOS),
                                    ayuda="N introducir · 3-7 figura · A-G nota · 0 silencio · . puntillo · Ctrl+L letra…")
         # clave, nombres y zoom van abajo, como en la barra de estado de un editor de partituras
-        pie = tema.herramientas(aviso, None, self.b_atajos, "|", self.clave, self.tonalidad, "|",
+        self.b_tempo = tema.boton("Tempo…", self.editar_tempo,
+                                  ayuda="Tempo e indicación (Andante, Allegro…) desde el compás de la nota elegida; sin nota elegida, el del principio")
+        pie = tema.herramientas(aviso, None, self.b_atajos, "|", self.clave, self.tonalidad, self.b_tempo, "|",
                                 tema.boton("−", lambda: self._zoom(-10), ayuda="Reducir"), self.e_zoom,
                                 tema.boton("+", lambda: self._zoom(10), ayuda="Ampliar"))
 
@@ -351,6 +354,7 @@ class PaginaPartituras(QWidget):
             "Reconoce la voz del audio de este proyecto y escribe cada palabra bajo su nota, sin volver a detectar las notas"
             if letras.instalado(modelo) else f"Primero descarga el modelo de voz «{modelo}» en la sección Letras")
         self.b_regenerar.setEnabled(hay and bool(self.notas))
+        self.b_tempo.setEnabled(hay and bool(self.notas))
         self.b_pdf.setEnabled(hay and bool(self.notas))
         self.b_midi.setEnabled(guardada)
         self.b_xml.setEnabled(guardada)
@@ -400,7 +404,7 @@ class PaginaPartituras(QWidget):
         if grabando and not self._grababa:      # empieza una toma: lienzo en blanco y motor en marcha
             self._hubo_vivo = self.en_vivo.isChecked() and lanzar.instalado("partituras")
             self.proyecto = self.version = None
-            self._ultima, self.letra, self.acordes = {}, [], []
+            self._ultima, self.letra, self.acordes, self.tempos = {}, [], [], []
             self._poner_notas([], 120)
             self.e_toma.setText("Grabando una toma nueva…")
             self.e_estado.setText("Preparando el borrador en vivo: las primeras notas tardan unos segundos." if self._hubo_vivo else "")
@@ -445,7 +449,7 @@ class PaginaPartituras(QWidget):
         if versiones:
             self._mostrar(versiones[-1])
         else:
-            self.letra, self.acordes = [], []
+            self.letra, self.acordes, self.tempos = [], [], []
             if not d.get("audio"):
                 self.version = {}             # partitura escrita a mano que aún no se ha guardado: se puede editar
             self._poner_notas([], 120)
@@ -548,6 +552,59 @@ class PaginaPartituras(QWidget):
             self._botones()
         self._reconocer_letra(colocar, "")
 
+    def _tempos(self):
+        """Tempo inicial (el del selector si se puso a mano) y los cambios a lo largo de la partitura."""
+        return partituras.tempos_de(self.tempo.value() or self.bpm, self.tempos)
+
+    def editar_tempo(self):
+        """Tempo desde el compás de la nota elegida: pulsos por minuto e indicación (o quitar ese cambio)."""
+        from PySide6.QtWidgets import QDialog, QSpinBox
+        fila = self.tabla.currentRow()
+        tempos = self._tempos()
+        t = self.notas[fila][0] if 0 <= fila < len(self.notas) else 0.0
+        inicio = partituras.a_compas(t, tempos)
+        vigente = next(x for x in reversed(tempos) if x[0] <= inicio + 0.01)
+        cambio_aqui = inicio > 0.01 and abs(vigente[0] - inicio) <= 0.01
+        d = QDialog(self)
+        d.setWindowTitle("Tempo")
+        v = QVBoxLayout(d)
+        v.setContentsMargins(20, 18, 20, 16)
+        compas = int(partituras.negras_en(inicio, tempos) // 4) + 1
+        v.addWidget(tema.etiqueta(f"<b>Tempo desde el compás {compas}</b>" if inicio > 0.01 else "<b>Tempo del principio</b>"))
+        v.addWidget(tema.etiqueta("Para poner un cambio de tempo más adelante, elige antes una nota de ese compás.", "tenue"))
+        pulsos = QSpinBox()
+        pulsos.setRange(20, 300)
+        pulsos.setSuffix(" pulsos/min (♩)")
+        pulsos.setValue(int(round(vigente[1])))
+        texto = QComboBox()
+        texto.setEditable(True)
+        texto.addItem("Automática (según la velocidad)", "")
+        for _limite, nombre in partituras.INDICACIONES:
+            texto.addItem(nombre, nombre)
+        if vigente[2]:
+            texto.setCurrentText(vigente[2])
+        muestra = tema.etiqueta("", "tenue")
+        elegido = lambda: "" if texto.currentIndex() == 0 and texto.currentText() == texto.itemText(0) else texto.currentText().strip()
+        actualizar = lambda *_: muestra.setText("Se escribirá: " + partituras.marca_tempo(pulsos.value(), elegido()))
+        pulsos.valueChanged.connect(actualizar)
+        texto.currentTextChanged.connect(actualizar)
+        actualizar()
+        v.addLayout(tema.fila(tema.etiqueta("Velocidad", "tenue", False), pulsos, None))
+        v.addLayout(tema.fila(tema.etiqueta("Indicación", "tenue", False), texto, estirar=texto))
+        v.addWidget(muestra)
+        quitar = tema.boton("Quitar este cambio", lambda: d.done(2), "peligro")
+        quitar.setVisible(cambio_aqui)
+        v.addLayout(tema.fila(quitar, None, tema.boton("Cancelar", d.reject), tema.boton("Aplicar", d.accept, "primario")))
+        r = d.exec()
+        if r == QDialog.Rejected:
+            return
+        self.tempos = partituras.poner_tempo(tempos, inicio, 0 if r == 2 else pulsos.value(), elegido())
+        if inicio <= 0.01:
+            self.tempo.setValue(self.tempos[0][1])   # el tempo del principio es el del selector
+        self._dibujar()
+        self.e_estado.setText(("Cambio de tempo quitado." if r == 2 else "Tempo puesto: " + partituras.marca_tempo(pulsos.value(), elegido()) + ".")
+                              + " Pulsa «Guardar versión» para escribirlo en el MusicXML.")
+
     def escribir_letra(self):
         """Letra escrita a mano: se reparte en sílabas, una por nota, sin tocar las notas."""
         from PySide6.QtWidgets import QDialog, QPlainTextEdit, QRadioButton
@@ -642,7 +699,7 @@ class PaginaPartituras(QWidget):
     def regenerar(self):
         edicion = rutas.TEMP / "edicion.notas.json"
         rutas.TEMP.mkdir(exist_ok=True)
-        partituras.guardar_notas(edicion, self.tempo.value() or self.bpm, self.notas, self.letra, self.acordes)
+        partituras.guardar_notas(edicion, self.tempo.value() or self.bpm, self.notas, self.letra, self.acordes, self._tempos())
         self._lanzar({"cmd": "regenerar", "notas": str(edicion), "carpeta": str(self.proyecto),
                       "nombre": self.proyecto.name, "bpm": self.tempo.value() or None, **self._notacion()}, "Creando la nueva versión…")
 
@@ -699,6 +756,7 @@ class PaginaPartituras(QWidget):
         bpm, notas = partituras.leer_notas(self.proyecto / version["notas"])
         self.letra = partituras.leer_letra(self.proyecto / version["notas"])
         self.acordes = partituras.leer_acordes(self.proyecto / version["notas"])
+        self.tempos = partituras.leer_tempos(self.proyecto / version["notas"])
         self._poner_notas(notas, bpm)
 
     def _poner_notas(self, notas, bpm, sel=-1):
@@ -757,7 +815,7 @@ class PaginaPartituras(QWidget):
         sel = self.tabla.currentRow()
         titulo = self.proyecto.name if self.proyecto else ""
         self.vista.poner(self.notas, sel, self.tempo.value() or self.bpm, self.clave.currentData(), self.nombres.isChecked(), self.letra,
-                         titulo, self.tonalidad.currentData(), self.acordes)
+                         titulo, self.tonalidad.currentData(), self.acordes, self._tempos())
         if sel >= 0:  # la nota elegida queda a la vista en la partitura
             r = self.vista.rect_de(sel)
             self.rollo.ensureVisible(r.center().x(), r.center().y(), 40, r.height() // 2 + 10)

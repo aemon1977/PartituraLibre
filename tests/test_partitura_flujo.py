@@ -136,6 +136,20 @@ class Flujo(Aislada):
         _bpm, notas = partituras.leer_notas(self.dir / eventos[-1]["notas"])
         self.assertTrue(notas and max(n[0] for n in notas) < 5.0)
 
+    def test_los_cambios_de_tempo_llegan_al_musicxml_en_su_compas(self):
+        # 8 negras a 120 (4 s) y después 8 negras a 60 (8 s): en la partitura, dos compases de negras cada uno
+        notas = [[i * 0.5, i * 0.5 + 0.45, 60 + i, 0.7] for i in range(8)] + [[4 + i, 4 + i + 0.9, 70 + i, 0.7] for i in range(8)]
+        partituras.guardar_notas(self.dir / "tempos.json", 120, notas, tempos=[[0.0, 120, ""], [4.0, 60, "Adagio"]])
+        eventos, codigo = ejecutar({"cmd": "regenerar", "notas": str(self.dir / "tempos.json"), "carpeta": str(self.dir), "nombre": "tempos"})
+        self.assertEqual(codigo, 0, eventos)
+        raiz = ET.parse(self.dir / eventos[-1]["musicxml"]).getroot()
+        marcas = [(m.get("number"), " ".join(w.text for w in m.iter("words")), m.findtext(".//metronome/per-minute"))
+                  for m in raiz.iter("measure") if m.find(".//metronome") is not None]
+        self.assertEqual(marcas, [("1", "Allegro", "120"), ("3", "Adagio", "60")])
+        duraciones = [n.findtext("type") for n in raiz.iter("note") if n.find("rest") is None]
+        self.assertEqual(duraciones, ["quarter"] * 16)                        # las lentas siguen siendo negras, no blancas
+        self.assertEqual(partituras.leer_tempos(self.dir / eventos[-1]["notas"]), [[0.0, 120, ""], [4.0, 60, "Adagio"]])
+
     def test_ritmos_irregulares_no_generan_tresillos(self):
         """Regresión: los tresillos que deducía la conversión hacían que MuseScore se cerrase al abrir el archivo."""
         notas = [[i / 3 * 0.5, (i + 1) / 3 * 0.5, 60 + i % 5, 0.7] for i in range(24)] + [[4.1, 4.37, 72, 0.7], [4.43, 5.0, 74, 0.7]]
@@ -323,6 +337,21 @@ class Notacion(unittest.TestCase):
         self.assertEqual(clave([50, 52, 55, 57, 60, 62]), "fa")         # Re3–Re4: Fa, con solo una línea adicional
         self.assertEqual(clave([52, 55, 57, 60, 64, 67, 69]), "do3")    # Mi3–La4 (viola): ni Sol ni Fa caben; Do en 3.ª
         self.assertEqual(clave([]), "sol")
+
+    def test_cambios_de_tempo(self):
+        T = partituras.tempos_de(120, [[8.0, 60, ""]])                       # 120 los primeros 8 s (16 negras), luego 60
+        self.assertEqual(partituras.negras_en(10, T), 18.0)
+        self.assertEqual(partituras.segundos_en(18, T), 10.0)
+        self.assertEqual(partituras.a_compas(13, T), 12.0)                   # el compás 6 empieza en el segundo 12
+        self.assertEqual(partituras.poner_tempo(T, 13, 90, "Andante")[-1], [12.0, 90, "Andante"])
+        self.assertEqual(partituras.poner_tempo(T, 9, 0), [[0.0, 120, ""]])   # quitar el cambio de ese compás
+        self.assertEqual(partituras.poner_tempo(T, 1, 100), [[0.0, 100, ""], [8.0, 60, ""]])
+        # detección: un cambio claro que se mantiene; las oscilaciones y un doble suelto no cuentan
+        self.assertEqual(partituras.cambios_de_tempo([100, 101, 99, 100, 130, 131, 129, 130], 100), [[0.0, 100, ""], [60.0, 130, ""]])
+        self.assertEqual(partituras.cambios_de_tempo([100, 102, 98, 200, 101, 99], 100), [[0.0, 100, ""]])
+        self.assertEqual([partituras.indicacion(b) for b in (50, 70, 99, 110, 130, 190)],
+                         ["Largo", "Adagio", "Andante", "Moderato", "Allegro", "Presto"])
+        self.assertEqual(partituras.marca_tempo(130, "Con brío"), "Con brío ♩ = 130")
 
     def test_acorde_de_un_cromagrama(self):
         croma = lambda *pcs: [1.0 if i in pcs else 0.05 for i in range(12)]
