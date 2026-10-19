@@ -38,6 +38,8 @@ class PaginaPartituras(QWidget):
         self.notas, self.bpm, self.tarea, self._cargando = [], 120, None, False
         self.letra = []        # texto cantado bajo cada nota (paralela a self.notas)
         self.acordes = []      # [[segundo, raíz, tipo], …] de la canción, encima del pentagrama
+        self._parando = False  # se pidió parar: el análisis termina con lo que lleve hecho
+        self._hasta = None     # segundo en que se paró la letra (paso 1), para escribir la partitura hasta ahí
         self.vivo = None       # motor del borrador en vivo mientras se graba
         self._ultima, self._grababa, self._hubo_vivo, self._auto = {}, False, False, False
 
@@ -75,7 +77,8 @@ class PaginaPartituras(QWidget):
         self.con_letra.setChecked(config.cargar().get("con_letra", True))
         self.con_letra.toggled.connect(self._guardar_con_letra)
         self.b_transcribir = tema.boton("Detectar notas y crear partitura", self.transcribir, "primario")
-        self.b_cancelar = tema.boton("Cancelar análisis", self.cancelar)
+        self.b_cancelar = tema.boton("Parar (conserva lo hecho)", self.cancelar,
+                                     ayuda="Termina ya y crea la partitura con lo analizado hasta ahora. Pulsa otra vez para cancelar del todo")
         self.b_oir = tema.boton("Escuchar audio", lambda: tema.abrir_en_sistema(self._audio()), ayuda="Abre el audio original en tu reproductor")
         self.barra = QProgressBar()
         self.barra.setRange(0, 1000)
@@ -455,6 +458,7 @@ class PaginaPartituras(QWidget):
         if not seguir:
             self._t0 = time.monotonic()
         self._base_barra = 400 if seguir else 0
+        self._parando = False
         self.barra.setValue(self._base_barra)
         self.e_estado.setText(mensaje)
         tema.reclasificar(self.e_estado, "tenue")
@@ -511,6 +515,13 @@ class PaginaPartituras(QWidget):
 
             def seguir(palabras, aviso):
                 orden["palabras"], self._sin_letra = palabras, aviso
+                if self._hasta is not None:   # parada en el paso 1: la partitura llega hasta donde llegó la letra
+                    if not (palabras and voz.is_file()):
+                        voz.unlink(missing_ok=True)
+                        self._parando, self._hasta = False, None
+                        self.e_estado.setText("Parado antes de reconocer la letra: no había nada que conservar. El audio original se conserva.")
+                        return self._botones()
+                    orden["hasta"] = self._hasta
                 if palabras and voz.is_file():   # canción: la melodía se saca de la voz aislada, no de la mezcla
                     orden.update(audio=str(voz), melodia=True)
                     return self._lanzar(orden, "Paso 2 de 2 · Escribiendo la melodía de la voz…", seguir=True)
@@ -596,6 +607,8 @@ class PaginaPartituras(QWidget):
                 fallo.append(ev["msg"])
             if ev["t"] in ("fin", "error"):
                 self.tarea = None
+                self._hasta = ev.get("hasta") if ev.get("parada") else None
+                self._parando = False
                 t.cancelar()
                 if frases:
                     segs = [{k: f[k] for k in ("inicio", "fin", "texto", "dudoso")} for f in frases]
@@ -634,9 +647,15 @@ class PaginaPartituras(QWidget):
                       "nombre": self.proyecto.name, "bpm": self.tempo.value() or None, **self._notacion()}, "Creando la nueva versión…")
 
     def cancelar(self):
-        if self.tarea:
-            self.e_estado.setText("Cancelando…")
-            self.tarea.cancelar()
+        """La primera vez, para y conserva lo hecho; la segunda, cancela del todo."""
+        if not self.tarea:
+            return
+        if not self._parando and self.tarea.parar():
+            self._parando = True
+            self.e_estado.setText("Parando: se conserva lo hecho hasta ahora… (pulsa otra vez para cancelar del todo)")
+            return
+        self.e_estado.setText("Cancelando…")
+        self.tarea.cancelar()
 
     def _evento(self, ev, carpeta):
         if ev["t"] == "progreso":
@@ -648,7 +667,7 @@ class PaginaPartituras(QWidget):
             self._resultado = ev
 
     def _fin(self, codigo, cancelada, carpeta):
-        self.tarea = None
+        self.tarea, self._parando, self._hasta = None, False, None
         tareas.limpiar_parciales(carpeta)
         r = self._resultado
         if cancelada:
@@ -660,7 +679,9 @@ class PaginaPartituras(QWidget):
             if carpeta == self.proyecto:
                 self.abrir_proyecto(carpeta)
                 aviso, self._sin_letra = getattr(self, "_sin_letra", ""), ""
-                self.e_estado.setText(f"Partitura creada: {r['n']} notas a {r['bpm']} pulsos/min"
+                parada = (f"Parado a los {int(r['hasta'] // 60)}:{int(r['hasta'] % 60):02d}: se conserva lo hecho hasta ahí. "
+                          if r.get("parada") else "")
+                self.e_estado.setText(parada + f"Partitura creada: {r['n']} notas a {r['bpm']} pulsos/min"
                                       + (f", {r['con_letra']} con letra" if r.get("con_letra") else "")
                                       + f" → {r['musicxml']} y {r['midi']}. Revísala a la derecha. " + aviso)
             self.cambio.emit()

@@ -151,6 +151,33 @@ class SeparacionDeVoz(unittest.TestCase):
                 time.sleep(0.1)
             self.assertFalse(Path(f"/proc/{hijos[0]}").exists())   # al cancelar no queda trabajando
 
+    def test_al_parar_la_letra_se_conserva_lo_reconocido(self):
+        import tempfile
+        import numpy as np
+        import soundfile as sf
+        from partitura_libre import rutas, separacion, tareas
+        eventos, fin = [], threading.Event()
+        with tempfile.TemporaryDirectory(dir=rutas.TEMP) as d:
+            wav = Path(d) / "larga.wav"
+            sf.write(wav, np.concatenate([self.mezcla] * 6), separacion.SR, subtype="PCM_16")
+            motor = None
+
+            def evento(ev):
+                eventos.append(ev)
+                if ev["t"] == "segmento" and sum(e["t"] == "segmento" for e in eventos) == 1:
+                    motor.parar()                                   # tras la primera frase
+                if ev["t"] in ("fin", "error"):
+                    fin.set()
+            motor = tareas.Tarea("partitura_libre.workers.voz", [str(letras.carpeta_modelo(MODELO))], "app", evento)
+            motor.enviar(id=1, audio=str(wav), idioma="es", cantada=True, palabras=True)
+            self.assertTrue(fin.wait(300))
+            motor.cancelar()
+        self.assertEqual(eventos[-1]["t"], "fin", eventos[-1])
+        self.assertTrue(eventos[-1]["parada"])
+        segmentos = [e for e in eventos if e["t"] == "segmento"]
+        self.assertTrue(segmentos)                                   # lo reconocido antes de parar llega
+        self.assertLess(eventos[-1]["hasta"], len(self.mezcla) * 6 / separacion.SR - 1)
+
 
 class Modelos(unittest.TestCase):
     def test_catalogo_explica_tamaño_y_memoria(self):

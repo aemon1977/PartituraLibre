@@ -60,6 +60,10 @@ class Tarea:
         except OSError:
             return False
 
+    def parar(self):
+        """Pide al motor que termine ya con lo que lleve hecho (no todos lo entienden). False si ya no está."""
+        return self.viva() and self.enviar(cmd="parar")
+
     def viva(self):
         return self.p.poll() is None
 

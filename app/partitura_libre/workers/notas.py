@@ -17,6 +17,7 @@ de partirse (ver partituras.integrar).
 import json
 import os
 import sys
+import threading
 from pathlib import Path
 
 from .. import partituras, rutas
@@ -29,9 +30,19 @@ VOZ = {"minimum_frequency": 65, "maximum_frequency": 1050, "minimum_note_length"
 COLOR_NOMBRES = "#1D5FA8"
 NOMBRES_ID = "nombres"   # marca en el MusicXML la línea de nombres de nota, para no confundirla con la letra
 MARGEN_S = 2   # contexto que se analiza de más a cada lado de un trozo
+PARAR = threading.Event()   # {"cmd": "parar"} por la entrada: se acaba el trozo en curso y se escribe lo hecho
 
 
-def detectar(audio, trozo_s=TROZO_S, ajustes=None):
+def escuchar_parar():
+    def leer():
+        for linea in sys.stdin:
+            if '"parar"' in linea:
+                PARAR.set()
+    threading.Thread(target=leer, daemon=True).start()
+
+
+def detectar(audio, trozo_s=TROZO_S, ajustes=None, limite=None):
+    """(notas, bpm, segundo analizado). Con `limite` o si llega «parar», se detiene ahí."""
     import numpy as np
     import soundfile as sf
     from basic_pitch import FilenameSuffix, build_icassp_2022_model_path
@@ -49,7 +60,7 @@ def detectar(audio, trozo_s=TROZO_S, ajustes=None):
             margen = int(min(MARGEN_S, trozo_s / 2) * sr)
             leer = lambda n: f.read(n, dtype="float32", always_2d=True).mean(axis=1)
             antes, nucleo, c0 = np.zeros(0, "float32"), leer(int(trozo_s * sr)), 0.0
-            while len(nucleo):
+            while len(nucleo) and not PARAR.is_set() and (limite is None or c0 < limite):
                 despues = leer(margen)  # contexto posterior; es el principio del núcleo siguiente
                 if bpm is None:
                     bpm = estimar_bpm(nucleo, sr)
@@ -68,7 +79,8 @@ def detectar(audio, trozo_s=TROZO_S, ajustes=None):
                 nucleo = np.concatenate([despues, resto])
     finally:
         trozo.unlink(missing_ok=True)
-    return sorted(partituras.quitar_armonicos(notas)), bpm or 120
+    final = min(c0, limite) if limite is not None else c0
+    return sorted(n for n in partituras.quitar_armonicos(notas) if n[0] < final), bpm or 120, final
 
 
 def en_vivo():
@@ -232,7 +244,9 @@ def main():
             return en_vivo()
         if o["cmd"] == "transcribir":
             emitir("progreso", v=0.0, msg="Cargando el motor Basic Pitch")
-            notas, bpm = detectar(o["audio"], o.get("trozo_s", TROZO_S), VOZ if o.get("melodia") else None)
+            escuchar_parar()
+            notas, bpm, final = detectar(o["audio"], o.get("trozo_s", TROZO_S), VOZ if o.get("melodia") else None, o.get("hasta"))
+            parada = PARAR.is_set() or o.get("hasta") is not None
             bpm = o.get("bpm") or bpm
             if o.get("melodia"):   # voz aislada: una sola línea, como se canta, y una sílaba por nota
                 notas, letra = partituras.letra_cantada(partituras.melodia(notas), o.get("palabras") or [])
@@ -242,6 +256,7 @@ def main():
             if notas and o.get("acordes_de"):
                 emitir("progreso", v=0.9, msg="Buscando los acordes")
                 acordes = detectar_acordes(o["acordes_de"], bpm, partituras.tonalidad(notas)[0] if o.get("armadura") is None else o["armadura"])
+                acordes = [a for a in acordes if a[0] < final]
             if not notas:
                 emitir("error", msg="No se detectó ninguna nota. Comprueba que el audio tiene una melodía audible; "
                                     "la grabación original se conserva.")
@@ -249,16 +264,17 @@ def main():
         elif o["cmd"] == "importar":
             emitir("progreso", v=0.2, msg="Leyendo la partitura")
             notas, bpm, letra = importar(o["partitura"])
-            acordes = []
+            acordes, parada, final = [], False, 0
             if not notas:
                 emitir("error", msg="Ese archivo no contiene notas que se puedan editar.")
                 return 1
         else:
             d = json.loads(Path(o["notas"]).read_text(encoding="utf-8"))
             notas, bpm, letra = d["notas"], o.get("bpm") or d.get("bpm", 120), d.get("letra") or []
-            acordes = d.get("acordes") or []
+            acordes, parada, final = d.get("acordes") or [], False, 0
         emitir("fin", **escribir(notas, bpm, o["carpeta"], o["nombre"], o.get("titulo", o["nombre"]),
-                                 o.get("clave", ""), o.get("nombres", False), letra, o.get("armadura"), acordes))
+                                 o.get("clave", ""), o.get("nombres", False), letra, o.get("armadura"), acordes),
+               **({"parada": True, "hasta": round(final, 1)} if parada else {}))
         return 0
     except Exception as e:
         import traceback

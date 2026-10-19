@@ -109,6 +109,33 @@ class Flujo(Aislada):
         otra, _ = ejecutar({"cmd": "regenerar", "notas": str(self.dir / eventos[-1]["notas"]), "carpeta": str(self.dir), "nombre": "editada"})
         self.assertEqual(partituras.leer_acordes(self.dir / otra[-1]["notas"]), acordes)   # editar no los pierde
 
+    def test_al_parar_se_conserva_lo_analizado(self):
+        """«Parar» a mitad: se termina el trozo en curso y se escribe la partitura con lo hecho hasta ahí."""
+        wav = escribir_wav(self.dir / "larga.wav", [(m, 0.5) for m in ESCALA] * 20)   # 80 s
+        eventos, fin = [], threading.Event()
+        t = tareas.Tarea("partitura_libre.workers.notas", [json.dumps({"cmd": "transcribir", "audio": str(wav), "carpeta": str(self.dir),
+                                                                      "nombre": "parada", "trozo_s": 10, "acordes_de": str(wav)})],
+                         "partituras", lambda ev: (eventos.append(ev), t.parar() if ev["t"] == "progreso" and ev["v"] > 0 else None),
+                         lambda c, cancelada: fin.set())
+        self.assertTrue(fin.wait(300))
+        r = eventos[-1]
+        self.assertEqual(r["t"], "fin", r)
+        self.assertTrue(r["parada"])
+        self.assertLess(r["hasta"], 40)                               # no siguió hasta el final
+        bpm, notas = partituras.leer_notas(self.dir / r["notas"])
+        self.assertTrue(notas)                                        # lo analizado se conserva
+        self.assertLess(max(n[0] for n in notas), r["hasta"])
+        self.assertTrue(all(a[0] < r["hasta"] for a in partituras.leer_acordes(self.dir / r["notas"])))
+
+    def test_con_hasta_la_partitura_acaba_donde_se_paro_la_letra(self):
+        wav = escribir_wav(self.dir / "escala.wav", [(m, 0.5) for m in ESCALA] * 3)   # 12 s
+        eventos, codigo = ejecutar({"cmd": "transcribir", "audio": str(wav), "carpeta": str(self.dir), "nombre": "hasta",
+                                    "trozo_s": 4, "hasta": 5.0})
+        self.assertEqual(codigo, 0, eventos)
+        self.assertEqual((eventos[-1]["parada"], eventos[-1]["hasta"]), (True, 5.0))
+        _bpm, notas = partituras.leer_notas(self.dir / eventos[-1]["notas"])
+        self.assertTrue(notas and max(n[0] for n in notas) < 5.0)
+
     def test_ritmos_irregulares_no_generan_tresillos(self):
         """Regresión: los tresillos que deducía la conversión hacían que MuseScore se cerrase al abrir el archivo."""
         notas = [[i / 3 * 0.5, (i + 1) / 3 * 0.5, 60 + i % 5, 0.7] for i in range(24)] + [[4.1, 4.37, 72, 0.7], [4.43, 5.0, 74, 0.7]]

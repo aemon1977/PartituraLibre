@@ -10,7 +10,9 @@ Recibe órdenes JSON por la entrada estándar, una por línea:
 """
 import json
 import os
+import queue
 import sys
+import threading
 from pathlib import Path
 
 from .. import letras, rutas, separacion
@@ -18,6 +20,11 @@ from . import emitir
 
 
 HAZ, TEMPERATURAS = 5, (0.0, 0.4)   # se ajustan al equipo en main()
+PARAR = threading.Event()   # {"cmd": "parar"}: terminar la orden en curso con lo reconocido hasta ahora
+
+
+class Parada(Exception):
+    pass
 
 
 def separar_aparte(audio, destino, id_):
@@ -29,6 +36,10 @@ def separar_aparte(audio, destino, id_):
                          creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
     fallo = ""
     for linea in p.stdout:
+        if PARAR.is_set():
+            p.terminate()
+            p.wait()
+            raise Parada
         ev = json.loads(linea)
         if ev["t"] == "progreso":
             emitir("progreso", id=id_, v=ev["v"], msg=f"Separando la voz de la música… {ev['v'] * 100:.0f} %")
@@ -53,10 +64,22 @@ def main():
             modelo = WhisperModel(sys.argv[1], device="cpu", compute_type="int8", local_files_only=True,
                                   cpu_threads=equipo.hilos_de_calculo())
         return modelo
+    ordenes = queue.Queue()
+
+    def leer():   # en un hilo aparte: así «parar» llega aunque se esté trabajando
+        for linea in sys.stdin:
+            o = json.loads(linea)
+            PARAR.set() if o.get("cmd") == "parar" else ordenes.put(o)
+        ordenes.put(None)
+    threading.Thread(target=leer, daemon=True).start()
     emitir("listo")
-    for linea in sys.stdin:
-        o = json.loads(linea)
-        audio, temporal = o["audio"], None
+    while (o := ordenes.get()) is not None:
+        PARAR.clear()
+        audio, temporal, hasta = o["audio"], None, 0.0
+
+        def limpiar():   # antes de avisar del fin: quien espera ese aviso puede cerrar el proceso al momento
+            if temporal:
+                temporal.unlink(missing_ok=True)
         try:
             cantada, desfase = o.get("cantada", False), o.get("desfase", 0.0)
             if o.get("separar") and separacion.instalado():   # primero se quita la música; se transcribe solo la voz
@@ -80,12 +103,19 @@ def main():
                                            **({"no_speech_threshold": None} if cantada else {}))
             emitir("idioma", id=o["id"], idioma=info.language, prob=round(info.language_probability, 3), dur=info.duration)
             for s in segs:
+                if PARAR.is_set():
+                    raise Parada
+                hasta = s.end + desfase
                 if s.text.strip() and not (cantada and letras.es_relleno(s.text, s.avg_logprob)):
                     emitir("segmento", id=o["id"], inicio=round(s.start + desfase, 2), fin=round(s.end + desfase, 2),
                            palabras=[[round(p.start + desfase, 2), round(p.end + desfase, 2), p.word.strip()] for p in (s.words or [])],
                            texto=s.text.strip(), v=round(min(1.0, s.end / max(info.duration, 0.01)), 3),
                            dudoso=cantada and s.avg_logprob < -0.65 or letras.es_dudoso(s.avg_logprob, s.no_speech_prob, s.compression_ratio))
+            limpiar()
             emitir("fin", id=o["id"])
+        except Parada:   # se conserva lo reconocido; «hasta» es dónde se quedó
+            limpiar()
+            emitir("fin", id=o["id"], parada=True, hasta=round(hasta, 2))
         except Exception as e:
             import traceback
             traceback.print_exc()
