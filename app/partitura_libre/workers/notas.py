@@ -257,6 +257,9 @@ def main():
                 emitir("progreso", v=0.9, msg="Buscando los acordes")
                 acordes = detectar_acordes(o["acordes_de"], bpm, partituras.tonalidad(notas)[0] if o.get("armadura") is None else o["armadura"])
                 acordes = [a for a in acordes if a[0] < final]
+            if not notas and parada:
+                emitir("error", msg="Parado antes de analizar nada: no había nada que conservar. El audio original se conserva.")
+                return 1
             if not notas:
                 emitir("error", msg="No se detectó ninguna nota. Comprueba que el audio tiene una melodía audible; "
                                     "la grabación original se conserva.")

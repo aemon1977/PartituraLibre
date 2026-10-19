@@ -532,11 +532,28 @@ class Interfaz(Aislada):
         p.transcribir()
         esperar(lambda: False, 1.0)
         p.cancelar()
+        p.cancelar()                                   # la segunda pulsación cancela del todo, sin conservar nada
         self.assertTrue(esperar(lambda: p.tarea is None, 15))
         self.assertIn("cancelado", p.e_estado.text())
         self.assertEqual(proyectos.leer(d)["resultados"], [])
         self.assertEqual(list(d.glob("*.parcial")), [])
         self.assertTrue(p.b_transcribir.isEnabled())
+
+    def test_parar_el_analisis_conserva_lo_hecho(self):
+        p = self.v.partituras
+        p.con_letra.setChecked(False)
+        d = proyectos.crear("parable", "partitura")
+        proyectos.importar_audio(d, escribir_wav(self.dir / "p.wav", [(m, 0.5) for m in ESCALA] * 80))   # 320 s: tres trozos
+        p.abrir_proyecto(d)
+        p.transcribir()
+        self.assertTrue(esperar(lambda: "Analizado" in p.e_estado.text(), 60))
+        p.cancelar()                                   # una vez: parar y conservar
+        self.assertIn("conserva", p.e_estado.text())
+        self.assertTrue(esperar(lambda: p.tarea is None, 120))
+        self.assertIn("Parado", p.e_estado.text())
+        self.assertEqual(len(proyectos.leer(d)["resultados"]), 1)   # la partitura con lo analizado
+        self.assertTrue(p.notas)
+        self.assertLess(max(n[0] for n in p.notas), 245)            # acaba el trozo en curso, no llega al final
 
     @unittest.skipUnless(any(letras.instalado(m) for m in letras.MODELOS), "sin modelo de voz descargado")
     def test_letra_de_principio_a_fin(self):
