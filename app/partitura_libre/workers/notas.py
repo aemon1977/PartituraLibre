@@ -151,8 +151,8 @@ def escribir(notas, bpm, carpeta, nombre, titulo, clave="", nombres=False, letra
     # interpretación real son casi siempre ruido y además hacen que MuseScore 4.7 se cierre al abrirlos.
     partitura = converter.parse(str(p_mid), format="midi", quarterLengthDivisors=(4,))
     partitura.metadata = metadata.Metadata(title=titulo, composer="Transcripción automática · Partitura Libre")
-    clave = clave or partituras.clave_adecuada(notas)   # automática: la misma que elige el editor
-    elegida = {"sol": clef.TrebleClef, "fa": clef.BassClef, "do3": clef.AltoClef, "do4": clef.TenorClef}.get(clave)
+    clave = clave or partituras.clave_adecuada(notas, voz=any(letra))   # automática: la misma que elige el editor
+    elegida = {"sol": clef.TrebleClef, "sol8": clef.Treble8vbClef, "fa": clef.BassClef, "do3": clef.AltoClef, "do4": clef.TenorClef}.get(clave)
     for parte in partitura.parts:
         if elegida:
             for c in list(parte.recurse().getElementsByClass(clef.Clef)):

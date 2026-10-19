@@ -164,6 +164,7 @@ def quitar_armonicos(notas):
 # nota natural) y posición de la línea a la que da nombre la clave (0 = línea inferior, 2 = segunda…).
 CLAVES = {
     "sol": ("Clave de Sol", 30, 2),            # línea inferior Mi4; el Sol4 está en la 2.ª línea
+    "sol8": ("Clave de Sol 8ª baja (voz)", 23, 2),  # suena una octava más grave: la de tenores y voces graves
     "fa": ("Clave de Fa (4.ª línea)", 18, 6),  # línea inferior Sol2; el Fa3 está en la 4.ª línea
     "do3": ("Clave de Do (3.ª línea)", 24, 4), # línea inferior Fa3; el Do4 está en la 3.ª línea
     "do4": ("Clave de Do (4.ª línea)", 22, 6), # línea inferior Re3; el Do4 está en la 4.ª línea
@@ -172,10 +173,11 @@ _LETRA = [0, 0, 1, 1, 2, 3, 3, 4, 4, 5, 5, 6]          # Do Do♯ Re Re♯ Mi Fa
 _SOSTENIDO = [False, True, False, True, False, False, True, False, True, False, True, False]
 
 
-def clave_adecuada(notas):
+def clave_adecuada(notas, voz=False):
     """Clave (Sol, Fa, Do en 3.ª o Do en 4.ª) que deja las notas dentro del pentagrama con menos líneas
     adicionales. A igualdad se prefiere la más habitual: Sol, luego Fa, luego las de Do, que solo ganan
-    cuando ahorran claramente (instrumentos o voces de registro medio, como la viola o el tenor)."""
+    cuando ahorran claramente (instrumentos de registro medio, como la viola).
+    Con `voz` (una canción) se escribe como en los cancioneros: Sol, o Sol 8ª baja si la voz es grave."""
     if not notas:
         return "sol"
     def coste(clave):
@@ -185,9 +187,9 @@ def clave_adecuada(notas):
             lineas = (-pos) // 2 if pos <= -2 else (pos - 8) // 2 if pos >= 10 else 0   # líneas adicionales
             total += (max(0, lineas - 1) + 0.2 * min(lineas, 1)) * max(fin - ini, 0.05)   # una sola es normal
         return total
-    preferencia = {"sol": 0.0, "fa": 0.02, "do3": 0.15, "do4": 0.2}   # peso de la costumbre
+    preferencia = {"sol": 0.0, "sol8": 0.02, "fa": 0.02, "do3": 0.15, "do4": 0.2}   # peso de la costumbre
     duracion = sum(max(f - i, 0.05) for i, f, _t, _v in notas)
-    return min(CLAVES, key=lambda c: coste(c) / duracion + preferencia[c])
+    return min(("sol", "sol8") if voz else ("sol", "fa", "do3", "do4"), key=lambda c: coste(c) / duracion + preferencia[c])
 
 
 def posicion(midi, clave, armadura=0):

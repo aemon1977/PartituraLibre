@@ -15,13 +15,13 @@ SONANDO = "#d9822b"  # nota que está sonando al reproducir
 MESA, PAPEL, TINTA, ELEGIDA, TENUE = "#2f3948", "#fdfcf7", "#1b2433", "#0f9d8f", "#7a8494"
 A4_ANCHO, A4_ALTO = 1000, 1414   # hoja A4 en unidades de dibujo para el PDF
 # Símbolos SMuFL de Bravura
-G_CLAVE = {"sol": "", "fa": "", "do3": "", "do4": ""}
+G_CLAVE = {"sol8": "\ue052", "sol": "", "fa": "", "do3": "", "do4": ""}
 G_CABEZA = {"redonda": "", "blanca": ""}
 G_BEMOL, G_BECUADRO = "\ue260", "\ue261"
 # Armadura: (letra, octava) de cada alteración en clave de Sol, en el orden en que se escriben
 ARMADURA_SOL = {1: [(3, 5), (0, 5), (4, 5), (1, 5), (5, 4), (2, 5), (6, 4)], -1: [(6, 4), (2, 5), (5, 4), (1, 5), (4, 4), (0, 5), (3, 4)]}
 # Posición de la armadura en cada clave respecto a la de Sol (en pasos de pentagrama) y altura máxima permitida
-DESPLAZA_CLAVE = {"sol": (0, 9), "fa": (-2, 9), "do3": (-1, 9), "do4": (1, 8)}
+DESPLAZA_CLAVE = {"sol": (0, 9), "sol8": (0, 9), "fa": (-2, 9), "do3": (-1, 9), "do4": (1, 8)}
 ANCHO_ALTERACION = 9
 G_NEGRA, G_SOSTENIDO, G_CUATRO, G_PUNTILLO = "", "", "", ""
 G_CORCHETE = {("corchea", True): "", ("corchea", False): "",
@@ -73,7 +73,7 @@ class Pentagrama(QWidget):
         """`letra` es el texto bajo cada nota (paralela a `notas`). `armadura` en quintas (+ sostenidos,
         − bemoles); None la detecta de las notas."""
         self.notas, self.sel, self.bpm, self.nombres, self.letra = notas, sel, bpm or 120, nombres, list(letra)
-        self.clave, self.titulo = clave or partituras.clave_adecuada(notas), titulo
+        self.clave, self.titulo = clave or partituras.clave_adecuada(notas, voz=any(self.letra)), titulo
         detectada = partituras.tonalidad(notas)
         self.armadura = detectada[0] if armadura is None else armadura
         self.tonalidad = detectada[1] if armadura is None else partituras.nombre_armadura(armadura)

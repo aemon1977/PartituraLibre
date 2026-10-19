@@ -276,6 +276,9 @@ class Notacion(unittest.TestCase):
         self.assertEqual(clave([50, 52, 55, 57, 60, 62]), "fa")         # Re3–Re4: Fa, con solo una línea adicional
         self.assertEqual(clave([52, 55, 57, 60, 64, 67, 69]), "do3")    # Mi3–La4 (viola): ni Sol ni Fa caben; Do en 3.ª
         self.assertEqual(clave([]), "sol")
+        voz = lambda tonos: partituras.clave_adecuada([[i, i + 0.5, t, .7] for i, t in enumerate(tonos)], voz=True)
+        self.assertEqual(voz([45, 48, 50, 51, 53, 55]), "sol8")           # voz grave cantando: Sol 8ª baja, nunca Fa
+        self.assertEqual(voz([62, 64, 67, 69, 72]), "sol")                # voz aguda: Sol
 
     def test_nombres_figuras_acordes_y_clave_automatica(self):
         self.assertEqual([partituras.solfeo(m) for m in (60, 62, 64, 65, 67, 69, 71, 73)], ["Do", "Re", "Mi", "Fa", "Sol", "La", "Si", "Do♯"])
