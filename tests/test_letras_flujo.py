@@ -123,6 +123,34 @@ class SeparacionDeVoz(unittest.TestCase):
         self.assertTrue(any(e["t"] == "progreso" and "Separando" in e["msg"] for e in eventos))
         self.assertIn("wikipedia", " ".join(e["texto"] for e in eventos if e["t"] == "segmento").lower())
 
+    def test_la_separacion_va_aparte_y_muere_al_cancelar(self):
+        """Separar y reconocer nunca están a la vez en memoria: separar va en su propio proceso, que no queda
+        huérfano si se cancela el análisis."""
+        import subprocess
+        import tempfile
+        import time
+        import numpy as np
+        import soundfile as sf
+        from partitura_libre import rutas, separacion, tareas
+        if rutas.WINDOWS:
+            self.skipTest("se comprueba con pgrep")
+        eventos, separando = [], threading.Event()
+        with tempfile.TemporaryDirectory(dir=rutas.TEMP) as d:
+            wav = Path(d) / "larga.wav"
+            sf.write(wav, np.concatenate([self.mezcla] * 12), separacion.SR, subtype="PCM_16")
+            motor = tareas.Tarea("partitura_libre.workers.voz", [str(letras.carpeta_modelo(MODELO))], "app",
+                                 lambda ev: (eventos.append(ev), separando.set() if "%" in ev.get("msg", "") else None))
+            motor.enviar(id=1, audio=str(wav), idioma="es", cantada=True, separar=True)
+            self.assertTrue(separando.wait(120))
+            hijos = subprocess.run(["pgrep", "-f", "partitura_libre.workers.separar " + str(wav)], capture_output=True, text=True).stdout.split()
+            self.assertEqual(len(hijos), 1)                      # la separación, en un proceso aparte
+            motor.cancelar()
+            for _ in range(50):
+                if not Path(f"/proc/{hijos[0]}").exists():
+                    break
+                time.sleep(0.1)
+            self.assertFalse(Path(f"/proc/{hijos[0]}").exists())   # al cancelar no queda trabajando
+
 
 class Modelos(unittest.TestCase):
     def test_catalogo_explica_tamaño_y_memoria(self):

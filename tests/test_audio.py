@@ -365,6 +365,8 @@ class EquipoModesto(unittest.TestCase):
         self.assertFalse(equipo.modesto(8, 0))      # memoria desconocida: decide el procesador
         self.assertGreaterEqual(equipo.hilos_de_calculo(), 1)
         self.assertLess(equipo.hilos_de_calculo(), max(2, equipo.nucleos() + 1))
+        if equipo.modesto(equipo.nucleos()):                 # en un mini PC, la mitad: que no se caliente hasta apagarse
+            self.assertLessEqual(equipo.hilos_de_calculo(), max(1, equipo.nucleos() // 2))
 
     def test_en_un_equipo_modesto_la_letra_de_una_cancion_usa_small(self):
         from partitura_libre import letras

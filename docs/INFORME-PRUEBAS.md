@@ -1,6 +1,6 @@
 # Informe de pruebas
 
-Fecha: 8 de octubre de 2026 · Versión 1.9.0
+Fecha: 8 de octubre de 2026 · Versión 1.9.1
 Equipo de pruebas: Debian 13 (trixie) x86_64 real, sesión Wayland con PipeWire, 24 hilos, 31 GB de RAM.
 **No se ha dispuesto de un Windows 11 ni de un Ubuntu 24.04.** Lo que no se pudo ejecutar se indica como tal.
 
@@ -117,6 +117,17 @@ Con la última toma de letra (pico del 13 %, señal apenas 3 dB sobre el ruido d
 ### «Sonido del equipo» elegía la salida equivocada (caso real) — corregido
 
 La lista ofrecía una entrada por cada salida de audio, y la del micrófono inalámbrico (que también tiene salida de auriculares) se confundía con el propio micrófono: al elegirla el nivel era 0 %. Ahora hay una única entrada que, al empezar, localiza la salida por la que está sonando algo (o la predeterminada si no suena nada), avisa antes de grabar si nada se está reproduciendo y da mensajes propios en vez de «acerca el micrófono». Verificado que se conecta a la salida correcta; **no ejecutable aquí** con música real, porque no sonaba nada durante la prueba.
+
+### Memoria por pasos en equipos modestos (1.9.1)
+
+Medido con **4 hilos** y un minuto de «Political incorrectness»: cada paso es un proceso aparte que devuelve su memoria al terminar, y ya no se cargan a la vez el separador y el reconocedor.
+
+| Paso | Antes | 1.9.1 |
+|---|---|---|
+| Separar la voz + reconocer la letra (`small`) | 1835 MB a la vez | 1440 MB el separador (solo), luego el reconocedor |
+| Notas + acordes | todos los núcleos | 476 MB, 8 s |
+
+En equipos modestos los análisis usan la mitad de los hilos (antes, todos menos uno), para que un mini PC no se caliente hasta apagarse. Al cancelar, el proceso de separación termina también (prueba automática). **No ejecutable aquí:** un mini PC real y su temperatura.
 
 ### Reproductor y rendimiento en equipos modestos (1.8)
 

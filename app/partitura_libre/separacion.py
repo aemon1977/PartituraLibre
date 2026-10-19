@@ -30,14 +30,9 @@ def separar(x, progreso=None, modelo=None):
     """`x`: audio estéreo (muestras, 2) en float32 a 44,1 kHz. Devuelve solo la voz, con la misma forma.
     El audio se procesa en trozos de unos 6 s que se solapan, y se descartan los bordes de cada uno."""
     import numpy as np
-    import onnxruntime as ort
 
     from . import equipo
-    opciones = ort.SessionOptions()
-    opciones.intra_op_num_threads = equipo.hilos_de_calculo()   # un núcleo libre para la ventana
-    opciones.enable_cpu_mem_arena = False   # sin reserva anticipada: 1,6 GB en vez de 2,9 GB, igual de rápido
-    opciones.enable_mem_pattern = False
-    sesion = ort.InferenceSession(str(modelo or ARCHIVO), opciones, providers=["CPUExecutionProvider"])
+    sesion = equipo.sesion_onnx(modelo or ARCHIVO)
     entrada = sesion.get_inputs()[0]
     _, _, dim_f, dim_t = entrada.shape
     n_fft, salto = {2048: 6144, 3072: 7680}[dim_f], 1024

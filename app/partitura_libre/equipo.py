@@ -42,5 +42,21 @@ def modesto(n=None, gb=None):
 
 
 def hilos_de_calculo():
-    """Hilos para los análisis: todos menos uno, que queda libre para que la ventana responda."""
-    return max(1, nucleos() - 1)
+    """Hilos para los análisis: todos menos uno, que queda libre para que la ventana responda. En equipos
+    modestos, la mitad: un mini PC con todos los núcleos al máximo durante minutos se calienta tanto que
+    puede llegar a apagarse."""
+    n = nucleos()
+    return max(1, n // 2) if modesto(n) else max(1, n - 1)
+
+
+def sesion_onnx(ruta):
+    """Sesión de ONNX Runtime con los hilos de `hilos_de_calculo` y sin reserva anticipada de memoria
+    (con ella, el separador ocupaba 2,9 GB; así, 1,4 GB, igual de rápido)."""
+    import onnxruntime as ort
+    opciones = ort.SessionOptions()
+    opciones.intra_op_num_threads = hilos_de_calculo()
+    opciones.inter_op_num_threads = 1
+    opciones.enable_cpu_mem_arena = False
+    opciones.enable_mem_pattern = False
+    opciones.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_BASIC   # medido: −170 MB, igual de rápido
+    return ort.InferenceSession(str(ruta), opciones, providers=["CPUExecutionProvider"])

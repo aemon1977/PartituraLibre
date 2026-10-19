@@ -38,6 +38,9 @@ def detectar(audio, trozo_s=TROZO_S, ajustes=None):
     from basic_pitch.inference import Model, predict
 
     modelo = Model(build_icassp_2022_model_path(FilenameSuffix.onnx))
+    if modelo.model_type == Model.MODEL_TYPES.ONNX:   # sin todos los núcleos ni reserva de memoria (equipos modestos)
+        from .. import equipo
+        modelo.model = equipo.sesion_onnx(build_icassp_2022_model_path(FilenameSuffix.onnx))
     trozo = rutas.TEMP / f"trozo-{os.getpid()}.wav"
     notas, ultima, bpm = [], {}, None
     try:

@@ -20,14 +20,39 @@ from . import emitir
 HAZ, TEMPERATURAS = 5, (0.0, 0.4)   # se ajustan al equipo en main()
 
 
+def separar_aparte(audio, destino, id_):
+    """La separación va en su propio proceso, antes de cargar el reconocedor: los dos juntos no caben
+    holgados en un equipo con poca memoria, y al acabar el proceso el sistema recupera toda la suya."""
+    import subprocess
+    p = subprocess.Popen([sys.executable, "-s", "-m", "partitura_libre.workers.separar", str(audio), str(destino)],
+                         stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True, encoding="utf-8",
+                         creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+    fallo = ""
+    for linea in p.stdout:
+        ev = json.loads(linea)
+        if ev["t"] == "progreso":
+            emitir("progreso", id=id_, v=ev["v"], msg=f"Separando la voz de la música… {ev['v'] * 100:.0f} %")
+        elif ev["t"] == "error":
+            fallo = ev["msg"]
+    if p.wait() or not Path(destino).is_file():
+        raise RuntimeError(fallo or f"el separador se cerró (código {p.returncode}); suele ser falta de memoria")
+    return str(destino)
+
+
 def main():
-    from faster_whisper import WhisperModel
     from .. import equipo
     global HAZ, TEMPERATURAS
     if equipo.modesto():
         HAZ, TEMPERATURAS = 1, (0.0,)
-    modelo = WhisperModel(sys.argv[1], device="cpu", compute_type="int8", local_files_only=True,
-                          cpu_threads=equipo.hilos_de_calculo())   # un núcleo libre para la ventana
+    modelo = None   # se carga con la primera orden, después de separar la voz: nunca los dos en memoria a la vez
+
+    def reconocedor():
+        nonlocal modelo
+        if modelo is None:
+            from faster_whisper import WhisperModel
+            modelo = WhisperModel(sys.argv[1], device="cpu", compute_type="int8", local_files_only=True,
+                                  cpu_threads=equipo.hilos_de_calculo())
+        return modelo
     emitir("listo")
     for linea in sys.stdin:
         o = json.loads(linea)
@@ -40,15 +65,15 @@ def main():
                 temporal = rutas.TEMP / f"voz-separada-{os.getpid()}.wav"
                 destino = Path(o["guardar_voz"]) if o.get("guardar_voz") else temporal   # la voz aislada se puede conservar
                 temporal = None if o.get("guardar_voz") else temporal
-                audio = str(separacion.voz_a_wav(audio, destino, lambda f: emitir(
-                    "progreso", id=o["id"], v=round(f, 3), msg=f"Separando la voz de la música… {f * 100:.0f} %")))
+                audio = separar_aparte(audio, destino, o["id"])
             # Voz cantada: sin filtro de silencios (la música lo confunde), sin arrastrar el texto
             # anterior (para que no «rellene» versos) y sin descartar de antemano los tramos que el
             # modelo cree sin voz: se muestran marcados como dudosos, salvo los que son puro relleno.
             # Sin reintentos a temperaturas altas: con música, el modelo cae en bucles («¡Aaaaah!») y cada
             # reintento repite el tramo; medido con 4 hilos, 454 s -> 26 s por minuto de canción, misma letra.
             # En equipos modestos, además, un solo candidato (beam 1).
-            segs, info = modelo.transcribe(audio, language=o.get("idioma") or None, beam_size=HAZ,
+            emitir("progreso", id=o["id"], v=1.0, msg="Cargando el reconocedor de voz…")
+            segs, info = reconocedor().transcribe(audio, language=o.get("idioma") or None, beam_size=HAZ,
                                            temperature=TEMPERATURAS,
                                            vad_filter=not cantada, condition_on_previous_text=not cantada,
                                            word_timestamps=bool(o.get("palabras")),
