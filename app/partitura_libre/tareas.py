@@ -75,6 +75,7 @@ class Tarea:
                 self.p.wait(3)
             except subprocess.TimeoutExpired:
                 self.p.kill()
+                self.p.wait()
 
 
 def cancelar_todas():

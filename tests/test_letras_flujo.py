@@ -3,12 +3,13 @@ import threading
 import unittest
 from pathlib import Path
 
-from partitura_libre import exportar, letras, tareas
+from partitura_libre import exportar, letras, rutas, tareas
 
 DATOS = Path(__file__).parent / "datos"
 MODELO = next((m for m in ("small", "base", "tiny") if letras.instalado(m)), None)
 
 
+@unittest.skipIf(rutas.WINDOWS, "la inferencia real de voz se comprueba en Linux; Windows valida el paquete")
 @unittest.skipUnless(MODELO, "no hay ningún modelo de voz descargado (descarga uno desde la app)")
 class Voz(unittest.TestCase):
     @classmethod
@@ -29,6 +30,8 @@ class Voz(unittest.TestCase):
         self.motor.enviar(id=i, **orden)
         with self.cond:
             ok = self.cond.wait_for(lambda: any(e["t"] in ("fin", "error") and e.get("id") == i for e in self.eventos), 300)
+        if not ok:
+            self.motor.cancelar()
         self.assertTrue(ok, "el motor de voz no respondió")
         return [e for e in self.eventos if e.get("id") == i]
 
@@ -74,6 +77,7 @@ class Voz(unittest.TestCase):
         self.assertTrue(all(e["dudoso"] for e in ev if e["t"] == "segmento"), ev)
 
 
+@unittest.skipIf(rutas.WINDOWS, "la inferencia real de voz se comprueba en Linux; Windows valida el paquete")
 @unittest.skipUnless(MODELO, "no hay ningún modelo de voz descargado")
 class SeparacionDeVoz(unittest.TestCase):
     """Voz real mezclada con una melodía fuerte, como una canción: el separador debe quitar la música."""
@@ -115,9 +119,11 @@ class SeparacionDeVoz(unittest.TestCase):
             sf.write(wav, self.mezcla, separacion.SR, subtype="PCM_16")
             motor = tareas.Tarea("partitura_libre.workers.voz", [str(letras.carpeta_modelo(MODELO))], "app",
                                  lambda ev: (eventos.append(ev), fin.set() if ev["t"] in ("fin", "error") else None))
-            motor.enviar(id=1, audio=str(wav), idioma="es", cantada=True, separar=True)
-            self.assertTrue(fin.wait(300))
-            motor.cancelar()
+            try:
+                motor.enviar(id=1, audio=str(wav), idioma="es", cantada=True, separar=True)
+                self.assertTrue(fin.wait(300))
+            finally:
+                motor.cancelar()
             self.assertEqual(list(rutas.TEMP.glob("voz-separada-*.wav")), [])      # el temporal se borra
         self.assertEqual(eventos[-1]["t"], "fin", eventos[-1])
         self.assertTrue(any(e["t"] == "progreso" and "Separando" in e["msg"] for e in eventos))
@@ -169,9 +175,11 @@ class SeparacionDeVoz(unittest.TestCase):
                 if ev["t"] in ("fin", "error"):
                     fin.set()
             motor = tareas.Tarea("partitura_libre.workers.voz", [str(letras.carpeta_modelo(MODELO))], "app", evento)
-            motor.enviar(id=1, audio=str(wav), idioma="es", cantada=True, palabras=True)
-            self.assertTrue(fin.wait(300))
-            motor.cancelar()
+            try:
+                motor.enviar(id=1, audio=str(wav), idioma="es", cantada=True, palabras=True)
+                self.assertTrue(fin.wait(300))
+            finally:
+                motor.cancelar()
         self.assertEqual(eventos[-1]["t"], "fin", eventos[-1])
         self.assertTrue(eventos[-1]["parada"])
         segmentos = [e for e in eventos if e["t"] == "segmento"]

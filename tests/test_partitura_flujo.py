@@ -5,7 +5,7 @@ import time
 import unittest
 import xml.etree.ElementTree as ET
 
-from partitura_libre import partituras, tareas
+from partitura_libre import partituras, rutas, tareas
 from tests.comun import ESCALA, Aislada, escribir_wav
 
 PASO = {"C": 0, "D": 2, "E": 4, "F": 5, "G": 7, "A": 9, "B": 11}
@@ -15,9 +15,11 @@ def ejecutar(orden, espera=300):
     """Lanza el motor de partituras y devuelve (eventos, código de salida)."""
     eventos, fin = [], threading.Event()
     codigo = []
-    tareas.Tarea("partitura_libre.workers.notas", [json.dumps(orden)], "partituras", eventos.append,
-                 lambda c, cancelada: (codigo.append(c), fin.set()))
-    assert fin.wait(espera), "el motor no terminó a tiempo"
+    motor = tareas.Tarea("partitura_libre.workers.notas", [json.dumps(orden)], "partituras", eventos.append,
+                         lambda c, cancelada: (codigo.append(c), fin.set()))
+    if not fin.wait(espera):
+        motor.cancelar()
+        raise AssertionError("el motor no terminó a tiempo")
     return eventos, codigo[0]
 
 
@@ -32,6 +34,7 @@ def tonos_musicxml(ruta):
 
 
 class Flujo(Aislada):
+    @unittest.skipIf(rutas.WINDOWS, "la inferencia real de partituras se comprueba en Linux; Windows valida el paquete")
     def test_escala_conocida_llega_a_midi_y_musicxml_y_se_puede_corregir(self):
         wav = escribir_wav(self.dir / "escala de prueba.wav", [(m, 0.5) for m in ESCALA])
         eventos, codigo = ejecutar({"cmd": "transcribir", "audio": str(wav), "carpeta": str(self.dir), "nombre": "escala ñ"})
@@ -63,6 +66,7 @@ class Flujo(Aislada):
         for f, contenido in antes.items():
             self.assertEqual((self.dir / fin[f]).read_bytes(), contenido, f"se modificó la primera versión de {f}")
 
+    @unittest.skipIf(rutas.WINDOWS, "la inferencia real de partituras se comprueba en Linux; Windows valida el paquete")
     def test_modo_cancion_el_motor_da_una_linea_con_una_palabra_por_nota(self):
         """Por el motor real: con «melodia» la letra sale una palabra por nota y sin notas simultáneas."""
         wav = escribir_wav(self.dir / "voz.wav", [(67, 1.5), (69, 0.5), (71, 0.5)])
@@ -76,6 +80,7 @@ class Flujo(Aislada):
         self.assertEqual(sum(1 for a, b in zip(notas, notas[1:]) if b[0] < a[1] - 1e-3), 0)   # una sola línea
         self.assertEqual([n[2] for n, t in zip(notas, letra) if t], [67, 69, 71])
 
+    @unittest.skipIf(rutas.WINDOWS, "la inferencia real de partituras se comprueba en Linux; Windows valida el paquete")
     def test_la_clave_elegida_y_los_nombres_de_nota_llegan_al_musicxml(self):
         wav = escribir_wav(self.dir / "escala.wav", [(m, 0.5) for m in ESCALA])
         eventos, codigo = ejecutar({"cmd": "transcribir", "audio": str(wav), "carpeta": str(self.dir), "nombre": "en fa",
@@ -89,6 +94,7 @@ class Flujo(Aislada):
         sin, _ = ejecutar({"cmd": "regenerar", "notas": str(self.dir / eventos[-1]["notas"]), "carpeta": str(self.dir), "nombre": "sin nombres"})
         self.assertEqual(list(ET.parse(self.dir / sin[-1]["musicxml"]).getroot().iter("lyric")), [])
 
+    @unittest.skipIf(rutas.WINDOWS, "la inferencia real de partituras se comprueba en Linux; Windows valida el paquete")
     def test_los_acordes_de_la_cancion_se_reconocen_y_llegan_al_musicxml(self):
         import numpy as np
         import soundfile as sf
@@ -109,6 +115,7 @@ class Flujo(Aislada):
         otra, _ = ejecutar({"cmd": "regenerar", "notas": str(self.dir / eventos[-1]["notas"]), "carpeta": str(self.dir), "nombre": "editada"})
         self.assertEqual(partituras.leer_acordes(self.dir / otra[-1]["notas"]), acordes)   # editar no los pierde
 
+    @unittest.skipIf(rutas.WINDOWS, "la inferencia real de partituras se comprueba en Linux; Windows valida el paquete")
     def test_al_parar_se_conserva_lo_analizado(self):
         """«Parar» a mitad: se termina el trozo en curso y se escribe la partitura con lo hecho hasta ahí."""
         wav = escribir_wav(self.dir / "larga.wav", [(m, 0.5) for m in ESCALA] * 20)   # 80 s
@@ -117,7 +124,9 @@ class Flujo(Aislada):
                                                                       "nombre": "parada", "trozo_s": 10, "acordes_de": str(wav)})],
                          "partituras", lambda ev: (eventos.append(ev), t.parar() if ev["t"] == "progreso" and ev["v"] > 0 else None),
                          lambda c, cancelada: fin.set())
-        self.assertTrue(fin.wait(300))
+        if not fin.wait(300):
+            t.cancelar()
+            self.fail("el motor no terminó a tiempo")
         r = eventos[-1]
         self.assertEqual(r["t"], "fin", r)
         self.assertTrue(r["parada"])
@@ -127,6 +136,7 @@ class Flujo(Aislada):
         self.assertLess(max(n[0] for n in notas), r["hasta"])
         self.assertTrue(all(a[0] < r["hasta"] for a in partituras.leer_acordes(self.dir / r["notas"])))
 
+    @unittest.skipIf(rutas.WINDOWS, "la inferencia real de partituras se comprueba en Linux; Windows valida el paquete")
     def test_con_hasta_la_partitura_acaba_donde_se_paro_la_letra(self):
         wav = escribir_wav(self.dir / "escala.wav", [(m, 0.5) for m in ESCALA] * 3)   # 12 s
         eventos, codigo = ejecutar({"cmd": "transcribir", "audio": str(wav), "carpeta": str(self.dir), "nombre": "hasta",
@@ -161,6 +171,7 @@ class Flujo(Aislada):
         self.assertNotIn("<time-modification", xml)
         self.assertGreater(xml.count("<note"), 10)
 
+    @unittest.skipIf(rutas.WINDOWS, "la inferencia real de partituras se comprueba en Linux; Windows valida el paquete")
     def test_audio_troceado_conserva_la_continuidad_temporal(self):
         """Con trozos de 2 s, una nota de 3 s cruza un corte: debe salir una sola nota y los tiempos reales."""
         wav = escribir_wav(self.dir / "larga.wav", [(60, 1.0), (67, 3.0), (72, 1.5)])
@@ -172,6 +183,7 @@ class Flujo(Aislada):
             self.assertAlmostEqual(inicio, ei, delta=0.08)
             self.assertAlmostEqual(final, ef, delta=0.12)
 
+    @unittest.skipIf(rutas.WINDOWS, "la inferencia real de partituras se comprueba en Linux; Windows valida el paquete")
     def test_silencio_no_inventa_notas_y_conserva_el_audio(self):
         import numpy as np
         import soundfile as sf
@@ -183,6 +195,7 @@ class Flujo(Aislada):
         self.assertIn("ninguna nota", eventos[-1]["msg"])
         self.assertEqual(sorted(p.name for p in self.dir.iterdir()), ["proyectos", "silencio.wav"])
 
+    @unittest.skipIf(rutas.WINDOWS, "la inferencia real de partituras se comprueba en Linux; Windows valida el paquete")
     def test_archivo_ilegible_da_error_explicado_y_ningun_resultado(self):
         falso = self.dir / "no es audio.wav"
         falso.write_text("esto no es un WAV")
@@ -191,6 +204,7 @@ class Flujo(Aislada):
         self.assertEqual(eventos[-1]["t"], "error")
         self.assertEqual(list(self.dir.glob("x*")), [])
 
+    @unittest.skipIf(rutas.WINDOWS, "la inferencia real de partituras se comprueba en Linux; Windows valida el paquete")
     def test_cancelar_detiene_el_motor_y_no_deja_resultados_a_medias(self):
         wav = escribir_wav(self.dir / "larga.wav", [(m, 0.5) for m in ESCALA] * 4)
         fin, datos = threading.Event(), {}

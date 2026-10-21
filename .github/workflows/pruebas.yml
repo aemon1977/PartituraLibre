@@ -11,7 +11,7 @@ on:
 jobs:
   windows:
     runs-on: windows-latest
-    timeout-minutes: 60
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       - name: Primera preparación con el lanzador (descarga Python y paquetes dentro de la carpeta)
@@ -25,6 +25,7 @@ jobs:
           $env:PYTHONPATH = "$pwd\app;$pwd\runtime\site-app"
           & $py -s -c "from partitura_libre import letras, separacion; letras.descargar_modelo('tiny'); separacion.descargar()"
       - name: Pruebas
+        timeout-minutes: 15
         shell: pwsh
         run: |
           $py = (Get-ChildItem runtime/python -Filter python.exe -Recurse -Depth 1 | Select-Object -First 1).FullName
