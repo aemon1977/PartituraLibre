@@ -8,7 +8,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from PySide6.QtWidgets import QApplication
 
-from partitura_libre import exportar, letras, proyectos
+from partitura_libre import exportar, letras, proyectos, rutas
 from partitura_libre.ui import tema, ventana
 from tests.comun import ESCALA, Aislada, escribir_wav
 
@@ -49,6 +49,7 @@ class Interfaz(Aislada):
             self.v.ir(i)
             self.assertEqual(self.v.pila.currentIndex(), i)
 
+    @unittest.skipIf(rutas.WINDOWS, "la inferencia real de partituras se comprueba en Linux; Windows valida la interfaz y el paquete")
     def test_partitura_de_principio_a_fin_con_correccion(self):
         p = self.v.partituras
         d = proyectos.crear("escala gráfica", "partitura")
@@ -546,6 +547,7 @@ class Interfaz(Aislada):
         finally:
             QDialog.exec = original
 
+    @unittest.skipIf(rutas.WINDOWS, "la inferencia real de partituras se comprueba en Linux; Windows valida la interfaz y el paquete")
     def test_fallo_del_analisis_se_explica_y_conserva_el_audio(self):
         p = self.v.partituras
         d = proyectos.crear("rota", "partitura")
@@ -576,6 +578,7 @@ class Interfaz(Aislada):
         self.assertEqual(list(d.glob("*.parcial")), [])
         self.assertTrue(p.b_transcribir.isEnabled())
 
+    @unittest.skipIf(rutas.WINDOWS, "la inferencia real de partituras se comprueba en Linux; Windows valida la interfaz y el paquete")
     def test_parar_el_analisis_conserva_lo_hecho(self):
         p = self.v.partituras
         p.con_letra.setChecked(False)
@@ -593,6 +596,7 @@ class Interfaz(Aislada):
         self.assertLess(max(n[0] for n in p.notas), 245)            # acaba el trozo en curso, no llega al final
 
     @unittest.skipUnless(any(letras.instalado(m) for m in letras.MODELOS), "sin modelo de voz descargado")
+    @unittest.skipIf(rutas.WINDOWS, "la inferencia real de voz se comprueba en Linux; Windows valida la interfaz y el paquete")
     def test_letra_de_principio_a_fin(self):
         from tests.test_letras_flujo import DATOS
         l = self.v.letras
@@ -628,6 +632,7 @@ class Interfaz(Aislada):
         self.assertIn("✎", l.texto.toPlainText())
 
     @unittest.skipUnless(any(letras.instalado(m) for m in letras.MODELOS), "sin modelo de voz descargado")
+    @unittest.skipIf(rutas.WINDOWS, "la inferencia real de voz se comprueba en Linux; Windows valida la interfaz y el paquete")
     def test_partitura_con_letra_de_una_sola_toma(self):
         """Una voz real (lectura libre en español) mezclada con una melodía: de un único audio deben salir
         las notas y, bajo ellas, las palabras; y la letra se puede corregir y vuelve a escribirse."""
