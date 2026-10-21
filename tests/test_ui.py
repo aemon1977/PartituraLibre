@@ -172,6 +172,7 @@ class Interfaz(Aislada):
         self.assertTrue(all((d / r[k]).is_file() for r in ficha["resultados"] for k in ("midi", "musicxml", "notas")))
         self.assertEqual(len(self.v.proyectos.lista), 1)   # el historial se actualiza solo
 
+    @unittest.skipIf(rutas.WINDOWS, "la inferencia real de partituras se comprueba en Linux; Windows valida la interfaz y el paquete")
     def test_partitura_en_vivo_mientras_se_graba_y_definitiva_al_detener(self):
         """Una grabación real salvo por el micrófono: los bloques de una melodía conocida entran por el
         mismo callback que usa PortAudio, y las notas deben ir apareciendo antes de detener."""
