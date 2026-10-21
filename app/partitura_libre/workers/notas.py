@@ -17,11 +17,10 @@ de partirse (ver partituras.integrar).
 import json
 import os
 import sys
-import threading
 from pathlib import Path
 
 from .. import partituras, rutas
-from . import emitir, reemplazar
+from . import emitir, parada_pedida, reemplazar
 
 # En Windows, una inferencia de dos minutos puede tardar mucho y dejar la barra
 # quieta demasiado tiempo. Los bloques cortos permiten informar del avance con
@@ -33,15 +32,6 @@ VOZ = {"minimum_frequency": 65, "maximum_frequency": 1050, "minimum_note_length"
 COLOR_NOMBRES = "#1D5FA8"
 NOMBRES_ID = "nombres"   # marca en el MusicXML la línea de nombres de nota, para no confundirla con la letra
 MARGEN_S = 2   # contexto que se analiza de más a cada lado de un trozo
-PARAR = threading.Event()   # {"cmd": "parar"} por la entrada: se acaba el trozo en curso y se escribe lo hecho
-
-
-def escuchar_parar():
-    def leer():
-        for linea in sys.stdin:
-            if '"parar"' in linea:
-                PARAR.set()
-    threading.Thread(target=leer, daemon=True).start()
 
 
 def detectar(audio, trozo_s=TROZO_S, ajustes=None, limite=None):
@@ -63,7 +53,7 @@ def detectar(audio, trozo_s=TROZO_S, ajustes=None, limite=None):
             margen = int(min(MARGEN_S, trozo_s / 2) * sr)
             leer = lambda n: f.read(n, dtype="float32", always_2d=True).mean(axis=1)
             antes, nucleo, c0 = np.zeros(0, "float32"), leer(int(trozo_s * sr)), 0.0
-            while len(nucleo) and not PARAR.is_set() and (limite is None or c0 < limite):
+            while len(nucleo) and not parada_pedida() and (limite is None or c0 < limite):
                 despues = leer(margen)  # contexto posterior; es el principio del núcleo siguiente
                 if bpm is None:
                     bpm = estimar_bpm(nucleo, sr)
@@ -286,9 +276,8 @@ def main():
             return en_vivo()
         if o["cmd"] == "transcribir":
             emitir("progreso", v=0.0, msg="Cargando el motor Basic Pitch")
-            escuchar_parar()
             notas, bpm, final = detectar(o["audio"], o.get("trozo_s", TROZO_S), VOZ if o.get("melodia") else None, o.get("hasta"))
-            parada = PARAR.is_set() or o.get("hasta") is not None
+            parada = parada_pedida() or o.get("hasta") is not None
             bpm = o.get("bpm") or bpm
             if o.get("melodia"):   # voz aislada: una sola línea, como se canta, y una sílaba por nota
                 notas, letra = partituras.letra_cantada(partituras.melodia(notas), o.get("palabras") or [])

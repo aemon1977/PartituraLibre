@@ -49,7 +49,6 @@ class Interfaz(Aislada):
             self.v.ir(i)
             self.assertEqual(self.v.pila.currentIndex(), i)
 
-    @unittest.skipIf(rutas.WINDOWS, "la inferencia real de partituras se comprueba en Linux; Windows valida la interfaz y el paquete")
     def test_partitura_de_principio_a_fin_con_correccion(self):
         p = self.v.partituras
         d = proyectos.crear("escala gráfica", "partitura")
@@ -172,7 +171,6 @@ class Interfaz(Aislada):
         self.assertTrue(all((d / r[k]).is_file() for r in ficha["resultados"] for k in ("midi", "musicxml", "notas")))
         self.assertEqual(len(self.v.proyectos.lista), 1)   # el historial se actualiza solo
 
-    @unittest.skipIf(rutas.WINDOWS, "la inferencia real de partituras se comprueba en Linux; Windows valida la interfaz y el paquete")
     def test_partitura_en_vivo_mientras_se_graba_y_definitiva_al_detener(self):
         """Una grabación real salvo por el micrófono: los bloques de una melodía conocida entran por el
         mismo callback que usa PortAudio, y las notas deben ir apareciendo antes de detener."""
@@ -548,7 +546,6 @@ class Interfaz(Aislada):
         finally:
             QDialog.exec = original
 
-    @unittest.skipIf(rutas.WINDOWS, "la inferencia real de partituras se comprueba en Linux; Windows valida la interfaz y el paquete")
     def test_fallo_del_analisis_se_explica_y_conserva_el_audio(self):
         p = self.v.partituras
         d = proyectos.crear("rota", "partitura")
@@ -579,7 +576,6 @@ class Interfaz(Aislada):
         self.assertEqual(list(d.glob("*.parcial")), [])
         self.assertTrue(p.b_transcribir.isEnabled())
 
-    @unittest.skipIf(rutas.WINDOWS, "la inferencia real de partituras se comprueba en Linux; Windows valida la interfaz y el paquete")
     def test_parar_el_analisis_conserva_lo_hecho(self):
         p = self.v.partituras
         p.con_letra.setChecked(False)
@@ -597,7 +593,6 @@ class Interfaz(Aislada):
         self.assertLess(max(n[0] for n in p.notas), 245)            # acaba el trozo en curso, no llega al final
 
     @unittest.skipUnless(any(letras.instalado(m) for m in letras.MODELOS), "sin modelo de voz descargado")
-    @unittest.skipIf(rutas.WINDOWS, "la inferencia real de voz se comprueba en Linux; Windows valida la interfaz y el paquete")
     def test_letra_de_principio_a_fin(self):
         from tests.test_letras_flujo import DATOS
         l = self.v.letras
@@ -633,7 +628,6 @@ class Interfaz(Aislada):
         self.assertIn("✎", l.texto.toPlainText())
 
     @unittest.skipUnless(any(letras.instalado(m) for m in letras.MODELOS), "sin modelo de voz descargado")
-    @unittest.skipIf(rutas.WINDOWS, "la inferencia real de voz se comprueba en Linux; Windows valida la interfaz y el paquete")
     def test_partitura_con_letra_de_una_sola_toma(self):
         """Una voz real (lectura libre en español) mezclada con una melodía: de un único audio deben salir
         las notas y, bajo ellas, las palabras; y la letra se puede corregir y vuelve a escribirse."""

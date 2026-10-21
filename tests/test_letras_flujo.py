@@ -9,7 +9,6 @@ DATOS = Path(__file__).parent / "datos"
 MODELO = next((m for m in ("small", "base", "tiny") if letras.instalado(m)), None)
 
 
-@unittest.skipIf(rutas.WINDOWS, "la inferencia real de voz se comprueba en Linux; Windows valida el paquete")
 @unittest.skipUnless(MODELO, "no hay ningún modelo de voz descargado (descarga uno desde la app)")
 class Voz(unittest.TestCase):
     @classmethod
@@ -77,7 +76,6 @@ class Voz(unittest.TestCase):
         self.assertTrue(all(e["dudoso"] for e in ev if e["t"] == "segmento"), ev)
 
 
-@unittest.skipIf(rutas.WINDOWS, "la inferencia real de voz se comprueba en Linux; Windows valida el paquete")
 @unittest.skipUnless(MODELO, "no hay ningún modelo de voz descargado")
 class SeparacionDeVoz(unittest.TestCase):
     """Voz real mezclada con una melodía fuerte, como una canción: el separador debe quitar la música."""

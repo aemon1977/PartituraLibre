@@ -10,17 +10,14 @@ Recibe órdenes JSON por la entrada estándar, una por línea:
 """
 import json
 import os
-import queue
 import sys
-import threading
 from pathlib import Path
 
 from .. import letras, rutas, separacion
-from . import emitir
+from . import aviso_de_parar, emitir, parada_pedida
 
 
 HAZ, TEMPERATURAS = 5, (0.0, 0.4)   # se ajustan al equipo en main()
-PARAR = threading.Event()   # {"cmd": "parar"}: terminar la orden en curso con lo reconocido hasta ahora
 
 
 class Parada(Exception):
@@ -31,12 +28,12 @@ def separar_aparte(audio, destino, id_):
     """La separación va en su propio proceso, antes de cargar el reconocedor: los dos juntos no caben
     holgados en un equipo con poca memoria, y al acabar el proceso el sistema recupera toda la suya."""
     import subprocess
-    p = subprocess.Popen([sys.executable, "-s", "-m", "partitura_libre.workers.separar", str(audio), str(destino)],
-                         stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True, encoding="utf-8",
+    p = subprocess.Popen([sys.executable, "-s", "-m", "partitura_libre.workers.separar", str(audio), str(destino), str(os.getpid())],
+                         stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, text=True, encoding="utf-8",
                          creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
     fallo = ""
     for linea in p.stdout:
-        if PARAR.is_set():
+        if parada_pedida():
             p.terminate()
             p.wait()
             raise Parada
@@ -64,17 +61,10 @@ def main():
             modelo = WhisperModel(sys.argv[1], device="cpu", compute_type="int8", local_files_only=True,
                                   cpu_threads=equipo.hilos_de_calculo())
         return modelo
-    ordenes = queue.Queue()
-
-    def leer():   # en un hilo aparte: así «parar» llega aunque se esté trabajando
-        for linea in sys.stdin:
-            o = json.loads(linea)
-            PARAR.set() if o.get("cmd") == "parar" else ordenes.put(o)
-        ordenes.put(None)
-    threading.Thread(target=leer, daemon=True).start()
     emitir("listo")
-    while (o := ordenes.get()) is not None:
-        PARAR.clear()
+    for linea in sys.stdin:
+        o = json.loads(linea)
+        aviso_de_parar().unlink(missing_ok=True)   # «parar» vale para la orden en curso, no para las siguientes
         audio, temporal, hasta = o["audio"], None, 0.0
 
         def limpiar():   # antes de avisar del fin: quien espera ese aviso puede cerrar el proceso al momento
@@ -103,7 +93,7 @@ def main():
                                            **({"no_speech_threshold": None} if cantada else {}))
             emitir("idioma", id=o["id"], idioma=info.language, prob=round(info.language_probability, 3), dur=info.duration)
             for s in segs:
-                if PARAR.is_set():
+                if parada_pedida():
                     raise Parada
                 hasta = s.end + desfase
                 if s.text.strip() and not (cantada and letras.es_relleno(s.text, s.avg_logprob)):

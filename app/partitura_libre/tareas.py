@@ -49,6 +49,7 @@ class Tarea:
             except OSError:
                 pass
         VIVAS.discard(self)
+        (rutas.TEMP / f"parar-{self.p.pid}").unlink(missing_ok=True)
         if self.al_terminar:
             self.al_terminar(codigo, self.cancelada)
 
@@ -60,9 +61,17 @@ class Tarea:
         except OSError:
             return False
 
+    def _avisar_parada(self):
+        rutas.TEMP.mkdir(parents=True, exist_ok=True)
+        (rutas.TEMP / f"parar-{self.p.pid}").touch()
+
     def parar(self):
-        """Pide al motor que termine ya con lo que lleve hecho (no todos lo entienden). False si ya no está."""
-        return self.viva() and self.enviar(cmd="parar")
+        """Pide al motor que termine ya con lo que lleve hecho (no todos lo entienden). False si ya no está.
+        El aviso es un archivo (ver workers.aviso_de_parar), no una orden por la entrada."""
+        if not self.viva():
+            return False
+        self._avisar_parada()
+        return True
 
     def viva(self):
         return self.p.poll() is None
@@ -70,6 +79,7 @@ class Tarea:
     def cancelar(self):
         self.cancelada = True
         if self.viva():
+            self._avisar_parada()   # también para los procesos que haya lanzado él (la separación de la voz)
             self.p.terminate()
             try:
                 self.p.wait(3)
