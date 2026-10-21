@@ -6,6 +6,8 @@ Termina solo si ese proceso pide parar (o se cancela) o deja de existir: así nu
 """
 import os
 import sys
+import threading
+import time
 
 from .. import separacion
 from . import emitir, parada_pedida, vivo
@@ -14,10 +16,12 @@ from . import emitir, parada_pedida, vivo
 def main():
     padre = int(sys.argv[3])
 
-    def progreso(f):
-        if parada_pedida(padre) or not vivo(padre):
-            os._exit(1)
-        emitir("progreso", v=round(f, 3))
+    def vigilar():   # cada medio segundo, sin esperar en ninguna tubería (en Windows eso bloqueaba el proceso)
+        while not (parada_pedida(padre) or not vivo(padre)):
+            time.sleep(0.5)
+        os._exit(1)
+    threading.Thread(target=vigilar, daemon=True).start()
+    progreso = lambda f: emitir("progreso", v=round(f, 3))
     try:
         separacion.voz_a_wav(sys.argv[1], sys.argv[2], progreso)
         emitir("fin")
