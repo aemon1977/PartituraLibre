@@ -532,7 +532,12 @@ def leer_acordes(ruta):
     return json.loads(Path(ruta).read_text(encoding="utf-8")).get("acordes") or []
 
 
-def guardar_notas(ruta, bpm, notas, letra=(), acordes=(), tempos=()):
+def leer_piano(ruta):
+    """Si la versión debe mostrarse como piano en dos pentagramas."""
+    return bool(json.loads(Path(ruta).read_text(encoding="utf-8")).get("piano", False))
+
+
+def guardar_notas(ruta, bpm, notas, letra=(), acordes=(), tempos=(), piano=False):
     letra = list(letra) + [""] * (len(notas) - len(letra))
     filas = sorted(([round(float(a), 4), round(float(b), 4), int(t), float(v)], letra[i]) for i, (a, b, t, v) in enumerate(notas))
     datos = {"bpm": bpm, "notas": [f[0] for f in filas]}
@@ -542,4 +547,6 @@ def guardar_notas(ruta, bpm, notas, letra=(), acordes=(), tempos=()):
         datos["acordes"] = [list(a) for a in acordes]
     if tempos and (len(tempos) > 1 or tempos[0][2]):
         datos["tempos"] = [list(t) for t in tempos]
+    if piano:
+        datos["piano"] = True
     Path(ruta).write_text(json.dumps(datos, ensure_ascii=False), encoding="utf-8")

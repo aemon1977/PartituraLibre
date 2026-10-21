@@ -23,7 +23,10 @@ from pathlib import Path
 from .. import partituras, rutas
 from . import emitir, reemplazar
 
-TROZO_S = 120
+# En Windows, una inferencia de dos minutos puede tardar mucho y dejar la barra
+# quieta demasiado tiempo. Los bloques cortos permiten informar del avance con
+# más frecuencia; en Linux se mantiene el tamaño pensado para audio largo.
+TROZO_S = 15 if rutas.WINDOWS else 120
 # Detección afinada para una voz aislada: su registro (Do2–Do6, sin los armónicos de encima), notas
 # más cortas (sílabas rápidas) y umbrales algo más bajos, porque una voz sola es más débil que una mezcla.
 VOZ = {"minimum_frequency": 65, "maximum_frequency": 1050, "minimum_note_length": 70, "onset_threshold": 0.4, "frame_threshold": 0.25}
@@ -105,7 +108,7 @@ def en_vivo():
 
 def importar(ruta):
     """Lee una partitura existente (MusicXML, MXL o MIDI) y la convierte en notas editables:
-    (notas, bpm, letra). Las notas ligadas se unen en una sola."""
+    (notas, bpm, letra, piano). Las notas ligadas se unen en una sola."""
     from music21 import converter, tempo
     s = converter.parse(str(ruta))
     marca = s.recurse().getElementsByClass(tempo.MetronomeMark).first()
@@ -124,7 +127,9 @@ def importar(ruta):
             filas.append(fila)
             abiertas[p.midi] = fila
     filas.sort(key=lambda f: f[0])
-    return [f[0] for f in filas], bpm, [f[1] for f in filas]
+    instrumentos = [getattr(i, "instrumentName", "") or "" for i in s.recurse().getElementsByClass("Instrument")]
+    piano = any("piano" in nombre.lower() for nombre in instrumentos)
+    return [f[0] for f in filas], bpm, [f[1] for f in filas], piano
 
 
 def detectar_acordes(audio, bpm, armadura=0):
@@ -172,7 +177,7 @@ def estimar_bpm(x, sr):
         return 120
 
 
-def escribir(notas, bpm, carpeta, nombre, titulo, clave="", nombres=False, letra=(), armadura=None, acordes=(), tempos=None):
+def escribir(notas, bpm, carpeta, nombre, titulo, clave="", nombres=False, letra=(), armadura=None, acordes=(), tempos=None, piano=False):
     """Escribe nombre.notas.json, nombre.mid y nombre.musicxml sin pisar nada.
     El MIDI suena como se tocó (segundos reales); en el MusicXML, con cambios de tempo, cada nota va en su pulso
     y cada cambio se escribe en su compás (♩ = …)."""
@@ -266,7 +271,7 @@ def escribir(notas, bpm, carpeta, nombre, titulo, clave="", nombres=False, letra
                            lyricIdentifier=NOMBRES_ID)
                 n.lyrics[-1].style.color = COLOR_NOMBRES   # en azul, para distinguirlos de la letra
     partitura.write("musicxml", fp=str(p_xml))
-    partituras.guardar_notas(p_notas, bpm, notas, letra, acordes, tempos)
+    partituras.guardar_notas(p_notas, bpm, notas, letra, acordes, tempos, piano)
     for p, f in ((p_notas, f_notas), (p_mid, f_mid), (p_xml, f_xml)):
         reemplazar(p, f)
     return {"midi": f_mid.name, "musicxml": f_xml.name, "notas": f_notas.name, "bpm": bpm, "n": len(notas),
@@ -289,6 +294,7 @@ def main():
                 notas, letra = partituras.letra_cantada(partituras.melodia(notas), o.get("palabras") or [])
             else:
                 letra = partituras.asignar_letra(notas, o.get("palabras") or [])
+            piano = not o.get("melodia")
             tempos = partituras.tempos_de(bpm)
             if notas and not o.get("bpm"):   # tempo automático: también sus cambios a lo largo de la canción
                 emitir("progreso", v=0.88, msg="Midiendo el tempo")
@@ -308,7 +314,7 @@ def main():
                 return 1
         elif o["cmd"] == "importar":
             emitir("progreso", v=0.2, msg="Leyendo la partitura")
-            notas, bpm, letra = importar(o["partitura"])
+            notas, bpm, letra, piano = importar(o["partitura"])
             acordes, parada, final, tempos = [], False, 0, None
             if not notas:
                 emitir("error", msg="Ese archivo no contiene notas que se puedan editar.")
@@ -316,10 +322,11 @@ def main():
         else:
             d = json.loads(Path(o["notas"]).read_text(encoding="utf-8"))
             notas, bpm, letra = d["notas"], o.get("bpm") or d.get("bpm", 120), d.get("letra") or []
+            piano = bool(d.get("piano", False))
             acordes, parada, final = d.get("acordes") or [], False, 0
             tempos = partituras.tempos_de(bpm, d.get("tempos"))
         emitir("fin", **escribir(notas, bpm, o["carpeta"], o["nombre"], o.get("titulo", o["nombre"]),
-                                 o.get("clave", ""), o.get("nombres", False), letra, o.get("armadura"), acordes, tempos),
+                                 o.get("clave", ""), o.get("nombres", False), letra, o.get("armadura"), acordes, tempos, piano),
                **({"parada": True, "hasta": round(final, 1)} if parada else {}))
         return 0
     except Exception as e:

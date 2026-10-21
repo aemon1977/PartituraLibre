@@ -46,6 +46,7 @@ class PaginaPartituras(QWidget):
         self._t0, self._base_barra = 0.0, 0   # inicio del análisis en curso y desde dónde avanza la barra
         self._espera = 0.0     # silencios tecleados antes de la próxima nota, en segundos
         self.notas, self.bpm, self.tarea, self._cargando = [], 120, None, False
+        self.piano = False
         self.letra = []        # texto cantado bajo cada nota (paralela a self.notas)
         self.acordes = []      # [[segundo, raíz, tipo], …] de la canción, encima del pentagrama
         self.tempos = []       # [[segundo, bpm, indicación], …]: tempo inicial y sus cambios
@@ -467,7 +468,7 @@ class PaginaPartituras(QWidget):
         if versiones:
             self._mostrar(versiones[-1])
         else:
-            self.letra, self.acordes, self.tempos = [], [], []
+            self.letra, self.acordes, self.tempos, self.piano = [], [], [], False
             if not d.get("audio"):
                 self.version = {}             # partitura escrita a mano que aún no se ha guardado: se puede editar
             self._poner_notas([], 120)
@@ -814,6 +815,7 @@ class PaginaPartituras(QWidget):
         self.letra = partituras.leer_letra(self.proyecto / version["notas"])
         self.acordes = partituras.leer_acordes(self.proyecto / version["notas"])
         self.tempos = partituras.leer_tempos(self.proyecto / version["notas"])
+        self.piano = partituras.leer_piano(self.proyecto / version["notas"])
         self._poner_notas(notas, bpm)
 
     def _poner_notas(self, notas, bpm, sel=-1):
@@ -872,7 +874,7 @@ class PaginaPartituras(QWidget):
         sel = self.tabla.currentRow()
         titulo = self.proyecto.name if self.proyecto else ""
         self.vista.poner(self.notas, sel, self.tempo.value() or self.bpm, self.clave.currentData(), self.nombres.isChecked(), self.letra,
-                         titulo, self.tonalidad.currentData(), self.acordes, self._tempos())
+                         titulo, self.tonalidad.currentData(), self.acordes, self._tempos(), self.piano)
         if sel >= 0:  # la nota elegida queda a la vista en la partitura
             r = self.vista.rect_de(sel)
             self.rollo.ensureVisible(r.center().x(), r.center().y(), 40, r.height() // 2 + 10)

@@ -8,7 +8,7 @@ from PySide6.QtWidgets import (QApplication, QButtonGroup, QHBoxLayout, QMainWin
 
 from PySide6.QtCore import QTimer
 
-from .. import __version__, config, proyectos, rutas, tareas
+from .. import __version__, config, editor, proyectos, rutas, tareas
 from . import tema
 from .ajustes import PaginaAjustes
 from .letras import PaginaLetras
@@ -83,6 +83,7 @@ class Ventana(QMainWindow):
         self.partituras.cerrar()
         self.letras.cerrar()
         tareas.cancelar_todas()
+        editor.cerrar()
 
     def closeEvent(self, ev):
         """Cerrar nunca pierde audio: la toma en curso se guarda; los análisis se cancelan limpiamente."""

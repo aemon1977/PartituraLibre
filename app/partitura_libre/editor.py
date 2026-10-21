@@ -1,6 +1,7 @@
 """MuseScore Studio como editor externo OPCIONAL (la app edita y exporta PDF por sí sola). Nunca se instala en el sistema:
 se usa una copia portable dentro de runtime/musescore o una instalación que ya exista."""
 import os
+import signal
 import shutil
 import stat
 import subprocess
@@ -15,6 +16,7 @@ PORTABLE = ({"url": _BASE + ".paf.exe", "mb": 139, "sha256": "1f482f572edac911bf
             {"url": _BASE + ".AppImage", "mb": 195, "sha256": "a31b2da2dbcc2191bcc98beb7be5c15f2f517bedb3444def96fe3088b74d3a1e"})
 CARPETA = rutas.RUNTIME / "musescore"
 LICENCIA = "MuseScore Studio es software libre (GPL v3) de MuseScore Ltd.; se descarga de su página oficial de GitHub."
+_PROCESOS = []
 
 
 def _portable():
@@ -64,9 +66,35 @@ def abrir(archivo=None):
     exe, origen = buscar()
     if not exe:
         return False
-    subprocess.Popen([str(exe), *([str(archivo)] if archivo else [])], env=_entorno(origen),
-                     stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    proceso = subprocess.Popen([str(exe), *([str(archivo)] if archivo else [])], env=_entorno(origen),
+                               stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                               start_new_session=not rutas.WINDOWS)
+    _PROCESOS.append(proceso)
     return True
+
+
+def cerrar():
+    """Cierra los editores que abrió esta aplicación, sin tocar otras instancias del usuario."""
+    procesos = list(_PROCESOS)
+    _PROCESOS.clear()
+    for proceso in procesos:
+        if proceso.poll() is not None:
+            continue
+        try:
+            if rutas.WINDOWS:
+                proceso.terminate()
+            else:
+                os.killpg(proceso.pid, signal.SIGTERM)
+            proceso.wait(timeout=3)
+        except (OSError, subprocess.TimeoutExpired):
+            try:
+                if rutas.WINDOWS:
+                    proceso.kill()
+                else:
+                    os.killpg(proceso.pid, signal.SIGKILL)
+                proceso.wait(timeout=2)
+            except (OSError, subprocess.TimeoutExpired):
+                pass
 
 
 def instalar_portable(progreso=None, cancelar=None):
