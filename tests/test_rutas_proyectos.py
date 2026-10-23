@@ -1,3 +1,4 @@
+import shutil
 import unittest
 from pathlib import Path
 
@@ -91,6 +92,16 @@ class Proyectos(Aislada):
         copia = proyectos.exportar(d, self.dir / "copias")
         self.assertTrue((copia / proyectos.FICHA).is_file())
         self.assertTrue(d.exists())
+
+    def test_proyecto_en_una_subcarpeta_de_la_biblioteca_aparece_en_el_historial(self):
+        """Regresión: con «Carpeta…» = data/proyectos/las viejas canciones, la lista salía vacía."""
+        from partitura_libre import rutas
+        d = proyectos.crear("Barcelona", "partitura", rutas.PROYECTOS / "las viejas canciones")
+        try:
+            self.assertIn(d, dict(proyectos.listar()))
+            self.assertEqual([c for c, _ in proyectos.listar()].count(d), 1)
+        finally:
+            shutil.rmtree(rutas.PROYECTOS / "las viejas canciones", ignore_errors=True)
 
 
 if __name__ == "__main__":

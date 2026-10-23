@@ -167,8 +167,10 @@ def estimar_bpm(x, sr):
         return 120
 
 
-def escribir(notas, bpm, carpeta, nombre, titulo, clave="", nombres=False, letra=(), armadura=None, acordes=(), tempos=None, piano=False):
-    """Escribe nombre.notas.json, nombre.mid y nombre.musicxml sin pisar nada.
+def escribir(notas, bpm, carpeta, nombre, titulo, clave="", nombres=False, letra=(), armadura=None, acordes=(), tempos=None, piano=False,
+             sobre=None):
+    """Escribe nombre.notas.json, nombre.mid y nombre.musicxml sin pisar nada; con `sobre` (nombre base de una versión
+    que ya existe), la reemplaza: así «Guardar» guarda sobre la misma partitura en vez de crear otra numerada.
     El MIDI suena como se tocó (segundos reales); en el MusicXML, con cambios de tempo, cada nota va en su pulso
     y cada cambio se escribe en su compás (♩ = …)."""
     import pretty_midi
@@ -178,7 +180,7 @@ def escribir(notas, bpm, carpeta, nombre, titulo, clave="", nombres=False, letra
     escritas = [[pulsos(a) * 60 / bpm, pulsos(b) * 60 / bpm, t, v] for a, b, t, v in notas] if len(tempos) > 1 else notas
 
     carpeta = Path(carpeta)
-    base = rutas.ruta_unica(carpeta, nombre, ".mid", (".musicxml", ".notas.json")).with_suffix("")
+    base = carpeta / sobre if sobre else rutas.ruta_unica(carpeta, nombre, ".mid", (".musicxml", ".notas.json")).with_suffix("")
     f_notas, f_mid, f_xml = (Path(f"{base}{e}") for e in (".notas.json", ".mid", ".musicxml"))
     p_mid, p_xml, p_notas = (Path(f"{f}.parcial") for f in (f_mid, f_xml, f_notas))
 
@@ -264,7 +266,7 @@ def escribir(notas, bpm, carpeta, nombre, titulo, clave="", nombres=False, letra
     partituras.guardar_notas(p_notas, bpm, notas, letra, acordes, tempos, piano)
     for p, f in ((p_notas, f_notas), (p_mid, f_mid), (p_xml, f_xml)):
         reemplazar(p, f)
-    return {"midi": f_mid.name, "musicxml": f_xml.name, "notas": f_notas.name, "bpm": bpm, "n": len(notas),
+    return {"midi": f_mid.name, "musicxml": f_xml.name, "notas": f_notas.name, "bpm": bpm, "n": len(notas), "sobre": bool(sobre),
             "con_letra": sum(bool(t) for t in letra), "acordes": len(acordes), "cambios_de_tempo": len(tempos) - 1}
 
 
@@ -315,7 +317,8 @@ def main():
             acordes, parada, final = d.get("acordes") or [], False, 0
             tempos = partituras.tempos_de(bpm, d.get("tempos"))
         emitir("fin", **escribir(notas, bpm, o["carpeta"], o["nombre"], o.get("titulo", o["nombre"]),
-                                 o.get("clave", ""), o.get("nombres", False), letra, o.get("armadura"), acordes, tempos, piano),
+                                 o.get("clave", ""), o.get("nombres", False), letra, o.get("armadura"), acordes, tempos, piano,
+                                 o.get("sobre") if o["cmd"] == "regenerar" else None),
                **({"parada": True, "hasta": round(final, 1)} if parada else {}))
         return 0
     except Exception as e:

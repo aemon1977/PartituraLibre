@@ -167,8 +167,9 @@ class Interfaz(Aislada):
         p.regenerar()
         self.assertTrue(esperar(lambda: p.tarea is None))
         ficha = proyectos.leer(d)
-        self.assertEqual([r["midi"] for r in ficha["resultados"]], ["escala gráfica.mid", "escala gráfica-2.mid"])
-        self.assertEqual(p.version["midi"], "escala gráfica-2.mid")
+        self.assertEqual([r["midi"] for r in ficha["resultados"]], ["escala gráfica.mid"])   # guardar: sobre la misma, sin «-2»
+        self.assertEqual(p.version["midi"], "escala gráfica.mid")
+        self.assertEqual(sorted(f.name for f in d.glob("escala gráfica*.mid")), ["escala gráfica.mid"])
         self.assertEqual(p.notas[2][2], 63)
         self.assertTrue(all((d / r[k]).is_file() for r in ficha["resultados"] for k in ("midi", "musicxml", "notas")))
         self.assertEqual(len(self.v.proyectos.lista), 1)   # el historial se actualiza solo
@@ -448,6 +449,12 @@ class Interfaz(Aislada):
             p.importar()
             self.assertEqual(p.proyecto.name, "Mi canción")
             self.assertEqual(proyectos.leer(p.proyecto)["nombre"], "Mi canción")
+            primera = p.proyecto
+            respuesta = ["Abrir la que existe"]                       # mismo nombre otra vez: se ofrece abrir la que hay
+            tema.dialogo = lambda padre, titulo, mensaje, botones=("Aceptar",), tipo="info": (self.dialogos.append(titulo), respuesta[0])[1]
+            p.importar()
+            self.assertEqual((p.proyecto, self.dialogos[-1]), (primera, "Ya existe"))
+            self.assertFalse((primera.parent / "Mi canción-2").exists())   # sin copias numeradas
         finally:
             QFileDialog.getOpenFileName = original
         p.version = {}
@@ -469,14 +476,14 @@ class Interfaz(Aislada):
         partituras_.guardar_notas(d / "con cambios.notas.json", 120, [[0, 0.5, 60, .7], [0.5, 1.0, 62, .7]])
         proyectos.anotar_resultado(d, "partitura", notas="con cambios.notas.json", midi="", musicxml="", bpm=120)
         p.abrir_proyecto(d)
-        self.assertEqual(p.b_regenerar.text(), "Guardar versión")
+        self.assertEqual(p.b_regenerar.text(), "Guardar")
         p.tabla.selectRow(0)
         p._atajo("arriba")                                                # una edición
-        self.assertEqual(p.b_regenerar.text(), "● Guardar versión")
+        self.assertEqual(p.b_regenerar.text(), "● Guardar")
         respuesta = ["No guardar"]
         tema.dialogo = lambda padre, titulo, mensaje, botones=("Aceptar",), tipo="info": (self.dialogos.append(titulo), respuesta[0])[1]
         self.assertTrue(p.descartar_o_guardar())                          # «No guardar»: se sigue y se olvida
-        self.assertEqual(p.b_regenerar.text(), "Guardar versión")
+        self.assertEqual(p.b_regenerar.text(), "Guardar")
         p._atajo("arriba")
         respuesta[0] = "Cancelar"
         self.v.close()
@@ -486,7 +493,9 @@ class Interfaz(Aislada):
         self.assertTrue(self.v.isVisible())                               # primero guarda…
         self.assertTrue(esperar(lambda: not self.v.isVisible(), 120))     # …y al terminar se cierra sola
         versiones = [r for r in proyectos.leer(d)["resultados"] if r["tipo"] == "partitura"]
-        self.assertEqual(len(versiones), 2)
+        self.assertEqual(len(versiones), 1)                               # guardar es sobre la misma partitura, sin copias numeradas
+        _bpm, guardadas = partituras_.leer_notas(d / "con cambios.notas.json")
+        self.assertEqual(guardadas[0][2], 62)                             # con las dos subidas de semitono
         self.assertEqual(self.dialogos, ["Cambios sin guardar"] * 3)
 
     def test_ir_atras_y_adelante_y_pulsar_la_marca_de_tempo(self):

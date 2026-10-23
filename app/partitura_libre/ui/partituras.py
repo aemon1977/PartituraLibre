@@ -1,5 +1,6 @@
 """Sección Partituras: grabar o importar, detectar notas, revisar/corregir y exportar."""
 import json
+from datetime import datetime
 import shutil
 import time
 from pathlib import Path
@@ -133,8 +134,7 @@ class PaginaPartituras(QWidget):
         rollo.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
 
         # -- barra de archivo ---------------------------------------------------
-        self.b_regenerar = tema.boton("Guardar versión", self.regenerar, "primario",
-                                      "Crea MIDI y MusicXML nuevos con tus correcciones (no pisa los anteriores)")
+        self.b_regenerar = tema.boton("Guardar", self.regenerar, "primario", "Guarda tus correcciones en esta partitura (MusicXML, MIDI y notas)")
         self.b_midi = tema.boton("MIDI…", lambda: self._copiar("midi", "MIDI (*.mid)"), ayuda="Guardar una copia del MIDI")
         self.b_xml = tema.boton("MusicXML…", lambda: self._copiar("musicxml", "MusicXML (*.musicxml)"), ayuda="Guardar una copia del MusicXML")
         self.b_pdf = tema.boton("PDF…", self.exportar_pdf, ayuda="Exportar a PDF la partitura que se ve, con tus correcciones")
@@ -573,7 +573,7 @@ class PaginaPartituras(QWidget):
                 self.letra = partituras.asignar_letra(self.notas, palabras)
                 self._poner_notas(self.notas, self.bpm, self.tabla.currentRow())
                 con = sum(bool(t) for t in self.letra)
-                self.e_estado.setText(f"Letra colocada bajo {con} nota(s). Corrígela si hace falta y pulsa «Guardar versión» "
+                self.e_estado.setText(f"Letra colocada bajo {con} nota(s). Corrígela si hace falta y pulsa «Guardar» "
                                       "para escribirla en el MusicXML." if con else
                                       "Se reconoció texto, pero ninguna palabra coincide en el tiempo con las notas.")
             else:
@@ -652,7 +652,7 @@ class PaginaPartituras(QWidget):
                 self._marcar_cambios()
                 if actual[0] <= 0.01:
                     self.tempo.setValue(bpm)   # el tempo del principio es el del selector
-                self.e_estado.setText(f"Tempo: {partituras.marca_tempo(bpm, nombre)}. Pulsa «Guardar versión» para escribirlo en el MusicXML.")
+                self.e_estado.setText(f"Tempo: {partituras.marca_tempo(bpm, nombre)}. Pulsa «Guardar» para escribirlo en el MusicXML.")
             self._dibujar()
 
         def cancelar():
@@ -712,7 +712,7 @@ class PaginaPartituras(QWidget):
             self.tempo.setValue(self.tempos[0][1])   # el tempo del principio es el del selector
         self._dibujar()
         self.e_estado.setText(("Cambio de tempo quitado." if r == 2 else "Tempo puesto: " + partituras.marca_tempo(pulsos.value(), elegido()) + ".")
-                              + " Pulsa «Guardar versión» para escribirlo en el MusicXML.")
+                              + " Pulsa «Guardar» para escribirlo en el MusicXML.")
 
     def escribir_letra(self):
         """Letra escrita a mano: se reparte en sílabas, una por nota, sin tocar las notas."""
@@ -747,7 +747,7 @@ class PaginaPartituras(QWidget):
         self._poner_notas(self.notas, self.bpm, desde)
         self.e_estado.setText(f"Letra puesta bajo {len(asignadas)} nota(s)"
                               + (f"; sobraban {sobran} sílaba(s), escritas juntas en la última." if sobran else ".")
-                              + " Pulsa «Guardar versión» para guardarla en el MusicXML.")
+                              + " Pulsa «Guardar» para guardarla en el MusicXML.")
 
     def _reconocer_letra(self, al_acabar, paso, guardar_voz=None):
         """Voz a texto con el tiempo de cada palabra, para colocar cada una bajo su nota. Al terminar llama a
@@ -809,8 +809,9 @@ class PaginaPartituras(QWidget):
         edicion = rutas.TEMP / "edicion.notas.json"
         rutas.TEMP.mkdir(exist_ok=True)
         partituras.guardar_notas(edicion, self.tempo.value() or self.bpm, self.notas, self.letra, self.acordes, self._tempos())
-        self._lanzar({"cmd": "regenerar", "notas": str(edicion), "carpeta": str(self.proyecto),
-                      "nombre": self.proyecto.name, "bpm": self.tempo.value() or None, **self._notacion()}, "Creando la nueva versión…")
+        sobre = self.version["notas"][:-len(".notas.json")] if self.version and self.version.get("notas") else None
+        self._lanzar({"cmd": "regenerar", "notas": str(edicion), "carpeta": str(self.proyecto), "sobre": sobre,
+                      "nombre": self.proyecto.name, "bpm": self.tempo.value() or None, **self._notacion()}, "Guardando…")
 
     def cancelar(self):
         """La primera vez, para y conserva lo hecho; la segunda, cancela del todo."""
@@ -840,7 +841,14 @@ class PaginaPartituras(QWidget):
             self.e_estado.setText("Análisis cancelado. El audio original se conserva.")
         elif r and r["t"] == "fin":
             version = {k: r[k] for k in ("midi", "musicxml", "notas", "bpm")}
-            proyectos.anotar_resultado(carpeta, "partitura", **version)
+            if r.get("sobre"):   # «Guardar» sobre la misma partitura: se actualiza su entrada, no se añade otra
+                d = proyectos.leer(carpeta)
+                for res in d["resultados"]:
+                    if res["tipo"] == "partitura" and res.get("notas") == r["notas"]:
+                        res.update(version, fecha=datetime.now().isoformat(timespec="seconds"))
+                proyectos.guardar(carpeta, d)
+            else:
+                proyectos.anotar_resultado(carpeta, "partitura", **version)
             self.barra.setValue(1000)
             if carpeta == self.proyecto:
                 self.abrir_proyecto(carpeta)
@@ -850,7 +858,10 @@ class PaginaPartituras(QWidget):
                 aviso, self._sin_letra = getattr(self, "_sin_letra", ""), ""
                 parada = (f"Parado a los {int(r['hasta'] // 60)}:{int(r['hasta'] % 60):02d}: se conserva lo hecho hasta ahí. "
                           if r.get("parada") else "")
-                self.e_estado.setText(parada + f"Partitura creada: {r['n']} notas a {r['bpm']} pulsos/min"
+                if r.get("sobre"):
+                    self.e_estado.setText(f"Guardada: {r['musicxml']}, {r['midi']} y sus notas.")
+                else:
+                    self.e_estado.setText(parada + f"Partitura creada: {r['n']} notas a {r['bpm']} pulsos/min"
                                       + (f", {r['con_letra']} con letra" if r.get("con_letra") else "")
                                       + f" → {r['musicxml']} y {r['midi']}. Revísala a la derecha. " + aviso)
             self.cambio.emit()
@@ -1080,8 +1091,19 @@ class PaginaPartituras(QWidget):
             tema.error(self, "MuseScore no disponible", "No se encontró MuseScore. Descárgalo en Ajustes (versión portable).")
 
     def _nombre_para(self, propuesto):
-        """El nombre de la partitura lo pone quien la crea: el escrito en «Nombre de la toma» o el que se pide ahora."""
-        return self.nombre.text().strip() or tema.pedir_texto(self, "Nombre de la partitura", "¿Cómo se llama esta partitura?", propuesto)
+        """El nombre de la partitura lo pone quien la crea: el escrito en «Nombre de la toma» o el que se pide ahora.
+        Si ya hay una con ese nombre, se ofrece abrirla en vez de crear otra con un número detrás. None: no seguir."""
+        nombre = self.nombre.text().strip() or tema.pedir_texto(self, "Nombre de la partitura", "¿Cómo se llama esta partitura?", propuesto)
+        existente = (Path(self.destino) if self.destino else rutas.PROYECTOS) / (nombre or "")
+        if nombre and (existente / proyectos.FICHA).is_file():
+            r = tema.dialogo(self, "Ya existe", f"Ya hay una partitura llamada «{nombre}».",
+                             ("Cancelar", "Crear otra con número", "Abrir la que existe"), "pregunta")
+            if r == "Abrir la que existe":
+                self.nombre.clear()
+                self.abrir_proyecto(existente)
+                self.cambio.emit()
+            return nombre if r == "Crear otra con número" else None
+        return nombre
 
     def nueva(self):
         """Partitura en blanco para escribirla a mano, sin audio."""
@@ -1138,9 +1160,8 @@ class PaginaPartituras(QWidget):
     # -- deshacer, introducir, arrastrar, mover y reproducir --------------------
     def _marcar_cambios(self, si=True):
         self._cambios = si
-        self.b_regenerar.setText("● Guardar versión" if si else "Guardar versión")
-        self.b_regenerar.setToolTip(("Hay cambios sin guardar. " if si else "")
-                                    + "Crea MIDI y MusicXML nuevos con tus correcciones (no pisa los anteriores)")
+        self.b_regenerar.setText("● Guardar" if si else "Guardar")
+        self.b_regenerar.setToolTip(("Hay cambios sin guardar. " if si else "") + "Guarda tus correcciones en esta partitura (MusicXML, MIDI y notas)")
 
     def descartar_o_guardar(self, despues=None):
         """Antes de que se pierda lo editado (cerrar, abrir otra partitura…): guardar, no guardar o cancelar.

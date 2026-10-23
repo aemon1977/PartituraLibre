@@ -70,8 +70,9 @@ def importar_audio(carpeta, origen):
 
 def listar():
     """[(carpeta, ficha)] de los más recientes a los más antiguos."""
-    carpetas = [p.parent for p in rutas.PROYECTOS.glob(f"*/{FICHA}")]
+    carpetas = [p.parent for p in rutas.PROYECTOS.rglob(FICHA)]   # también en subcarpetas («las viejas canciones/…»)
     carpetas += [Path(p) for p in config.cargar()["externos"] if (Path(p) / FICHA).is_file()]
+    carpetas = list(dict.fromkeys(carpetas))
     salida = []
     for c in carpetas:
         try:

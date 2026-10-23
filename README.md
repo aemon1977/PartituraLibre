@@ -89,7 +89,7 @@ Con el ratón: clic elige una nota, arrastrarla arriba o abajo cambia su altura 
 
 **Reproductor.** Arriba: ⏪ y ⏩ (5 s atrás y adelante), ▶/⏸ (también Espacio), ⏹, una barra en la que un clic lleva justo a ese punto, y el tiempo. Por defecto suena la **canción original**; también puedes oír la **voz aislada** o la partitura tal como está escrita. Mientras suena, una **línea naranja avanza sobre la partitura** y se resaltan la nota y **la sílaba** que se están cantando. Si eliges una nota, empieza desde ahí.
 
-**Nombre y guardado.** Al importar un audio, abrir una partitura o crear una en blanco, el programa pregunta cómo se llama (propone el nombre del archivo). Para cambiarlo después, **pulsa el título** en la hoja. Mientras haya ediciones sin guardar, el botón dice «● Guardar versión»; si cierras el programa o abres otra partitura, pregunta si guardarlas.
+**Nombre y guardado.** Al importar un audio, abrir una partitura o crear una en blanco, el programa pregunta cómo se llama (propone el nombre del archivo). Para cambiarlo después, **pulsa el título** en la hoja. Si ya hay una con ese nombre, ofrece abrirla en vez de crear otra con un número. **Guardar** guarda sobre la misma partitura (no crea copias numeradas). Mientras haya ediciones sin guardar, el botón dice «● Guardar»; si cierras el programa o abres otra partitura, pregunta si guardarlas.
 
 **Parar.** «Parar (conserva lo hecho)» termina el análisis y crea la partitura con lo que lleve: si estaba reconociendo la letra, hasta donde llegó; si estaba sacando las notas, hasta el trozo en curso. Pulsándolo otra vez se cancela del todo.
 
