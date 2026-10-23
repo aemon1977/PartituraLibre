@@ -38,6 +38,8 @@ def detectar(audio, trozo_s=TROZO_S, ajustes=None, limite=None):
     """(notas, bpm, segundo analizado). Con `limite` o si llega «parar», se detiene ahí."""
     import numpy as np
     import soundfile as sf
+    from .. import equipo
+    equipo.onnxruntime()   # antes que Basic Pitch: el nuestro y no el de Windows; y si falla, el error real
     from basic_pitch import FilenameSuffix, build_icassp_2022_model_path
     from basic_pitch.inference import Model, predict
 
@@ -78,6 +80,8 @@ def detectar(audio, trozo_s=TROZO_S, ajustes=None, limite=None):
 
 def en_vivo():
     """Borrador durante la grabación: el modelo se carga una vez y cada segmento se analiza al llegar."""
+    from .. import equipo
+    equipo.onnxruntime()   # antes que Basic Pitch: el nuestro y no el de Windows; y si falla, el error real
     from basic_pitch import FilenameSuffix, build_icassp_2022_model_path
     from basic_pitch.inference import Model, predict
 

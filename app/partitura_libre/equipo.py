@@ -49,10 +49,26 @@ def hilos_de_calculo():
     return max(1, n // 2) if modesto(n) else max(1, n - 1)
 
 
+def onnxruntime():
+    """ONNX Runtime del paquete. En Windows 11, System32 trae su propio onnxruntime.dll (de Windows ML), de otra
+    versión: si el sistema lo carga en vez del nuestro, «import onnxruntime» falla (y Basic Pitch lo ocultaba con un
+    «_default_model_type is not defined»). Por eso se carga antes el nuestro, por su ruta completa. Si aun así
+    falla, el error real llega a quien lo use."""
+    if rutas.WINDOWS:
+        import ctypes
+        import importlib.util
+        from pathlib import Path
+        capi = Path(importlib.util.find_spec("onnxruntime").origin).parent / "capi"
+        os.add_dll_directory(str(capi))
+        ctypes.WinDLL(str(capi / "onnxruntime.dll"))
+    import onnxruntime as ort
+    return ort
+
+
 def sesion_onnx(ruta):
     """Sesión de ONNX Runtime con los hilos de `hilos_de_calculo` y sin reserva anticipada de memoria
     (con ella, el separador ocupaba 2,9 GB; así, 1,4 GB, igual de rápido)."""
-    import onnxruntime as ort
+    ort = onnxruntime()
     opciones = ort.SessionOptions()
     opciones.intra_op_num_threads = hilos_de_calculo()
     opciones.inter_op_num_threads = 1
