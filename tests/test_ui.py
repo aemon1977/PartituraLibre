@@ -469,6 +469,20 @@ class Interfaz(Aislada):
         self.assertEqual(proyectos.leer(p.proyecto)["nombre"], "Mi canción (versión lenta)")
         self.assertIn(p.proyecto, [c for c, _ in proyectos.listar()])   # sigue en la biblioteca con su nombre nuevo
 
+    def test_guardar_conserva_el_piano(self):
+        """Regresión: al guardar, la partitura de piano (dos pentagramas) pasaba a uno solo."""
+        p = self.v.partituras
+        d = proyectos.crear("piano", "partitura")
+        partituras_ = __import__("partitura_libre.partituras", fromlist=["x"])
+        partituras_.guardar_notas(d / "piano.notas.json", 120, [[0, 0.5, 72, .7], [0, 0.5, 48, .7]], piano=True)
+        proyectos.anotar_resultado(d, "partitura", notas="piano.notas.json", midi="", musicxml="", bpm=120)
+        p.abrir_proyecto(d)
+        self.assertTrue(p.vista.piano)
+        p.regenerar()
+        self.assertTrue(esperar(lambda: p.tarea is None, 120))
+        self.assertTrue(partituras_.leer_piano(d / "piano.notas.json"))
+        self.assertTrue(p.vista.piano)
+
     def test_cerrar_con_cambios_sin_guardar_pregunta_y_guarda(self):
         p = self.v.partituras
         d = proyectos.crear("con cambios", "partitura")

@@ -808,7 +808,7 @@ class PaginaPartituras(QWidget):
     def regenerar(self):
         edicion = rutas.TEMP / "edicion.notas.json"
         rutas.TEMP.mkdir(exist_ok=True)
-        partituras.guardar_notas(edicion, self.tempo.value() or self.bpm, self.notas, self.letra, self.acordes, self._tempos())
+        partituras.guardar_notas(edicion, self.tempo.value() or self.bpm, self.notas, self.letra, self.acordes, self._tempos(), self.piano)
         sobre = self.version["notas"][:-len(".notas.json")] if self.version and self.version.get("notas") else None
         self._lanzar({"cmd": "regenerar", "notas": str(edicion), "carpeta": str(self.proyecto), "sobre": sobre,
                       "nombre": self.proyecto.name, "bpm": self.tempo.value() or None, **self._notacion()}, "Guardando…")
