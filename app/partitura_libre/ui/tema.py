@@ -250,6 +250,13 @@ def error(padre, titulo, mensaje):
     dialogo(padre, titulo, mensaje, tipo="error")
 
 
+def pedir_texto(padre, titulo, mensaje, inicial=""):
+    """Un texto que escribe el usuario; None si cancela o lo deja vacío."""
+    from PySide6.QtWidgets import QInputDialog, QLineEdit
+    texto, ok = QInputDialog.getText(padre, titulo, mensaje, QLineEdit.Normal, inicial)
+    return texto.strip() if ok and texto.strip() else None
+
+
 def confirmar(padre, titulo, mensaje, si="Continuar", no="Cancelar"):
     return dialogo(padre, titulo, mensaje, (no, si), "pregunta") == si
 

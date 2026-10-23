@@ -29,9 +29,11 @@ class Interfaz(Aislada):
         self.dialogos = []
         self._dialogo = tema.dialogo
         tema.dialogo = lambda padre, titulo, mensaje, botones=("Aceptar",), tipo="info": (self.dialogos.append((titulo, mensaje)), botones[-1])[1]
+        self._pedir_texto, self.nombres_pedidos = tema.pedir_texto, []
+        tema.pedir_texto = lambda padre, titulo, mensaje, inicial="": (self.nombres_pedidos.append(inicial), inicial)[1]
 
     def tearDown(self):
-        tema.dialogo = self._dialogo
+        tema.dialogo, tema.pedir_texto = self._dialogo, self._pedir_texto
         self.v._cerrar_motores()
         self.v.deleteLater()
         QApplication.processEvents()
@@ -428,6 +430,64 @@ class Interfaz(Aislada):
         self.assertTrue(panel._ofrecer_sistema())
         self.assertEqual(len(self.dialogos), 3)
         PanelCaptura._prefiere_micro = False
+
+    def test_el_nombre_de_la_partitura_lo_pone_quien_la_crea_y_se_cambia_pulsando_el_titulo(self):
+        from PySide6.QtCore import QPointF, Qt
+        from PySide6.QtGui import QMouseEvent
+        from PySide6.QtWidgets import QFileDialog
+        p = self.v.partituras
+        wav = escribir_wav(self.dir / "grabacion 0012.wav", [(60, 0.5)])
+        original = QFileDialog.getOpenFileName
+        QFileDialog.getOpenFileName = staticmethod(lambda *a, **k: (str(wav), ""))
+        try:
+            tema.pedir_texto = lambda padre, titulo, mensaje, inicial="": (self.nombres_pedidos.append(inicial), None)[1]
+            antes = len(proyectos.listar())
+            p.importar()                                                   # cancelar el nombre: no se crea nada
+            self.assertEqual((self.nombres_pedidos, len(proyectos.listar())), (["grabacion 0012"], antes))
+            tema.pedir_texto = lambda padre, titulo, mensaje, inicial="": "Mi canción"
+            p.importar()
+            self.assertEqual(p.proyecto.name, "Mi canción")
+            self.assertEqual(proyectos.leer(p.proyecto)["nombre"], "Mi canción")
+        finally:
+            QFileDialog.getOpenFileName = original
+        p.version = {}
+        p._poner_notas([[0, 0.5, 60, .7]], 120)
+        p.vista.grab()
+        p.vista.mousePressEvent(QMouseEvent(QMouseEvent.MouseButtonPress, QPointF(p.vista._caja_titulo.center()), Qt.LeftButton,
+                                            Qt.LeftButton, Qt.NoModifier))
+        p._editor_titulo.setText("Mi canción (versión lenta)")            # pulsar el título lo vuelve editable
+        p._editor_titulo.editingFinished.emit()
+        self.assertEqual(p.proyecto.name, "Mi canción (versión lenta)")
+        self.assertTrue((p.proyecto / "proyecto.json").is_file() and (p.proyecto / "grabacion 0012.wav").is_file())
+        self.assertEqual(proyectos.leer(p.proyecto)["nombre"], "Mi canción (versión lenta)")
+        self.assertIn(p.proyecto, [c for c, _ in proyectos.listar()])   # sigue en la biblioteca con su nombre nuevo
+
+    def test_cerrar_con_cambios_sin_guardar_pregunta_y_guarda(self):
+        p = self.v.partituras
+        d = proyectos.crear("con cambios", "partitura")
+        partituras_ = __import__("partitura_libre.partituras", fromlist=["x"])
+        partituras_.guardar_notas(d / "con cambios.notas.json", 120, [[0, 0.5, 60, .7], [0.5, 1.0, 62, .7]])
+        proyectos.anotar_resultado(d, "partitura", notas="con cambios.notas.json", midi="", musicxml="", bpm=120)
+        p.abrir_proyecto(d)
+        self.assertEqual(p.b_regenerar.text(), "Guardar versión")
+        p.tabla.selectRow(0)
+        p._atajo("arriba")                                                # una edición
+        self.assertEqual(p.b_regenerar.text(), "● Guardar versión")
+        respuesta = ["No guardar"]
+        tema.dialogo = lambda padre, titulo, mensaje, botones=("Aceptar",), tipo="info": (self.dialogos.append(titulo), respuesta[0])[1]
+        self.assertTrue(p.descartar_o_guardar())                          # «No guardar»: se sigue y se olvida
+        self.assertEqual(p.b_regenerar.text(), "Guardar versión")
+        p._atajo("arriba")
+        respuesta[0] = "Cancelar"
+        self.v.close()
+        self.assertTrue(self.v.isVisible())                               # «Cancelar»: no se cierra
+        respuesta[0] = "Guardar"
+        self.v.close()
+        self.assertTrue(self.v.isVisible())                               # primero guarda…
+        self.assertTrue(esperar(lambda: not self.v.isVisible(), 120))     # …y al terminar se cierra sola
+        versiones = [r for r in proyectos.leer(d)["resultados"] if r["tipo"] == "partitura"]
+        self.assertEqual(len(versiones), 2)
+        self.assertEqual(self.dialogos, ["Cambios sin guardar"] * 3)
 
     def test_ir_atras_y_adelante_y_pulsar_la_marca_de_tempo(self):
         from PySide6.QtCore import QPointF, Qt

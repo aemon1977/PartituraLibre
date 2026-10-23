@@ -47,6 +47,7 @@ class Pentagrama(QWidget):
     insertada = Signal(int, int)          # modo introducir: (nota tras la que va, o -1 al principio; tono)
     tecla = Signal(str)                   # atajos de edición
     tempo_pedido = Signal(float)          # clic en una marca de tempo: (segundo en que empieza)
+    titulo_pedido = Signal()              # clic en el título: cambiar el nombre de la partitura
 
     # Mismas teclas que MuseScore: N introducir, 3-7 figura, A-G nota, 0 silencio, . puntillo, Ctrl+L letra
     TECLAS = {Qt.Key_Up: "arriba", Qt.Key_Down: "abajo", Qt.Key_Left: "anterior", Qt.Key_Right: "siguiente",
@@ -59,6 +60,7 @@ class Pentagrama(QWidget):
         self.acordes = []   # [[segundo, raíz, tipo], …] encima del pentagrama
         self.tempos = [[0.0, 120, ""]]   # [[segundo, bpm, indicación], …]: el primero es el tempo inicial
         self._marcas = {}
+        self._caja_titulo = None   # zona del título dibujado: pulsarla cambia el nombre
         self.armadura, self.tonalidad = 0, "Do mayor"
         self.sonando = -1    # índice de la nota que suena al reproducir (-1: ninguna)
         self.cursor = None   # segundo por el que va la reproducción: se dibuja una línea que avanza
@@ -290,8 +292,11 @@ class Pentagrama(QWidget):
 
         if cabecera:
             g.setFont(self._fuente(24, z, serif=True))
-            g.drawText(QRectF(papel.left(), papel.top() + 22 * z, papel.width(), 34 * z), Qt.AlignCenter,
-                       self.titulo or "Partitura sin título")
+            titulo = self.titulo or "Partitura sin título"
+            g.drawText(QRectF(papel.left(), papel.top() + 22 * z, papel.width(), 34 * z), Qt.AlignCenter, titulo)
+            if pantalla:
+                ancho_t = QFontMetrics(g.font()).horizontalAdvance(titulo) + 16
+                self._caja_titulo = QRectF(papel.center().x() - ancho_t / 2, papel.top() + 22 * z, ancho_t, 34 * z)
             g.setFont(self._fuente(11, z, serif=True))
             g.drawText(QRectF(izq, papel.top() + 60 * z, der - izq, 18 * z), Qt.AlignRight, "Partitura Libre")
             g.drawText(QRectF(izq, papel.top() + 60 * z, der - izq, 18 * z), Qt.AlignLeft,
@@ -496,6 +501,8 @@ class Pentagrama(QWidget):
         for t, caja in self._marcas.items():
             if caja.contains(ev.position()):
                 return self.tempo_pedido.emit(t)
+        if self._caja_titulo is not None and self._caja_titulo.contains(ev.position()):
+            return self.titulo_pedido.emit()
         for caja, i in self._cajas:
             if caja.contains(ev.position()):
                 clave = self._clave_nota(i)

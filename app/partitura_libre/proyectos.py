@@ -22,6 +22,20 @@ def crear(nombre, tipo, carpeta=None):
     return d
 
 
+def renombrar(carpeta, nombre):
+    """Cambia el nombre de un proyecto: su carpeta y su ficha (los archivos de dentro conservan el suyo).
+    Devuelve la carpeta nueva; si ya existe otra con ese nombre, se añade «-2», «-3»…"""
+    carpeta = Path(carpeta)
+    nueva = rutas.ruta_unica(carpeta.parent, nombre)
+    carpeta.rename(nueva)
+    actualizar(nueva, nombre=nueva.name)
+    a = config.cargar()
+    if str(carpeta) in a["externos"]:
+        a["externos"] = sorted({*a["externos"], str(nueva)} - {str(carpeta)})
+        config.guardar(a)
+    return nueva
+
+
 def leer(carpeta):
     return json.loads((Path(carpeta) / FICHA).read_text(encoding="utf-8"))
 

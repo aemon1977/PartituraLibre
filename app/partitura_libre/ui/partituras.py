@@ -51,6 +51,9 @@ class PaginaPartituras(QWidget):
         self.acordes = []      # [[segundo, raíz, tipo], …] de la canción, encima del pentagrama
         self.tempos = []       # [[segundo, bpm, indicación], …]: tempo inicial y sus cambios
         self._editor_tempo = None   # cuadro de texto abierto sobre una marca de tempo
+        self._editor_titulo = None  # y sobre el título
+        self._cambios = False       # hay ediciones que aún no están en ninguna versión guardada
+        self._despues_de_guardar = None   # lo que se iba a hacer cuando se pidió guardar antes
         self._parando = False  # se pidió parar: el análisis termina con lo que lleve hecho
         self._hasta = None     # segundo en que se paró la letra (paso 1), para escribir la partitura hasta ahí
         self.vivo = None       # motor del borrador en vivo mientras se graba
@@ -122,6 +125,7 @@ class PaginaPartituras(QWidget):
         self.vista.arrastrada.connect(self._arrastrar)
         self.vista.insertada.connect(self._insertar)
         self.vista.tempo_pedido.connect(lambda t: self.renombrar_tempo(t) if self.b_tempo.isEnabled() else None)
+        self.vista.titulo_pedido.connect(self.renombrar)
         rollo = self.rollo = QScrollArea()
         rollo.setWidget(self.vista)
         rollo.setWidgetResizable(True)
@@ -398,11 +402,16 @@ class PaginaPartituras(QWidget):
 
     # -- entrada ------------------------------------------------------------
     def importar(self):
+        if not self.descartar_o_guardar(self.importar):
+            return
         ruta, _ = QFileDialog.getOpenFileName(self, "Importar audio", "", f"Audio ({partituras.AUDIO});;Todos (*)")
         if not ruta:
             return
+        nombre = self._nombre_para(Path(ruta).stem)
+        if not nombre:
+            return
         try:
-            d = proyectos.crear(self.nombre.text().strip() or Path(ruta).stem, "partitura", self.destino or None)
+            d = proyectos.crear(nombre, "partitura", self.destino or None)
             proyectos.importar_audio(d, ruta)
         except OSError as e:
             return tema.error(self, "No se pudo importar", f"{e}\n\nComprueba que el archivo existe y que hay espacio libre.")
@@ -458,6 +467,7 @@ class PaginaPartituras(QWidget):
 
     def abrir_proyecto(self, carpeta):
         self.proyecto, self.version = Path(carpeta), None
+        self._marcar_cambios(False)
         self._hist, self._rehechos = [], []
         d = proyectos.leer(self.proyecto)
         versiones = [r for r in d["resultados"] if r["tipo"] == "partitura" and (self.proyecto / r["notas"]).is_file()]
@@ -575,6 +585,45 @@ class PaginaPartituras(QWidget):
         """Tempo inicial (el del selector si se puso a mano) y los cambios a lo largo de la partitura."""
         return partituras.tempos_de(self.tempo.value() or self.bpm, self.tempos)
 
+    def renombrar(self):
+        """Pulsar el título de la hoja lo vuelve editable: Intro cambia el nombre de la partitura (su carpeta en la
+        biblioteca y el título de las versiones que se guarden desde ahora). Esc lo deja."""
+        caja = self.vista._caja_titulo
+        if caja is None or self.proyecto is None or self.tarea is not None:
+            return
+        editor_ = QLineEdit(self.proyecto.name, self.vista)
+        editor_.setAlignment(Qt.AlignCenter)
+        editor_.setToolTip("Nombre de la partitura. Intro para guardarlo, Esc para dejarlo")
+        editor_.setGeometry(caja.toAlignedRect().adjusted(-120, 0, 120, 0))
+        editor_.selectAll()
+        editor_.show()
+        editor_.setFocus()
+        self._editor_titulo = editor_
+
+        def aplicar():
+            if self._editor_titulo is not editor_:
+                return
+            self._editor_titulo = None
+            nombre = editor_.text().strip().replace("/", "-").replace("\\", "-")
+            editor_.deleteLater()
+            if not nombre or nombre == self.proyecto.name:
+                return
+            if self._sonando:
+                self.detener()   # en Windows no se puede mover una carpeta con un audio abierto
+            try:
+                nueva = proyectos.renombrar(self.proyecto, nombre)
+            except OSError as e:
+                return tema.error(self, "No se pudo cambiar el nombre", f"{e}\n\nCierra los programas que tengan abiertos sus archivos y prueba otra vez.")
+            self.abrir_proyecto(nueva)
+            self.cambio.emit()
+            self.e_estado.setText(f"Ahora se llama «{nueva.name}». Las versiones que guardes llevarán ese título.")
+
+        def cancelar():
+            self._editor_titulo = None
+            editor_.deleteLater()
+        editor_.editingFinished.connect(aplicar)
+        QShortcut(QKeySequence(Qt.Key_Escape), editor_, cancelar, context=Qt.WidgetShortcut)
+
     def renombrar_tempo(self, t):
         """Pulsar una marca de tempo la vuelve editable ahí mismo: «Con brío», «Allegro 120»… Intro la guarda;
         Esc (o dejarla igual) no cambia nada."""
@@ -600,6 +649,7 @@ class PaginaPartituras(QWidget):
             if texto.strip() and texto != partituras.marca_tempo(actual[1], actual[2]):
                 nombre, bpm = partituras.leer_marca(texto, actual[1])
                 self.tempos = partituras.poner_tempo(tempos, actual[0], bpm, nombre)
+                self._marcar_cambios()
                 if actual[0] <= 0.01:
                     self.tempo.setValue(bpm)   # el tempo del principio es el del selector
                 self.e_estado.setText(f"Tempo: {partituras.marca_tempo(bpm, nombre)}. Pulsa «Guardar versión» para escribirlo en el MusicXML.")
@@ -657,6 +707,7 @@ class PaginaPartituras(QWidget):
         if r == QDialog.Rejected:
             return
         self.tempos = partituras.poner_tempo(tempos, inicio, 0 if r == 2 else pulsos.value(), elegido())
+        self._marcar_cambios()
         if inicio <= 0.01:
             self.tempo.setValue(self.tempos[0][1])   # el tempo del principio es el del selector
         self._dibujar()
@@ -793,6 +844,9 @@ class PaginaPartituras(QWidget):
             self.barra.setValue(1000)
             if carpeta == self.proyecto:
                 self.abrir_proyecto(carpeta)
+                if self._despues_de_guardar:   # se guardó antes de cerrar o de abrir otra cosa: ahora se hace
+                    QTimer.singleShot(0, self._despues_de_guardar)
+                    self._despues_de_guardar = None
                 aviso, self._sin_letra = getattr(self, "_sin_letra", ""), ""
                 parada = (f"Parado a los {int(r['hasta'] // 60)}:{int(r['hasta'] % 60):02d}: se conserva lo hecho hasta ahí. "
                           if r.get("parada") else "")
@@ -1025,10 +1079,19 @@ class PaginaPartituras(QWidget):
         if not editor.abrir(self._archivo("musicxml")):
             tema.error(self, "MuseScore no disponible", "No se encontró MuseScore. Descárgalo en Ajustes (versión portable).")
 
+    def _nombre_para(self, propuesto):
+        """El nombre de la partitura lo pone quien la crea: el escrito en «Nombre de la toma» o el que se pide ahora."""
+        return self.nombre.text().strip() or tema.pedir_texto(self, "Nombre de la partitura", "¿Cómo se llama esta partitura?", propuesto)
+
     def nueva(self):
         """Partitura en blanco para escribirla a mano, sin audio."""
+        if not self.descartar_o_guardar(self.nueva):
+            return
+        nombre = self._nombre_para("Partitura nueva")
+        if not nombre:
+            return
         try:
-            d = proyectos.crear(self.nombre.text().strip() or "Partitura nueva", "partitura", self.destino or None)
+            d = proyectos.crear(nombre, "partitura", self.destino or None)
         except OSError as e:
             return tema.error(self, "No se pudo crear la partitura", f"{e}\n\nElige otra carpeta de destino.")
         self.nombre.clear()
@@ -1041,11 +1104,16 @@ class PaginaPartituras(QWidget):
 
     def abrir_existente(self):
         """Convierte un MusicXML, MXL o MIDI en una partitura editable dentro de un proyecto nuevo."""
+        if not self.descartar_o_guardar(self.abrir_existente):
+            return
         ruta, _ = QFileDialog.getOpenFileName(self, "Abrir partitura", str(rutas.DATOS), f"Partituras ({partituras.PARTITURAS})")
         if not ruta:
             return
+        nombre = self._nombre_para(Path(ruta).stem)
+        if not nombre:
+            return
         try:
-            d = proyectos.crear(Path(ruta).stem, "partitura", self.destino or None)
+            d = proyectos.crear(nombre, "partitura", self.destino or None)
             copia = rutas.ruta_unica(d, "original " + Path(ruta).stem, Path(ruta).suffix.lower())
             shutil.copy2(ruta, copia)         # el archivo original se conserva en el proyecto
         except OSError as e:
@@ -1068,8 +1136,30 @@ class PaginaPartituras(QWidget):
             tema.error(self, "No se pudo exportar el PDF", f"{e}\n\nElige otra carpeta o libera espacio.")
 
     # -- deshacer, introducir, arrastrar, mover y reproducir --------------------
+    def _marcar_cambios(self, si=True):
+        self._cambios = si
+        self.b_regenerar.setText("● Guardar versión" if si else "Guardar versión")
+        self.b_regenerar.setToolTip(("Hay cambios sin guardar. " if si else "")
+                                    + "Crea MIDI y MusicXML nuevos con tus correcciones (no pisa los anteriores)")
+
+    def descartar_o_guardar(self, despues=None):
+        """Antes de que se pierda lo editado (cerrar, abrir otra partitura…): guardar, no guardar o cancelar.
+        True si se puede seguir ya; con «Guardar», se guarda y después se hace `despues`."""
+        if not (self._cambios and self.proyecto and self.notas and self.tarea is None):
+            return True
+        r = tema.dialogo(self, "Cambios sin guardar", f"«{self.proyecto.name}» tiene cambios que aún no se han guardado.",
+                         ("Cancelar", "No guardar", "Guardar"), "aviso")
+        if r == "No guardar":
+            self._marcar_cambios(False)
+            return True
+        if r == "Guardar":
+            self._despues_de_guardar = despues
+            self.regenerar()
+        return False
+
     def _recordar(self):
         """Guarda el estado antes de un cambio, para poder deshacerlo."""
+        self._marcar_cambios()
         self._hist.append(([list(n) for n in self.notas], list(self.letra)))
         del self._hist[:-200]
         self._rehechos.clear()

@@ -74,6 +74,8 @@ class Ventana(QMainWindow):
 
     def _abrir_proyecto(self, carpeta, tipo):
         pagina, i = (self.letras, 1) if tipo == "letra" else (self.partituras, 0)
+        if tipo != "letra" and not self.partituras.descartar_o_guardar(lambda: self._abrir_proyecto(carpeta, tipo)):
+            return
         if pagina.ocupada:
             return tema.dialogo(self, "Ahora no", "Espera a que termine la grabación o el análisis en curso antes de abrir otro proyecto.", tipo="aviso")
         pagina.abrir_proyecto(carpeta)
@@ -86,7 +88,10 @@ class Ventana(QMainWindow):
         editor.cerrar()
 
     def closeEvent(self, ev):
-        """Cerrar nunca pierde audio: la toma en curso se guarda; los análisis se cancelan limpiamente."""
+        """Cerrar nunca pierde audio: la toma en curso se guarda; los análisis se cancelan limpiamente; si hay
+        ediciones sin guardar se pregunta (con «Guardar», la ventana se cierra sola al terminar)."""
+        if not self.partituras.descartar_o_guardar(self.close):
+            return ev.ignore()
         analizando = self.partituras.tarea is not None or self.letras._final is not None
         if analizando and not tema.confirmar(self, "Hay un análisis en curso", "Si cierras ahora se cancelará. El audio "
                                              "original se conserva y podrás repetirlo.", "Cerrar y cancelar"):
