@@ -59,6 +59,15 @@ def onnxruntime():
         import importlib.util
         from pathlib import Path
         capi = Path(importlib.util.find_spec("onnxruntime").origin).parent / "capi"
+        # onnxruntime.dll necesita la biblioteca de C++ de Microsoft (msvcp140.dll), que un Windows recién instalado
+        # no trae. El paquete ya la lleva junto a la ventana (shiboken6): se carga de ahí, sin instalar nada.
+        for carpeta in (rutas.RUNTIME / "site-app" / "shiboken6", rutas.RUNTIME / "site-app" / "PySide6"):
+            if (carpeta / "msvcp140.dll").is_file():
+                os.add_dll_directory(str(carpeta))
+                for nombre in ("msvcp140.dll", "msvcp140_1.dll", "msvcp140_2.dll"):   # vcruntime ya lo carga Python
+                    if (carpeta / nombre).is_file():
+                        ctypes.WinDLL(str(carpeta / nombre))
+                break
         os.add_dll_directory(str(capi))
         ctypes.WinDLL(str(capi / "onnxruntime.dll"))
     import onnxruntime as ort
