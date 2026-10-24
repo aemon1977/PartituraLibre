@@ -341,6 +341,7 @@ class PaginaLetras(QWidget):
                                   f"({ev['prob'] * 100:.0f} % de confianza). Transcribiendo {ev['dur']:.0f} s de audio…")
         elif ev["t"] == "segmento":
             self._nuevos.append({k: ev[k] for k in ("inicio", "fin", "texto", "dudoso")})
+            self._nuevos.sort(key=lambda s: s["inicio"])   # lo reescuchado en los huecos llega al final
             mitad = 500 if self._separando else 0
             self.barra.setValue(mitad + int(ev["v"] * (1000 - mitad)))
             self._poner(self._nuevos)

@@ -92,15 +92,30 @@ def main():
                                            word_timestamps=bool(o.get("palabras")),
                                            **({"no_speech_threshold": None} if cantada else {}))
             emitir("idioma", id=o["id"], idioma=info.language, prob=round(info.language_probability, 3), dur=info.duration)
+
+            def enviar(segs, v=None):
+                for s in segs:
+                    if parada_pedida():
+                        raise Parada
+                    emitir("segmento", id=o["id"], inicio=round(s.start + desfase, 2), fin=round(s.end + desfase, 2),
+                           palabras=[[round(p.start + desfase, 2), round(p.end + desfase, 2), p.word.strip()] for p in (s.words or [])],
+                           texto=s.text.strip(), v=v or round(min(1.0, s.end / max(info.duration, 0.01)), 3),
+                           dudoso=cantada and s.avg_logprob < -0.65 or letras.es_dudoso(s.avg_logprob, s.no_speech_prob, s.compression_ratio))
+            tramos = []
             for s in segs:
                 if parada_pedida():
                     raise Parada
                 hasta = s.end + desfase
                 if s.text.strip() and not (cantada and letras.es_relleno(s.text, s.avg_logprob)):
-                    emitir("segmento", id=o["id"], inicio=round(s.start + desfase, 2), fin=round(s.end + desfase, 2),
-                           palabras=[[round(p.start + desfase, 2), round(p.end + desfase, 2), p.word.strip()] for p in (s.words or [])],
-                           texto=s.text.strip(), v=round(min(1.0, s.end / max(info.duration, 0.01)), 3),
-                           dudoso=cantada and s.avg_logprob < -0.65 or letras.es_dudoso(s.avg_logprob, s.no_speech_prob, s.compression_ratio))
+                    tramos.append((s.start, s.end))
+                    enviar([s])
+            huecos = letras.huecos(tramos, info.duration) if cantada and not o.get("borrar") else []   # no en el borrador en vivo
+            if huecos:   # se vuelve a escuchar solo lo que quedó sin letra: cada hueco empieza su propia ventana
+                segs, _ = reconocedor().transcribe(audio, language=info.language, beam_size=HAZ, temperature=TEMPERATURAS,
+                                                   vad_filter=False, condition_on_previous_text=False, no_speech_threshold=None,
+                                                   word_timestamps=bool(o.get("palabras")), clip_timestamps=[t for h in huecos for t in h])
+                segs = [s for s in segs if s.text.strip() and not letras.es_relleno(s.text, s.avg_logprob)]
+                enviar([s for s, vale in zip(segs, letras.sin_bucles([(s.text, s.compression_ratio) for s in segs])) if vale], v=1.0)
             limpiar()
             emitir("fin", id=o["id"])
         except Parada:   # se conserva lo reconocido; «hasta» es dónde se quedó

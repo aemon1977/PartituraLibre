@@ -107,6 +107,26 @@ def es_relleno(texto, logprob):
     return logprob < -1.2 or len(t.strip(" .,¡!¿?…")) < 3 or any(m in t for m in MULETILLAS)
 
 
+HUECO_S = 8.0   # un tramo de canción sin ninguna frase reconocida de al menos esto se vuelve a escuchar
+
+
+def huecos(tramos, duracion):
+    """[(inicio, fin)] de los tramos sin frase. Con voz cantada el modelo a veces escucha una ventana de
+    30 s, contesta «¡Gracias!» y salta a la siguiente: se pierden estrofas enteras (sobre todo con «small»)."""
+    bordes = [0.0] + [t for tramo in sorted(tramos) for t in tramo] + [duracion]
+    return [(a, b) for a, b in zip(bordes[::2], bordes[1::2]) if b - a >= HUECO_S]
+
+
+def sin_bucles(segs):
+    """De lo reescuchado en los huecos, fuera lo que el modelo inventa sobre música sin voz: la misma frase
+    tres o más veces («¡Presa!» ×10) o un texto muy repetitivo («¡Aaaaa…!»). `segs`: (texto, compresión)."""
+    clave = lambda t: re.sub(r"\W+", " ", t.lower()).strip()
+    veces = {}
+    for texto, _ in segs:
+        veces[clave(texto)] = veces.get(clave(texto), 0) + 1
+    return [veces[clave(texto)] < 3 and compresion <= 2.4 for texto, compresion in segs]
+
+
 def es_dudoso(logprob, sin_voz, compresion):
     """Criterio para pedir revisión humana de un segmento."""
     return logprob < -0.8 or sin_voz > 0.5 or compresion > 2.4

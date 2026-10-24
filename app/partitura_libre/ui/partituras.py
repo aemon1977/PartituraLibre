@@ -777,6 +777,7 @@ class PaginaPartituras(QWidget):
                 self._parando = False
                 t.cancelar()
                 if frases:
+                    frases.sort(key=lambda f: f["inicio"])   # lo reescuchado en los huecos llega al final
                     segs = [{k: f[k] for k in ("inicio", "fin", "texto", "dudoso")} for f in frases]
                     f_json = rutas.ruta_unica(carpeta, carpeta.name, ".letra.json", (".txt",))
                     f_txt = f_json.with_name(f_json.name.replace(".letra.json", ".txt"))

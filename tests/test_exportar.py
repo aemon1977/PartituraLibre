@@ -74,6 +74,13 @@ class TextoEditable(unittest.TestCase):
         self.assertFalse(letras.es_relleno("Y empezamos a tocar", -0.70))   # se muestra, marcado con ⚠
         self.assertTrue(letras.es_dudoso(-0.70, 0.82, 1.2))
 
+    def test_huecos_sin_letra_se_reescuchan(self):
+        self.assertEqual(letras.huecos([(26.5, 35.7), (36.9, 42.6), (155.7, 157.1)], 160.0),
+                         [(0.0, 26.5), (42.6, 155.7)])
+        # Salida real de «small» reescuchando un tramo instrumental: el bucle y el «Aaaa» fuera, la letra se queda
+        segs = [("¡Presa!", 1.0)] * 3 + [("Político.", 1.0), ("Sí, buena.", 1.1), ("Político.", 1.0), ("¡Aaaaaaaaaaaaaaaa!", 6.5)]
+        self.assertEqual(letras.sin_bucles(segs), [False] * 3 + [True] * 3 + [False])
+
     def test_criterio_de_duda(self):
         self.assertFalse(letras.es_dudoso(-0.2, 0.05, 1.4))
         self.assertTrue(letras.es_dudoso(-1.3, 0.05, 1.4))   # el modelo no está seguro
