@@ -3,13 +3,13 @@ from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (QApplication, QCheckBox, QFileDialog, QGridLayout, QInputDialog, QPlainTextEdit, QVBoxLayout,
                                QWidget)
 
-from .. import __version__, actualizar, config, diagnostico, editor, letras, limpieza, rutas, separacion, tareas
+from .. import __version__, actualizar, config, diagnostico, editor, lector, letras, limpieza, rutas, separacion, tareas
 from . import tema
 
 LICENCIAS = ("Partitura Libre usa software libre que se descarga dentro de su carpeta: Python (PSF), Qt/PySide6 (LGPL v3), "
              "Basic Pitch de Spotify (Apache 2.0), ONNX Runtime (MIT), music21 (BSD), faster-whisper y CTranslate2 (MIT), "
              "modelos Whisper de OpenAI (MIT), sounddevice y soundfile (MIT/BSD), uv (MIT/Apache 2.0). "
-             "MuseScore Studio (GPL v3) es opcional y se ejecuta como programa aparte. Detalle en docs/LICENCIAS.md.")
+             "MuseScore Studio (GPL v3) y Audiveris (AGPL v3) son opcionales y se ejecutan como programas aparte. Detalle en docs/LICENCIAS.md.")
 
 
 def _mb(b):
@@ -39,6 +39,13 @@ class PaginaAjustes(QWidget):
         ve.addWidget(self.e_editor)
         ve.addLayout(tema.fila(self.b_ms_bajar, self.b_ms_elegir, None))
         ve.addLayout(tema.fila(self.b_ms_abrir, self.b_ms_quitar, None))
+
+        tv, vv = tema.tarjeta("Audiveris (opcional, para el Lector)")
+        self.e_audiveris = tema.etiqueta()
+        self.b_av_bajar = tema.boton(f"Descargar Audiveris ({lector.AUDIVERIS['mb']} MB)", self._bajar_audiveris)
+        self.b_av_quitar = tema.boton("Quitar Audiveris", self._quitar_audiveris, "peligro")
+        vv.addWidget(self.e_audiveris)
+        vv.addLayout(tema.fila(self.b_av_bajar, self.b_av_quitar, None))
 
         td, vd = tema.tarjeta("Diagnóstico")
         vd.addWidget(tema.etiqueta("Comprueba el runtime portable, el entorno activo, los micrófonos, los motores, los modelos, "
@@ -89,7 +96,7 @@ class PaginaAjustes(QWidget):
         if pendiente:
             self.e_actualizacion.setText(f"La versión {pendiente} ya está descargada: se instalará la próxima vez que abras el programa.")
 
-        area = tema.columna(tm, te, td, tl, ta)
+        area = tema.columna(tm, te, tv, td, tl, ta)
         v = QVBoxLayout(self)
         v.setContentsMargins(22, 18, 14, 18)
         v.setSpacing(12)
@@ -120,11 +127,17 @@ class PaginaAjustes(QWidget):
         exe, origen = editor.buscar()
         self.e_editor.setText(
             (f"Disponible ({origen}): {exe}" if exe else "No instalado. No hace falta: Partitura Libre edita la partitura y exporta el PDF por sí sola. "
-             "Descárgalo solo si además quieres abrir tus MusicXML en MuseScore.")
+             "Descárgalo si quieres oír partituras en el Lector o abrir tus MusicXML en MuseScore.")
             + f"\nLa copia portable se guarda en runtime/musescore y no se instala en el sistema. {editor.LICENCIA}")
         self.b_ms_bajar.setEnabled(origen != "portable")
         self.b_ms_quitar.setEnabled(origen == "portable")
         self.b_ms_abrir.setEnabled(bool(exe))
+        puesto = lector.audiveris() is not None
+        self.e_audiveris.setText(("Descargado: el Lector abre partituras en PDF e imagen." if puesto else
+                                  "No descargado. Solo hace falta para que el Lector abra partituras en PDF o en imagen.")
+                                 + f"\nSe guarda en runtime/audiveris y no se instala en el sistema. {lector.LICENCIA}")
+        self.b_av_bajar.setEnabled(not puesto)
+        self.b_av_quitar.setEnabled(puesto)
 
     # -- actualizaciones ---------------------------------------------------------
     def _guardar_opcion(self, clave, valor):
@@ -237,6 +250,22 @@ class PaginaAjustes(QWidget):
     def _quitar_musescore(self):
         if tema.confirmar(self, "Quitar MuseScore portable", "Se borrará la copia de MuseScore de runtime/musescore.", "Borrar MuseScore"):
             editor.quitar_portable()
+            self.recargar()
+            self.cambio.emit()
+
+    def _bajar_audiveris(self):
+        tema.descarga_con_dialogo(
+            self, "Descargar Audiveris",
+            f"Audiveris {lector.VERSION} reconoce partituras impresas en PDF o en imagen para el Lector.\n\n"
+            f"• Descarga: {lector.AUDIVERIS['mb']} MB (≈ 190 MB descomprimido; trae su propio Java)\n• Se guarda en: {lector.CARPETA}\n"
+            f"• No se instala en el sistema ni pide contraseña.\n\n{lector.LICENCIA}",
+            lector.instalar, lambda ok: (self.recargar(), self.cambio.emit()))
+
+    def _quitar_audiveris(self):
+        if self._ocupada():
+            return tema.dialogo(self, "Ahora no", "Espera a que termine la grabación o el análisis en curso.", tipo="aviso")
+        if tema.confirmar(self, "Quitar Audiveris", "Se borrará la copia de Audiveris de runtime/audiveris. Podrás volver a descargarla.", "Borrar Audiveris"):
+            lector.quitar()
             self.recargar()
             self.cambio.emit()
 

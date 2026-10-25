@@ -18,6 +18,7 @@ PartituraLibre/
       letras.py        modelos de voz, texto editable por segmentos
       exportar.py      TXT / SRT / VTT / LRC y su lectura
       editor.py        MuseScore portable o existente; PDF
+      lector.py        Lector: Audiveris (PDF/imagen -> MusicXML), instrumento y letra en el MusicXML, sonido con MuseScore
       descargas.py     descargas con progreso, cancelación y sha256
       tareas.py        procesos de análisis en segundo plano, cancelables
       diagnostico.py   comprobaciones e informe
@@ -29,7 +30,7 @@ PartituraLibre/
       ui/              interfaz Qt: tema, captura, pentagrama, partituras, letras, proyectos, ajustes, ventana
       recursos/        fuente de notación Bravura (SIL OFL)
     requisitos/        *.in (lo pedido), *.txt (bloqueo con hashes para Linux y Windows), exclusiones.txt
-  runtime/   uv, Python 3.11, site-app/, site-partituras/, musescore/     (descargado)
+  runtime/   uv, Python 3.11, site-app/, site-partituras/, musescore/, audiveris/   (descargado)
   models/    modelos de voz                                               (descargado a petición)
   data/      proyectos; datos de MuseScore portable
   config/  logs/  temp/
@@ -82,6 +83,8 @@ Lo cubre `tests/test_dependencias.py`, incluido el caso de dependencia ausente y
 **10. Voz a texto con faster-whisper en CPU (int8).** Sin GPU ni claves. Los modelos se bajan a `models/whisper/` solo al pulsar el botón, con tamaño, memoria y progreso; se verifica el sha256 que publica el repositorio. `HF_HUB_OFFLINE=1` impide que ninguna biblioteca descargue por su cuenta. Voz cantada: sin filtro de silencios ni arrastre de contexto y umbral de duda más estricto. **Separación de voz para canciones** (`separacion.py`): un modelo MDX-Net en ONNX (UVR-MDX-NET-Voc_FT, 64 MB, a petición) ejecutado con ONNX Runtime y una transformada de Fourier hecha con numpy, sin PyTorch. El motor de voz aísla la voz en un WAV temporal y transcribe ese. Se adoptó tras medir con tomas reales del usuario que mejora la letra con los tres modelos.
 
 **11. MuseScore, opcional.** La edición y el PDF se hacen en la app (ver 7 septies). Quien quiera puede abrir además el MusicXML en MuseScore Studio, descargado a `runtime/musescore/` (AppImage extraído en Linux, PortableApps en Windows) o uno ya instalado, que se usa sin modificarlo. A la copia portable se le fijan `HOME` y `XDG_*` dentro de la carpeta, porque de otro modo crea `~/Documents/MuseScore4`.
+
+**11 quater. Lector de partituras (1.10).** Toca una partitura con el instrumento elegido, solo las notas. No se reimplementa nada que ya hagan bien programas libres: un PDF o una imagen lo reconoce **Audiveris** (`-batch -export`, a MXL) y la conversión y el sonido los hace **MuseScore** (`-o`, a MusicXML y a WAV, sin ventana). Entre medias, la app reescribe el MusicXML: quita la letra y pone en cada parte el instrumento elegido por su sonido estándar (`instrument-sound`) y su nombre en MuseScore; se quita `midi-instrument`, porque su número de programa haría elegir otro. No se hace por MIDI: al importarlo, MuseScore toma el primer instrumento con ese programa (la trompeta salía como «Vuvuzela»). Los 35 instrumentos se comprobaron uno a uno: MuseScore elige el correcto y las notas suenan a la misma altura que con piano, también los transpositores. Audiveris se descarga a petición, con sha256: en Linux, el `.deb` de Ubuntu 22.04 (el de bibliotecas más antiguas) extraído con `dpkg-deb` o, sin dpkg, abriendo el archivo «ar» en Python y descomprimiendo con `tar --zstd`; en Windows, la variante de consola del `.msi`, extraída con `msiexec /a` (instalación administrativa: solo copia archivos). Su configuración va a `data/audiveris` (HOME, XDG y APPDATA del proceso). En Windows, para exportar se usa `App/MuseScore/bin/MuseScore4.exe` de la copia de PortableApps, que guarda su configuración en su propia carpeta; el lanzador de PortableApps abriría la ventana. Los dos se ejecutan en grupo de procesos propio: cancelar los corta con sus hijos. `tests/test_lector.py` comprueba con un PDF real (Mutopia, dominio público) que las notas leídas son las del MIDI de la misma edición y que nada se escribe en el perfil; la CI lo pasa en Windows y Linux reales.
 
 **11 bis. Actualización desde GitHub** (`actualizar.py`). La app consulta la última *release* del repositorio público (una petición sin datos del usuario; se puede desactivar). Si hay una versión mayor y el usuario acepta, descarga el paquete de su sistema, verifica el sha256 que publica GitHub y que la versión de dentro es la anunciada, y lo deja en `runtime/actualizacion`. El cambio lo hace el lanzador en el arranque siguiente, antes de abrir nada: `app/` pasa a `app.anterior/` y entra la nueva; después se reinicia con el código nuevo, que reinstala paquetes si su bloqueo cambió. No se tocan `runtime/`, `models/`, `data/`, `config/` ni `logs/`. Los paquetes se extraen rechazando rutas fuera de la carpeta. En Windows no se sustituye el `.bat`, porque está en ejecución.
 

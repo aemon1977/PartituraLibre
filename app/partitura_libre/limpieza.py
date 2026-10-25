@@ -5,7 +5,7 @@ import subprocess
 
 from . import rutas
 
-DESCRIPCION = {"app": "código del programa", "runtime": "Python, paquetes y editor portables",
+DESCRIPCION = {"app": "código del programa", "runtime": "Python, paquetes, MuseScore y Audiveris portables",
                "models": "modelos de voz", "data": "grabaciones, partituras y letras",
                "config": "preferencias", "logs": "diagnósticos", "temp": "temporales"}
 

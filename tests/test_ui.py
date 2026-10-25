@@ -40,14 +40,14 @@ class Interfaz(Aislada):
         super().tearDown()
 
     def test_navegacion_y_botones_bloqueados_al_empezar(self):
-        self.assertEqual([b.text() for b in self.v.grupo.buttons()], ["Partituras", "Letras", "Grabaciones / Proyectos", "Ajustes"])
+        self.assertEqual([b.text() for b in self.v.grupo.buttons()], ["Partituras", "Letras", "Lector", "Grabaciones / Proyectos", "Ajustes"])
         p, l = self.v.partituras, self.v.letras
         for b in (p.b_transcribir, p.b_cancelar, p.b_regenerar, p.b_midi, p.b_xml, p.b_borrar, p.b_oir,
                   p.captura.b_pausa, p.captura.b_detener, p.captura.b_cancelar,
                   l.b_transcribir, l.b_cancelar, l.b_guardar, l.b_exportar, l.b_copiar):
             self.assertFalse(b.isEnabled(), b.text())
         self.assertTrue(p.b_importar.isEnabled() and l.b_importar.isEnabled())
-        for i in range(4):
+        for i in range(5):
             self.v.ir(i)
             self.assertEqual(self.v.pila.currentIndex(), i)
 
@@ -785,6 +785,79 @@ class Interfaz(Aislada):
         self.assertIn("corregida", letra_xml(p.version))
         self.v._abrir_proyecto(d, "letra")                                    # el texto completo se abre en Letras
         self.assertIn("wikipedia", self.v.letras.texto.toPlainText().lower())
+
+    def test_lector_pide_lo_que_falta_sin_descargar_solo(self):
+        from partitura_libre import editor, lector
+        from tests.test_lector import DATOS
+        lec, pedidas = self.v.lector, []
+        self.assertFalse(lec.b_tocar.isEnabled() or lec.b_parar.isEnabled() or lec.b_guardar.isEnabled())
+        buscar, descarga = editor.buscar, tema.descarga_con_dialogo
+        editor.buscar, tema.descarga_con_dialogo = (lambda: (None, "")), (lambda padre, titulo, *a: pedidas.append(titulo))
+        try:
+            lec.recargar()
+            self.assertTrue(lec.b_ms.isVisibleTo(lec))
+            lec.abrir(str(DATOS / "minueto-bach.pdf"))
+            self.assertTrue(lec.b_tocar.isEnabled())
+            lec.tocar()
+        finally:
+            editor.buscar, tema.descarga_con_dialogo = buscar, descarga
+        self.assertEqual(pedidas, ["Descargar MuseScore portable"])   # se ofrece (con su tamaño); nada se baja sin aceptar
+        self.assertFalse(lec.ocupada)
+        if editor.buscar()[0] and not lector.audiveris():
+            tema.descarga_con_dialogo = lambda padre, titulo, *a: pedidas.append(titulo)
+            try:
+                lec.tocar()
+            finally:
+                tema.descarga_con_dialogo = descarga
+            self.assertEqual(pedidas[-1], "Descargar Audiveris")
+
+    def test_lector_toca_con_el_instrumento_elegido(self):
+        from partitura_libre import audio, editor
+        from tests.test_lector import DOS_PARTES
+        if not editor.buscar()[0]:
+            self.skipTest("MuseScore no está descargado")
+        lec, sonado = self.v.lector, []
+        partitura = self.dir / "dos partes.musicxml"
+        partitura.write_text(DOS_PARTES, encoding="utf-8")
+        reproducir, parar = audio.reproducir_archivo, audio.parar_reproduccion
+        audio.reproducir_archivo = lambda ruta, desde=0.0: (sonado.append(Path(ruta)), 2.0)[1]   # sin depender de altavoces
+        try:
+            self.v.ir(2)
+            lec.abrir(str(partitura))
+            lec.instrumento.setCurrentText("Violín")
+            lec.tocar()
+            self.assertTrue(lec.ocupada and lec.b_cancelar.isVisibleTo(lec) and not lec.b_abrir.isEnabled())
+            self.assertTrue(esperar(lambda: not lec.ocupada, 120), lec.e_estado.text())
+            self.assertEqual(self.dialogos, [])
+            self.assertTrue(sonado[-1].is_file())
+            self.assertIn("violín", lec.e_estado.text())
+            self.assertTrue(lec.b_guardar.isEnabled() and lec.b_parar.isEnabled())
+            leida = lec.leida
+
+            lec.tocar()                                    # el mismo instrumento otra vez: suena al momento
+            self.assertFalse(lec.ocupada)
+            self.assertEqual(len(sonado), 2)
+            lec.instrumento.setCurrentText("Flauta")       # otro: se reutiliza la partitura ya leída
+            lec.tocar()
+            self.assertTrue(esperar(lambda: not lec.ocupada, 120), lec.e_estado.text())
+            self.assertEqual(lec.leida, leida)
+            self.assertNotEqual(sonado[-1], sonado[0])
+
+            lec.instrumento.setCurrentText("Trompeta")     # cancelar a medias deja la página lista
+            lec.tocar()
+            lec.cancelar()
+            self.assertTrue(esperar(lambda: not lec.ocupada, 30))
+            self.assertEqual(lec.e_estado.text(), "Cancelado.")
+            self.assertTrue(lec.b_tocar.isEnabled())
+
+            import shutil                                  # «Vaciar temporales» no la deja rota
+            shutil.rmtree(lec.carpeta)
+            lec.instrumento.setCurrentText("Violín")
+            lec.tocar()
+            self.assertTrue(esperar(lambda: not lec.ocupada, 120), lec.e_estado.text())
+            self.assertTrue(sonado[-1].is_file())
+        finally:
+            audio.reproducir_archivo, audio.parar_reproduccion = reproducir, parar
 
     def test_ajustes_diagnostico_y_contenido(self):
         a = self.v.ajustes

@@ -4,3 +4,7 @@ voz-es.flac  Primeros 25 s de «Es-Corto desambiguacion-article.ogg» (lectura d
              Modificación: recorte a 25 s, mono, 16 kHz, FLAC.
 jfk.flac     Fragmento del discurso inaugural de John F. Kennedy (1961). Dominio público
              (obra del gobierno de EE. UU.). Tomado de las pruebas de faster-whisper.
+minueto-bach.pdf / minueto-bach.mid
+             Minueto en Sol mayor, BWV Anh. 114 (Cuaderno de Anna Magdalena Bach), edición de Allen Garvin
+             para el Mutopia Project (Mutopia-2017/01/19-75). «Placed in the public domain by the typesetter».
+             https://www.mutopiaproject.org/cgibin/piece-info.cgi?id=75

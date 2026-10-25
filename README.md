@@ -1,9 +1,10 @@
 # Partitura Libre
 
-Aplicación de escritorio gratuita para **Windows 11** y **Debian 13** (preparada para Ubuntu 24.04) con dos funciones:
+Aplicación de escritorio gratuita para **Windows 11** y **Debian 13** (preparada para Ubuntu 24.04) con tres funciones:
 
 - **Partituras:** graba o importa una melodía, detecta las notas y crea MIDI y MusicXML editables.
 - **Letras:** pasa voz (hablada o cantada) a texto editable, con marcas de tiempo.
+- **Lector:** toca cualquier partitura (PDF, imagen, MusicXML, MIDI…) con el instrumento que elijas, para comprobar de oído que está bien escrita.
 
 Todo se procesa en tu equipo: sin cuentas, sin nube, sin cuotas de minutos ni de exportaciones.
 
@@ -39,7 +40,8 @@ No hay instalación: ver [Descargar](#descargar). Solo se descarga algo más si 
 | Descarga opcional | Tamaño | Dónde |
 |---|---|---|
 | Modelo de voz `tiny` / `base` / `medium` / `large-v3` | 75 / 145 / 1530 / 3090 MB | `models/whisper/` |
-| MuseScore Studio 4.7.5 portable (opcional; la app edita y exporta PDF sin él) | 195 MB (≈ 570 MB descomprimido) | `runtime/musescore/` |
+| MuseScore Studio 4.7.5 portable (para el Lector; la app edita y exporta PDF sin él) | 195 MB (≈ 570 MB descomprimido) | `runtime/musescore/` |
+| Audiveris 5.11.0 (para que el Lector abra PDF e imágenes; trae su propio Java) | 78 MB en Linux, 85 MB en Windows (≈ 190 MB descomprimido) | `runtime/audiveris/` |
 
 ### Desde el código fuente (para desarrollo)
 
@@ -116,13 +118,23 @@ Guardar y exportar: *Guardar versión* crea MIDI y MusicXML nuevos con tus cambi
 5. **Voz hablada o voz cantada (modo de prueba).** Para canciones con instrumentos hay dos ayudas, y se suman: **separar la voz de la música** antes de transcribir (pulsa *Descargar separador*, 64 MB, una sola vez; tarda en torno a un tercio de la duración del audio) y usar el modelo **large-v3** (3 GB), que con canto acierta claramente más que `small`. Los versos poco fiables se marcan con **⚠** para que los escuches y corrijas; el programa no inventa texto donde no entiende. Aun así, la letra de una canción rara vez sale perfecta: revísala.
 6. **Revisa y exporta.** El texto es editable (una línea por frase, marcas `[mm:ss.cc]` opcionales), se puede buscar y copiar, y se exporta a **TXT, SRT, VTT o LRC**.
 
+### Lector
+
+Para escuchar cómo suena una partitura y comprobar que se lee bien: la tuya, exportada desde *Partituras*, o cualquier otra.
+
+1. **Abrir partitura…**: PDF, imagen (PNG, JPG, TIFF), MusicXML, MXL, MIDI o MuseScore (`.mscz`).
+2. Elige el **instrumento** (35: piano, violín, flauta, trompeta, guitarra, saxos, órgano, voz…). Todas las partes suenan con él, a su altura real (también los instrumentos transpositores, como la trompeta en Si♭).
+3. **▶ Interpretar.** Se tocan **solo las notas**: la letra no se canta. Con *Guardar audio…* te llevas el WAV.
+
+Un PDF o una imagen se lee primero con **Audiveris** (reconocimiento óptico de partituras, ≈ 20 s por página); se lee una sola vez, y cambiar de instrumento solo vuelve a generar el sonido. Funciona muy bien con partituras impresas por ordenador (de un PDF de Mutopia saca 203 de sus 204 notas); con escaneos malos o manuscritos fallará más. El sonido lo pone **MuseScore** con sus instrumentos. Los dos se descargan desde la propia pestaña la primera vez (ver tabla de descargas opcionales), dentro de la carpeta del programa, y se ejecutan sin abrir ninguna ventana.
+
 ### Grabaciones / Proyectos
 
 Historial de todas las tomas con su audio y sus resultados. Desde aquí puedes reabrirlas, ver su carpeta, exportar una copia o eliminarlas.
 
 ### Ajustes
 
-Modelos de voz, MuseScore portable, **Diagnóstico** (runtime, micrófonos, motores, modelos, editor, espacio libre; guarda un informe en `logs/` sin grabaciones ni datos personales), tamaño de cada carpeta, vaciado de temporales y **desinstalación**.
+Modelos de voz, MuseScore portable, Audiveris, **Diagnóstico** (runtime, micrófonos, motores, modelos, editor, espacio libre; guarda un informe en `logs/` sin grabaciones ni datos personales), tamaño de cada carpeta, vaciado de temporales y **desinstalación**.
 
 ## Actualizaciones
 
@@ -162,6 +174,8 @@ Cada proyecto es una carpeta en `data/proyectos/` (o donde tú elijas).
 | La transcripción se cierra sola | Falta memoria: usa un modelo más pequeño. Detalle en `logs/motores.log`. |
 | No suena *▶ Oír* | Usa la salida de audio predeterminada del sistema: compruébala en el control de sonido. |
 | MuseScore no arranca (Linux) | Es opcional. La copia portable necesita X11 o XWayland (lo normal en escritorios actuales). |
+| El Lector no lee un PDF | Audiveris solo reconoce partituras impresas; un escaneo debe ser nítido (300 ppp o más). Si el PDF lleva texto y música, solo se toma la música. El detalle del error queda en `logs/motores.log`. |
+| Audiveris no arranca (Linux) | Necesita las bibliotecas X11 habituales de un escritorio (`libxtst6`, `libxi6`, `libxrender1`); en un Debian o Ubuntu con escritorio ya están. |
 | El programa se cerró mientras grababa | Al volver a abrirlo, la toma aparece como «Interrumpida» con el audio hasta el corte. |
 
 ## Versión anterior

@@ -5,7 +5,7 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
-from . import __version__, audio, editor, lanzar, letras, rutas
+from . import __version__, audio, editor, lanzar, lector, letras, rutas
 
 OK, AVISO, ERROR = "OK", "AVISO", "ERROR"
 
@@ -59,6 +59,9 @@ def comprobar(probar_micro=True):
     exe, origen = editor.buscar()
     r.append(("Editor de partituras", OK, "integrado en la app (edición y PDF propios)"
               + (f"; además, MuseScore opcional ({origen}): {exe}" if exe else "; MuseScore opcional no instalado")))
+    r.append(("Lector de partituras", OK if exe else AVISO,
+              ("MuseScore para el sonido: sí" if exe else "falta MuseScore (se descarga en la pestaña Lector)")
+              + ("; Audiveris para PDF e imágenes: sí" if lector.audiveris() else "; Audiveris (PDF e imágenes) no descargado")))
 
     libre = shutil.disk_usage(rutas.RAIZ).free / 2**30
     r.append(("Espacio libre", OK if libre > 2 else AVISO, f"{libre:.1f} GB en la unidad del programa"))

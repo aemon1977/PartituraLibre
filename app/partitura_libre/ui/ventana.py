@@ -1,4 +1,4 @@
-"""Ventana principal: barra de navegación y las cuatro secciones."""
+"""Ventana principal: barra de navegación y las cinco secciones."""
 import sys
 import traceback
 from datetime import datetime
@@ -11,6 +11,7 @@ from PySide6.QtCore import QTimer
 from .. import __version__, config, editor, proyectos, rutas, tareas
 from . import tema
 from .ajustes import PaginaAjustes
+from .lector import PaginaLector
 from .letras import PaginaLetras
 from .partituras import PaginaPartituras
 from .proyectos import PaginaProyectos
@@ -23,8 +24,8 @@ class Ventana(QMainWindow):
         self.setWindowIcon(tema.icono())
         self.resize(1360, 860)
 
-        self.partituras, self.letras = PaginaPartituras(), PaginaLetras()
-        ocupada = lambda: self.partituras.ocupada or self.letras.ocupada
+        self.partituras, self.letras, self.lector = PaginaPartituras(), PaginaLetras(), PaginaLector()
+        ocupada = lambda: self.partituras.ocupada or self.letras.ocupada or self.lector.ocupada
         self.proyectos = PaginaProyectos(ocupada)
         self.ajustes = PaginaAjustes(ocupada, self._cerrar_motores)
         self.pila = QStackedWidget()
@@ -36,7 +37,7 @@ class Ventana(QMainWindow):
         hb.addWidget(tema.etiqueta("♪  Partitura Libre", "marca", False))
         hb.addSpacing(22)
         self.grupo = QButtonGroup(self)
-        for i, (texto, pagina) in enumerate((("Partituras", self.partituras), ("Letras", self.letras),
+        for i, (texto, pagina) in enumerate((("Partituras", self.partituras), ("Letras", self.letras), ("Lector", self.lector),
                                             ("Grabaciones / Proyectos", self.proyectos), ("Ajustes", self.ajustes))):
             self.pila.addWidget(pagina)
             b = tema.boton(texto, clase="nav")
@@ -62,6 +63,8 @@ class Ventana(QMainWindow):
         self.ajustes.cambio.connect(self.letras.recargar_modelos)
         self.ajustes.cambio.connect(self.letras._botones)
         self.ajustes.cambio.connect(self.partituras._botones)
+        self.ajustes.cambio.connect(self.lector.recargar)
+        self.lector.cambio.connect(self.ajustes.recargar)
         self.letras.cambio.connect(self.ajustes.recargar)
         self.letras.cambio.connect(self.partituras._botones)
         self.proyectos.abrir.connect(self._abrir_proyecto)
@@ -69,7 +72,7 @@ class Ventana(QMainWindow):
     def ir(self, i):
         self.grupo.button(i).setChecked(True)
         self.pila.setCurrentIndex(i)
-        if i == 2:
+        if self.pila.widget(i) is self.proyectos:
             self.proyectos.recargar()
 
     def _abrir_proyecto(self, carpeta, tipo):
@@ -84,6 +87,7 @@ class Ventana(QMainWindow):
     def _cerrar_motores(self):
         self.partituras.cerrar()
         self.letras.cerrar()
+        self.lector.cerrar()
         tareas.cancelar_todas()
         editor.cerrar()
 

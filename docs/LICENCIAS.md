@@ -22,10 +22,13 @@ El código propio de Partitura Libre es MIT (`LICENSE`). Salvo la fuente Bravura
 | pretty_midi, mido | Escritura de MIDI | MIT | PyPI |
 | music21 | MIDI a MusicXML | BSD 3 | PyPI |
 | Fuente Bravura (Steinberg) | Claves y figuras del pentagrama; **sí va incluida** en `app/partitura_libre/recursos/` | SIL Open Font License 1.1 | github.com/steinbergmedia/bravura |
-| MuseScore Studio 4.7.5 (opcional) | Edición gráfica y PDF; programa aparte | GPL v3 | github.com/musescore/MuseScore |
+| MuseScore Studio 4.7.5 (opcional) | Edición gráfica y PDF; en el Lector, convertir la partitura y darle sonido; programa aparte | GPL v3 | github.com/musescore/MuseScore |
+| Audiveris 5.11.0 (opcional) | Lector: reconocer partituras en PDF o imagen; programa aparte con su propio Java | AGPL v3 | github.com/Audiveris/audiveris |
 
 Notas:
 
 - **TensorFlow no se instala.** Basic Pitch 0.4.0 lo declara como dependencia, pero trae el mismo modelo en ONNX; `app/requisitos/exclusiones.txt` lo omite (≈ 1,5 GB menos) y el motor funciona con ONNX Runtime.
 - **MuseScore** se ejecuta como proceso independiente (no se enlaza), por lo que su GPL no afecta al código del programa. No se redistribuye: se baja de su página oficial.
+- **Audiveris**, igual: proceso independiente que se ejecuta por línea de órdenes, no se enlaza ni se modifica, y no se redistribuye (se baja de su página oficial a petición del usuario). Su AGPL no afecta al código del programa.
+- Partitura de prueba del Lector (`tests/datos/minueto-bach.pdf`): edición del Mutopia Project en dominio público.
 - Audios de prueba: ver `tests/datos/LICENCIAS.txt`.
