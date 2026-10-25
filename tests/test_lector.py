@@ -124,6 +124,8 @@ def _perfil():
     casa = Path.home()
     sitios = [casa / ".config/MuseScore", casa / ".local/share/MuseScore", casa / "Documents/MuseScore4",
               casa / ".config/AudiverisLtd", casa / ".cache/AudiverisLtd", casa / ".local/share/AudiverisLtd"]
+    if rutas.WINDOWS:
+        sitios.append(lector._documentos() / "MuseScore4")
     for var in ("APPDATA", "LOCALAPPDATA"):
         if os.environ.get(var):
             sitios += [Path(os.environ[var]) / "MuseScore", Path(os.environ[var]) / "AudiverisLtd"]

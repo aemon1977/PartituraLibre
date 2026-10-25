@@ -182,16 +182,38 @@ def _musescore():
         # edición guarda su configuración dentro de su carpeta (Data/settings), no en el perfil
         exe = next(iter(sorted(exe.parent.glob("App/MuseScore/bin/MuseScore*.exe"))), exe)
     e = editor._entorno(origen) or {k: v for k, v in os.environ.items() if k != "PYTHONPATH"}
-    if not rutas.WINDOWS:   # sin ventana; MuseScore no hace caso de QT_QPA_PLATFORM, sino de la suya
+    if rutas.WINDOWS:
+        # Windows solo tiene la plataforma «windows»: con otra, MuseScore abre un aviso y se queda esperando
+        e.pop("QT_QPA_PLATFORM", None)
+        e.pop("MU_QT_QPA_PLATFORM", None)
+    else:   # sin ventana; MuseScore no hace caso de QT_QPA_PLATFORM, sino de la suya
         e["QT_QPA_PLATFORM"] = e["MU_QT_QPA_PLATFORM"] = "offscreen"
     return exe, e
+
+
+def _documentos():
+    """Carpeta Documentos de Windows, también si está en otro sitio (OneDrive…)."""
+    import winreg
+    try:
+        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, r"Software\Microsoft\Windows\CurrentVersion\Explorer\User Shell Folders") as k:
+            return Path(os.path.expandvars(winreg.QueryValueEx(k, "Personal")[0]))
+    except OSError:
+        return Path.home() / "Documents"
 
 
 def musescore(entrada, salida, cancelar=None):
     """Convierte con MuseScore; el formato lo da la extensión de `salida` (.musicxml, .wav, .mid…)."""
     exe, e = _musescore()
     Path(salida).unlink(missing_ok=True)
-    ejecutar([exe, "-o", salida, entrada], e, cancelar, limite=600)
+    # En Windows, MuseScore crea Documentos\MuseScore4 (carpetas vacías de plugins y estilos) y no hay forma de
+    # llevarla a otro sitio: si la crea esta conversión y sigue sin ningún archivo, se quita al terminar.
+    rastro = _documentos() / "MuseScore4" if rutas.WINDOWS else None
+    habia = rastro is not None and rastro.exists()
+    try:
+        ejecutar([exe, "-o", salida, entrada], e, cancelar, limite=600)
+    finally:
+        if rastro is not None and not habia and rastro.is_dir() and not any(f for _, _, f in os.walk(rastro) if f):
+            shutil.rmtree(rastro, ignore_errors=True)
     if not Path(salida).is_file():
         raise RuntimeError(f"MuseScore no pudo convertir «{Path(entrada).name}».")
     return Path(salida)
