@@ -103,8 +103,13 @@ def instalar_portable(progreso=None, cancelar=None):
     archivo = CARPETA / PORTABLE["url"].rsplit("/", 1)[1]
     descargas.descargar(PORTABLE["url"], archivo, progreso, cancelar, PORTABLE["sha256"])
     if rutas.WINDOWS:
-        # Instalador de PortableApps: solo descomprime en la carpeta indicada, sin registro ni permisos.
-        r = subprocess.run([str(archivo), f"/DESTINATION={CARPETA}\\", "/SILENT=true", "/AUTOCLOSE=true"], timeout=900)
+        # Instalador de PortableApps: solo descomprime en la carpeta indicada, sin registro ni permisos. No tiene modo
+        # silencioso (ignora /SILENT=true y /S; comprobado en Windows): sin el idioma en el entorno pregunta cuál usar,
+        # y después muestra su asistente. Se le da el idioma y se avanza el asistente solo.
+        e = dict(os.environ, **{"PortableApps.comLocaleID": "1034", "PortableApps.comLanguageCode": "es",
+                                "PortableApps.comLocaleCode2": "es", "PortableApps.comLocaleName": "SPANISH"})
+        r = subprocess.Popen(f'"{archivo}" /DESTINATION="{CARPETA}\\" /AUTOCLOSE=true', env=e)
+        _avanzar_asistente(r, 900)
     else:
         archivo.chmod(archivo.stat().st_mode | stat.S_IXUSR)
         shutil.rmtree(CARPETA / "squashfs-root", ignore_errors=True)
@@ -114,6 +119,41 @@ def instalar_portable(progreso=None, cancelar=None):
     archivo.unlink(missing_ok=True)
     if r.returncode != 0 or not _portable():
         raise OSError("No se pudo descomprimir MuseScore dentro de la carpeta del programa.")
+
+
+def _avanzar_asistente(proceso, limite):
+    """Pulsa el botón principal (Siguiente, Instalar, Terminar: el 1 en los instaladores NSIS) de las ventanas de
+    `proceso` hasta que termina. Se manda como orden a la ventana, así funciona aunque no esté en primer plano."""
+    import ctypes
+    import time
+    from ctypes import wintypes
+    u = ctypes.windll.user32
+    u.GetDlgItem.restype = wintypes.HWND
+    u.GetDlgItem.argtypes = (wintypes.HWND, ctypes.c_int)
+    u.GetWindowThreadProcessId.argtypes = (wintypes.HWND, ctypes.POINTER(wintypes.DWORD))
+    u.IsWindowVisible.argtypes = u.IsWindowEnabled.argtypes = (wintypes.HWND,)
+    u.PostMessageW.argtypes = (wintypes.HWND, wintypes.UINT, wintypes.WPARAM, wintypes.LPARAM)
+    ventanas = []
+
+    @ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
+    def ver(h, _):
+        pid = wintypes.DWORD()
+        u.GetWindowThreadProcessId(h, ctypes.byref(pid))
+        if pid.value == proceso.pid and u.IsWindowVisible(h):
+            ventanas.append(h)
+        return True
+    fin = time.monotonic() + limite
+    while proceso.poll() is None:
+        if time.monotonic() > fin:
+            proceso.kill()
+            raise OSError("El instalador de MuseScore no terminó.")
+        ventanas.clear()
+        u.EnumWindows(ver, 0)
+        for h in ventanas:
+            boton = u.GetDlgItem(h, 1)
+            if boton and u.IsWindowEnabled(boton):
+                u.PostMessageW(h, 0x0111, 1, boton)   # WM_COMMAND, IDOK, BN_CLICKED: como pulsarlo
+        time.sleep(0.5)
 
 
 def quitar_portable():

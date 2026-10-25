@@ -182,8 +182,8 @@ def _musescore():
         # edición guarda su configuración dentro de su carpeta (Data/settings), no en el perfil
         exe = next(iter(sorted(exe.parent.glob("App/MuseScore/bin/MuseScore*.exe"))), exe)
     e = editor._entorno(origen) or {k: v for k, v in os.environ.items() if k != "PYTHONPATH"}
-    if not rutas.WINDOWS:
-        e["QT_QPA_PLATFORM"] = "offscreen"
+    if not rutas.WINDOWS:   # sin ventana; MuseScore no hace caso de QT_QPA_PLATFORM, sino de la suya
+        e["QT_QPA_PLATFORM"] = e["MU_QT_QPA_PLATFORM"] = "offscreen"
     return exe, e
 
 
