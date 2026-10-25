@@ -214,7 +214,7 @@ def musescore(entrada, salida, cancelar=None):
         try:
             ejecutar([exe, "-o", salida, entrada], e, cancelar, limite=600)
         except RuntimeError:
-            # MuseScore se cierra a veces de golpe al arrancar (visto en Windows: 0xC0000005, 1 de cada ~100
+            # MuseScore se cierra a veces de golpe al arrancar (visto en Windows: 0xC0000005, 1 vez en unas 80
             # conversiones) y a la segunda va bien: se reintenta una vez antes de dar el error
             if salida.is_file():
                 raise
