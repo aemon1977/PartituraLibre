@@ -204,15 +204,17 @@ def _documentos():
 def musescore(entrada, salida, cancelar=None):
     """Convierte con MuseScore; el formato lo da la extensión de `salida` (.musicxml, .wav, .mid…)."""
     exe, e = _musescore()
-    Path(salida).unlink(missing_ok=True)
-    # En Windows, MuseScore crea Documentos\MuseScore4 (carpetas vacías de plugins y estilos) y no hay forma de
-    # llevarla a otro sitio: si la crea esta conversión y sigue sin ningún archivo, se quita al terminar.
+    entrada, salida = Path(entrada).resolve(), Path(salida).resolve()   # se ejecuta desde temp/
+    salida.unlink(missing_ok=True)
+    # En Windows, MuseScore crea Documentos\MuseScore4 (carpetas vacías de plugins y estilos y un acceso directo a
+    # los suyos) y no hay forma de llevarla a otro sitio: si la crea esta conversión y no tiene nada más, se quita.
     rastro = _documentos() / "MuseScore4" if rutas.WINDOWS else None
     habia = rastro is not None and rastro.exists()
     try:
         ejecutar([exe, "-o", salida, entrada], e, cancelar, limite=600)
     finally:
-        if rastro is not None and not habia and rastro.is_dir() and not any(f for _, _, f in os.walk(rastro) if f):
+        if rastro is not None and not habia and rastro.is_dir() \
+                and all(f == "Built-in styles.lnk" for _, _, archivos in os.walk(rastro) for f in archivos):
             shutil.rmtree(rastro, ignore_errors=True)
     if not Path(salida).is_file():
         raise RuntimeError(f"MuseScore no pudo convertir «{Path(entrada).name}».")
@@ -223,7 +225,7 @@ def musescore(entrada, salida, cancelar=None):
 def a_musicxml(entrada, carpeta, cancelar=None, progreso=None):
     """MusicXML de cualquier partitura en `carpeta`. Un PDF o una imagen se lee antes con Audiveris
     (≈ 20 s por página). `progreso(texto)` cuenta en qué paso va."""
-    entrada, carpeta = Path(entrada), Path(carpeta)
+    entrada, carpeta = Path(entrada).resolve(), Path(carpeta).resolve()
     carpeta.mkdir(parents=True, exist_ok=True)
     if entrada.suffix.lower() in IMAGENES:
         exe = audiveris()
