@@ -211,7 +211,14 @@ def musescore(entrada, salida, cancelar=None):
     rastro = _documentos() / "MuseScore4" if rutas.WINDOWS else None
     habia = rastro is not None and rastro.exists()
     try:
-        ejecutar([exe, "-o", salida, entrada], e, cancelar, limite=600)
+        try:
+            ejecutar([exe, "-o", salida, entrada], e, cancelar, limite=600)
+        except RuntimeError:
+            # MuseScore se cierra a veces de golpe al arrancar (visto en Windows: 0xC0000005, 1 de cada ~100
+            # conversiones) y a la segunda va bien: se reintenta una vez antes de dar el error
+            if salida.is_file():
+                raise
+            ejecutar([exe, "-o", salida, entrada], e, cancelar, limite=600)
     finally:
         if rastro is not None and not habia and rastro.is_dir() \
                 and all(f == "Built-in styles.lnk" for _, _, archivos in os.walk(rastro) for f in archivos):
