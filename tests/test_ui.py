@@ -125,10 +125,10 @@ class Interfaz(Aislada):
         p._atajo("anterior")
         self.assertEqual(p.tabla.currentRow(), 2)
         antes = len(p.vista.sistemas)
-        p._zoom(60); p.vista.setFixedWidth(620); QApplication.processEvents()                     # hoja estrecha y ampliada: más sistemas
+        p._zoom(100); QApplication.processEvents()                                               # más grande en la hoja: más sistemas
         self.assertGreater(len(p.vista.sistemas), antes)
         self.assertEqual(sorted(i for c in notas_en() for i in c["col"]), list(range(8)))         # sin perder ni repetir notas
-        p._zoom(-60); p.vista.setMaximumWidth(16777215); p.vista.setMinimumWidth(560); QApplication.processEvents()
+        p._zoom(-100); QApplication.processEvents()
 
         # Edición sin MuseScore: deshacer, arrastrar, mover en el tiempo, introducir con clic y PDF propio
         original = [list(n) for n in p.notas]
@@ -273,19 +273,19 @@ class Interfaz(Aislada):
         origen = QPoint(int(caja.center().x()), int(caja.center().y()))
         QTest.mousePress(p.vista, Qt.LeftButton, Qt.NoModifier, origen)
         self.assertEqual(p.tabla.currentRow(), i)
-        tiempos = []
+        tiempos, medio = [], 5 * p.vista._z            # medio espacio del pentagrama, en píxeles de pantalla
         for paso in range(1, 9):                       # ocho pasos hacia arriba: medio espacio cada uno
             t = time.perf_counter()
-            QTest.mouseMove(p.vista, origen - QPoint(0, paso * 5))
+            QTest.mouseMove(p.vista, origen - QPoint(0, round(paso * medio)))
             QApplication.processEvents()               # incluye el repintado
             tiempos.append(time.perf_counter() - t)
         self.assertEqual(p.notas[i][2], 74)            # Do4 + 8 posiciones = Re5
         self.assertEqual(p.tabla.item(i, 2).text(), "74")
         self.assertEqual(p.tabla.item(i, 3).text(), "Re5")
         self.assertEqual([n[2] for k, n in enumerate(p.notas) if k != i], [60] * 1199)   # las demás, intactas
-        QTest.mouseRelease(p.vista, Qt.LeftButton, Qt.NoModifier, origen - QPoint(0, 40))
+        QTest.mouseRelease(p.vista, Qt.LeftButton, Qt.NoModifier, origen - QPoint(0, round(8 * medio)))
         nueva_caja = next(c for c, k in p.vista._cajas if k == i)
-        self.assertLess(nueva_caja.center().y(), caja.center().y() - 30)                  # la zona sensible sigue a la nota
+        self.assertLess(nueva_caja.center().y(), caja.center().y() - 6 * medio)                  # la zona sensible sigue a la nota
         self.assertLess(sorted(tiempos)[len(tiempos) // 2], 0.02, f"arrastre lento: {tiempos}")
         p._atajo("deshacer")                            # todo el arrastre es un solo paso
         self.assertEqual(p.notas[i][2], 60)
@@ -785,6 +785,28 @@ class Interfaz(Aislada):
         self.assertIn("corregida", letra_xml(p.version))
         self.v._abrir_proyecto(d, "letra")                                    # el texto completo se abre en Letras
         self.assertIn("wikipedia", self.v.letras.texto.toPlainText().lower())
+
+    def test_el_zoom_es_el_tamano_en_la_hoja_impresa(self):
+        """Lo que se ve es lo que se imprime: mismas hojas y mismos sistemas por hoja que el PDF; reducir ahorra papel."""
+        p = self.v.partituras
+        escala = [60, 62, 64, 65, 67, 69, 71, 72, 71, 69, 67, 65, 64, 62]
+        p.vista.poner([[i * 0.5, i * 0.5 + 0.45, escala[i % 14], 0.8] for i in range(240)], bpm=120,
+                      letra=["la" if i % 3 else "can-" for i in range(240)], titulo="Hojas")
+        hojas = {}
+        for zoom in (60, 100, 150):
+            p._zoom(zoom - round(p.vista.zoom * 100))
+            QApplication.processEvents()
+            en_pantalla = [sum(1 for y in p.vista._sis_y if h.top() <= y <= h.bottom()) for h in p.vista._hojas]
+            self.assertEqual(en_pantalla, [len(s) for s in p.vista.paginas()], zoom)
+            self.assertEqual(p.vista.exportar_pdf(self.dir / f"{zoom}.pdf"), len(en_pantalla))
+            self.assertIn(f"{zoom} % · {len(en_pantalla)} hoja", p.e_zoom.text())
+            hojas[zoom] = len(en_pantalla)
+        self.assertLess(hojas[60], hojas[100])
+        self.assertLess(hojas[100], hojas[150])
+        p.vista.resize(700, p.vista.height())                   # el ancho de la ventana no cambia el reparto
+        QApplication.processEvents()
+        self.assertEqual(len(p.vista._hojas), hojas[150])
+        p._zoom(100 - round(p.vista.zoom * 100))
 
     def test_lector_pide_lo_que_falta_sin_descargar_solo(self):
         from partitura_libre import editor, lector

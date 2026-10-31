@@ -127,6 +127,7 @@ class PaginaPartituras(QWidget):
         self.vista.insertada.connect(self._insertar)
         self.vista.tempo_pedido.connect(lambda t: self.renombrar_tempo(t) if self.b_tempo.isEnabled() else None)
         self.vista.titulo_pedido.connect(self.renombrar)
+        self.vista.hojas.connect(lambda n: self._rotulo_zoom(n) if hasattr(self, "e_zoom") else None)
         rollo = self.rollo = QScrollArea()
         rollo.setWidget(self.vista)
         rollo.setWidgetResizable(True)
@@ -252,6 +253,8 @@ class PaginaPartituras(QWidget):
         self.clave.currentIndexChanged.connect(self._cambio_de_vista)
         self.nombres.toggled.connect(self._cambio_de_vista)
         self.e_zoom = tema.etiqueta(f"{round(self.vista.zoom * 100)} %", "tenue", False)
+        self.e_zoom.setToolTip("Tamaño de la partitura en la hoja impresa: se ve tal cual saldrá en el PDF, página a página")
+        self._rotulo_zoom()
         notas_barra = tema.herramientas(self.b_insertar, *self.b_fig.values(), self.b_puntillo, "|", self.b_sube, self.b_baja, self.b_octava_sube,
                                         self.b_octava_baja, self.b_antes, self.b_despues, "|",
                                         self.b_anadir, self.b_borrar, "|", self.e_letra, "|", self.nombres, None)
@@ -288,8 +291,9 @@ class PaginaPartituras(QWidget):
         self.b_tempo = tema.boton("Tempo…", self.editar_tempo,
                                   ayuda="Tempo e indicación (Andante, Allegro…) desde el compás de la nota elegida; sin nota elegida, el del principio")
         pie = tema.herramientas(aviso, None, self.b_atajos, "|", self.clave, self.tonalidad, self.b_tempo, "|",
-                                tema.boton("−", lambda: self._zoom(-10), ayuda="Reducir"), self.e_zoom,
-                                tema.boton("+", lambda: self._zoom(10), ayuda="Ampliar"))
+                                tema.boton("−", lambda: self._zoom(-10), ayuda="Más pequeña en la hoja: caben más compases por página (menos papel)"),
+                                self.e_zoom,
+                                tema.boton("+", lambda: self._zoom(10), ayuda="Más grande en la hoja: se lee mejor, pero ocupa más páginas"))
 
         cuerpo = QHBoxLayout()
         cuerpo.setContentsMargins(12, 12, 12, 8)
@@ -1042,9 +1046,13 @@ class PaginaPartituras(QWidget):
             self.letra[i] = self.e_letra.text().strip()
             self._nota_cambiada(i)
 
+    def _rotulo_zoom(self, hojas=None):
+        hojas = len(self.vista._hojas) if hojas is None else hojas
+        self.e_zoom.setText(f"{round(self.vista.zoom * 100)} % · {hojas} hoja{'s' if hojas != 1 else ''}")
+
     def _zoom(self, paso):
         self.vista.cambiar_zoom((round(self.vista.zoom * 100) + paso) / 100)
-        self.e_zoom.setText(f"{round(self.vista.zoom * 100)} %")
+        self._rotulo_zoom()
         a = config.cargar()
         a["zoom"] = round(self.vista.zoom * 100)
         config.guardar(a)
@@ -1404,7 +1412,7 @@ class PaginaPartituras(QWidget):
         lugar = self.vista.poner_cursor(t)
         if lugar:
             y = int(self.vista._sis_y[lugar[0]])
-            self.rollo.ensureVisible(int(lugar[1]), y, 120, int(self.vista._alto_sistema(self.vista.zoom)))
+            self.rollo.ensureVisible(int(lugar[1]), y, 120, int(self.vista._alto_sistema(self.vista._z)))
 
     def _fin_reproduccion(self):
         self.detener()

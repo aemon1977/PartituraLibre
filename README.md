@@ -53,7 +53,7 @@ Clonando el repositorio, `./iniciar-linux.sh` o `iniciar-windows.bat` descargan 
 
 La sección está organizada como un editor de partituras:
 
-- **Arriba, dos barras.** La de archivo: *Nueva*, *Abrir…*, *Guardar versión*, deshacer y rehacer, *▶ Oír*, *Letra*, *PDF…*, *MIDI…*, *MusicXML…*, *Carpeta* y los botones que muestran u ocultan los paneles laterales. La de notas: *✎ Introducir*, las cinco figuras (redonda a semicorchea) y el puntillo, semitono y octava arriba o abajo, mover la nota antes o después, *+ Nota*, *Borrar* y la letra de la nota elegida. y la casilla *Nombre de cada nota*. Abajo, en la barra de estado: *Atajos de teclado*, la clave y el zoom.
+- **Arriba, dos barras.** La de archivo: *Nueva*, *Abrir…*, *Guardar versión*, deshacer y rehacer, *▶ Oír*, *Letra*, *PDF…*, *MIDI…*, *MusicXML…*, *Carpeta* y los botones que muestran u ocultan los paneles laterales. La de notas: *✎ Introducir*, las cinco figuras (redonda a semicorchea) y el puntillo, semitono y octava arriba o abajo, mover la nota antes o después, *+ Nota*, *Borrar* y la letra de la nota elegida. y la casilla *Nombre de cada nota*. Abajo, en la barra de estado: *Atajos de teclado*, la clave y el zoom. **El zoom es el tamaño en la hoja impresa:** la partitura se ve como saldrá en el PDF, en hojas A4 separadas y numeradas, y junto al zoom se indica cuántas hojas ocupa («80 % · 2 hojas»). Redúcelo para que quepa en menos papel o amplíalo para leerla mejor.
 - **En el centro, la partitura** en una hoja: título, clave, compás de 4/4, barras y números de compás, figuras, silencios, nombres de nota y letra, repartida en sistemas según el ancho de la ventana.
 - **A la izquierda, el panel *Grabación*** (grabar o importar, y convertir en partitura). **A la derecha, la *Lista de notas*** con los valores exactos.
 
@@ -103,7 +103,7 @@ Los análisis largos muestran cuánto tiempo queda.
 
 **Equipos modestos** (4 hilos o menos, o menos de 12 GB de memoria, como un mini PC con Ryzen 3): la letra de las canciones se reconoce con `small` y un solo candidato, y los análisis van con prioridad baja dejando un núcleo libre para que la ventana no se trabe. Medido con 4 hilos: un minuto de canción tarda ≈ 1 min 45 s en total (separar la voz, reconocer la letra y sacar las notas) y usa ≈ 1,8 GB de memoria.
 
-Guardar y exportar: *Guardar versión* crea MIDI y MusicXML nuevos con tus cambios, sin pisar los anteriores. *PDF…* escribe en A4 la partitura tal como la ves, con clave, nombres y letra. MuseScore es opcional: si lo tienes, aparece un botón para abrir en él el MusicXML guardado.
+Guardar y exportar: *Guardar versión* crea MIDI y MusicXML nuevos con tus cambios, sin pisar los anteriores. *PDF…* escribe en A4 la partitura tal como la ves, con el tamaño y las páginas que muestra el zoom, con clave, nombres y letra. MuseScore es opcional: si lo tienes, aparece un botón para abrir en él el MusicXML guardado.
 
 > La hoja de la app coloca cada nota a su altura exacta, elige la figura más parecida a su duración y marca compases y silencios según el tempo. No dibuja ligaduras, tresillos ni armaduras; el puntillo solo aparece en duraciones exactas (las que escribes tú), y las alteraciones se escriben siempre con sostenidos. El MusicXML se cuantiza a semicorcheas.
 >

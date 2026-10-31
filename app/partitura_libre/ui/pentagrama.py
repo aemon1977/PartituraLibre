@@ -13,7 +13,8 @@ ESP = 10            # píxeles entre dos líneas del pentagrama con el zoom al 1
 NOMBRE = "#1d5fa8"   # color de los nombres de nota (la letra va en negro)
 SONANDO = "#d9822b"  # nota que está sonando al reproducir
 MESA, PAPEL, TINTA, ELEGIDA, TENUE = "#2f3948", "#fdfcf7", "#1b2433", "#0f9d8f", "#7a8494"
-A4_ANCHO, A4_ALTO = 1000, 1414   # hoja A4 en unidades de dibujo para el PDF
+A4_ANCHO, A4_ALTO = 1000, 1414   # hoja A4 en unidades de dibujo (en pantalla se escala al ancho de la ventana)
+MARGEN, CABECERA = 60, 96         # margen de la hoja y alto del título, en esas unidades (este, por la escala)
 # Símbolos SMuFL de Bravura
 G_CLAVE = {"sol8": "\ue052", "sol": "", "fa": "", "do3": "", "do4": ""}
 G_CABEZA = {"redonda": "", "blanca": ""}
@@ -48,6 +49,7 @@ class Pentagrama(QWidget):
     tecla = Signal(str)                   # atajos de edición
     tempo_pedido = Signal(float)          # clic en una marca de tempo: (segundo en que empieza)
     titulo_pedido = Signal()              # clic en el título: cambiar el nombre de la partitura
+    hojas = Signal(int)                   # cambió el n.º de páginas A4 que ocupa (por el zoom o las notas)
 
     # Mismas teclas que MuseScore: N introducir, 3-7 figura, A-G nota, 0 silencio, . puntillo, Ctrl+L letra
     TECLAS = {Qt.Key_Up: "arriba", Qt.Key_Down: "abajo", Qt.Key_Left: "anterior", Qt.Key_Right: "siguiente",
@@ -64,7 +66,9 @@ class Pentagrama(QWidget):
         self.armadura, self.tonalidad = 0, "Do mayor"
         self.sonando = -1    # índice de la nota que suena al reproducir (-1: ninguna)
         self.cursor = None   # segundo por el que va la reproducción: se dibuja una línea que avanza
-        self.titulo, self.zoom, self.insertar, self.piano = "", 1.0, False, False
+        self.titulo, self.zoom, self.insertar, self.piano = "", 1.0, False, False   # zoom: tamaño en la hoja impresa
+        self._z = 1.0        # escala en pantalla: el zoom por el tamaño al que se ve la hoja
+        self._hojas = []     # rectángulo de cada página A4 en pantalla
         self.sistemas = []   # cada sistema: lista de piezas {'col': índices de notas (vacío = silencio), 'x', 'barra', 'ancho', 'compas', 'silencio'}
         self._sis_y = []     # y de la línea inferior de cada sistema
         self._cajas = []     # (rectángulo, índice de nota) para elegir con el ratón
@@ -90,7 +94,8 @@ class Pentagrama(QWidget):
         self.update()
 
     def cambiar_zoom(self, zoom):
-        self.zoom = max(0.6, min(2.0, zoom))
+        """Tamaño de la música en la hoja: el PDF sale igual que se ve, con las mismas páginas."""
+        self.zoom = max(0.5, min(2.0, zoom))
         self._componer()
         self.update()
 
@@ -180,14 +185,39 @@ class Pentagrama(QWidget):
                 p["tempo"], p["tempo_t"] = partituras.marca_tempo(bpm, texto), t
         return sistemas
 
+    def _por_pagina(self, n, z):
+        """Cuántos de `n` sistemas caben en cada página A4 con el tamaño `z` (la primera lleva el título)."""
+        alto, cuentas, y = self._alto_sistema(z), [0], MARGEN + CABECERA * z
+        for _ in range(n):
+            if cuentas[-1] and y + alto > A4_ALTO - MARGEN:
+                cuentas.append(0)
+                y = MARGEN
+            cuentas[-1] += 1
+            y += alto
+        return cuentas
+
     def _componer(self):
-        e, z = ESP * self.zoom, self.zoom
-        self._papel = QRectF(26, 22, max(self.width() - 52, 500), 0)
-        self.sistemas = self._repartir(self._papel.left() + 34 * z, self._papel.right() - 30 * z, z)
-        cabecera, alto = 96 * z, self._alto_sistema(z)
-        self._sis_y = [self._papel.top() + cabecera + self._sobre(z) + s * alto for s in range(len(self.sistemas))]
-        self._papel.setHeight(cabecera + len(self.sistemas) * alto + 40 * z)
-        self.setMinimumHeight(int(self._papel.bottom() + 26))
+        # Se reparte como en el PDF, en unidades de la hoja, y se escala al ancho de la ventana: lo que se ve es lo
+        # que se imprime, con los mismos compases en cada sistema y los mismos sistemas en cada página.
+        z = self.zoom
+        f = max(self.width() - 52, 500) / A4_ANCHO   # píxeles de pantalla por unidad de la hoja
+        self._z = zs = z * f
+        e = ESP * zs
+        self.sistemas = self._repartir(MARGEN + 34 * z, A4_ANCHO - MARGEN - 30 * z, z)
+        for piezas in self.sistemas:
+            for p in piezas:
+                p["x"], p["ancho"] = 26 + p["x"] * f, p["ancho"] * f
+        self._hojas, self._sis_y, arriba = [], [], 22
+        for n, cuantos in enumerate(self._por_pagina(len(self.sistemas), z)):
+            hoja = QRectF(26, arriba, A4_ANCHO * f, A4_ALTO * f)
+            self._hojas.append(hoja)
+            y = hoja.top() + MARGEN * f + (CABECERA * zs if n == 0 else 0) + self._sobre(zs)
+            self._sis_y += [y + k * self._alto_sistema(zs) for k in range(cuantos)]
+            arriba = hoja.bottom() + 24
+        self._papel = self._hojas[0].adjusted(MARGEN * f, MARGEN * f, -MARGEN * f, -MARGEN * f)   # zona escrita
+        self.setMinimumHeight(int(arriba + 2))
+        self.hojas.emit(len(self._hojas))
+        z = zs
         self._marcas = {}  # zona de cada marca de tempo dibujada (segundo -> rectángulo): pulsarla la edita
         self._cajas = []   # zona sensible de cada nota; se calcula aquí y no al pintar, porque solo se pinta lo visible
         for piezas, base in zip(self.sistemas, self._sis_y):
@@ -204,8 +234,8 @@ class Pentagrama(QWidget):
 
     def _banda(self, s):
         """Franja de la hoja que ocupa un sistema, con sus notas más agudas y graves y su texto."""
-        e = ESP * self.zoom
-        return QRectF(0, self._sis_y[s] - self._sobre(self.zoom) - e, self.width(), self._alto_sistema(self.zoom) + 2 * e)
+        e = ESP * self._z
+        return QRectF(0, self._sis_y[s] - self._sobre(self._z) - e, self.width(), self._alto_sistema(self._z) + 2 * e)
 
     def marcar_sonando(self, indice):
         """Resalta la nota que suena (y repinta solo lo que cambia)."""
@@ -253,7 +283,7 @@ class Pentagrama(QWidget):
         for s, piezas in enumerate(self.sistemas):
             for p in piezas:
                 if indice in p["col"]:
-                    return QRect(int(p["x"]) - 40, int(self._sis_y[s] - 9 * ESP * self.zoom), 120, int(16 * ESP * self.zoom))
+                    return QRect(int(p["x"]) - 40, int(self._sis_y[s] - 9 * ESP * self._z), 120, int(16 * ESP * self._z))
         return QRect(0, 0, 1, 1)
 
     # -- dibujo ---------------------------------------------------------------
@@ -261,15 +291,20 @@ class Pentagrama(QWidget):
         g = QPainter(self)
         g.setRenderHint(QPainter.Antialiasing)
         g.fillRect(ev.rect(), QColor(MESA))
-        g.fillRect(self._papel.translated(3, 4), QColor(0, 0, 0, 70))      # sombra de la hoja
-        g.fillRect(self._papel, QColor(PAPEL))
+        g.setFont(self._fuente(10, self._z))
+        for n, hoja in enumerate(self._hojas):   # cada página A4, con su número como en el PDF
+            g.fillRect(hoja.translated(3, 4), QColor(0, 0, 0, 70))      # sombra de la hoja
+            g.fillRect(hoja, QColor(PAPEL))
+            g.setPen(QColor(TENUE))
+            g.drawText(QRectF(hoja.left(), hoja.bottom() - 46 * hoja.width() / A4_ANCHO, hoja.width(), 16 * hoja.width() / A4_ANCHO),
+                       Qt.AlignCenter, f"{n + 1} / {len(self._hojas)}")
         visibles = [s for s in range(len(self.sistemas)) if self._banda(s).intersects(QRectF(ev.rect()))]   # solo lo que se ve
-        self._pintar(g, self._papel, [self.sistemas[s] for s in visibles], [self._sis_y[s] for s in visibles], self.zoom,
+        self._pintar(g, self._papel, [self.sistemas[s] for s in visibles], [self._sis_y[s] for s in visibles], self._z,
                      True, visibles, len(self.sistemas), True, self.sel)
         lugar = self.lugar_de(self.cursor) if self.cursor is not None and self.sistemas else None
         if lugar:   # la línea de reproducción, de arriba abajo del pentagrama
-            e, base = ESP * self.zoom, self._sis_y[lugar[0]]
-            g.setPen(QPen(QColor(SONANDO), max(2.0, 2.4 * self.zoom)))
+            e, base = ESP * self._z, self._sis_y[lugar[0]]
+            g.setPen(QPen(QColor(SONANDO), max(2.0, 2.4 * self._z)))
             g.drawLine(QPointF(lugar[1], base - 11 * e / 2 - 8 * e / 2), QPointF(lugar[1], base + (16 if self.piano else 3) * e))
 
     def _pintar(self, g, papel, sistemas, bases, z, cabecera, numeros, total, pantalla, sel):
@@ -443,16 +478,12 @@ class Pentagrama(QWidget):
 
     # -- PDF ------------------------------------------------------------------
     def paginas(self):
-        """Reparto para imprimir en A4: lista de páginas, cada una con sus sistemas."""
-        z, margen = 1.0, 60
-        sistemas = self._repartir(margen + 34 * z, A4_ANCHO - margen - 30 * z, z)
-        alto, paginas, y = self._alto_sistema(z), [[]], margen + 96 * z
-        for s in sistemas:
-            if paginas[-1] and y + alto > A4_ALTO - margen:
-                paginas.append([])
-                y = margen
-            paginas[-1].append(s)
-            y += alto
+        """Reparto para imprimir en A4 con el tamaño elegido (el zoom): lista de páginas, cada una con sus sistemas."""
+        z = self.zoom
+        sistemas, paginas = self._repartir(MARGEN + 34 * z, A4_ANCHO - MARGEN - 30 * z, z), []
+        for cuantos in self._por_pagina(len(sistemas), z):
+            paginas.append(sistemas[:cuantos])
+            sistemas = sistemas[cuantos:]
         return paginas
 
     def exportar_pdf(self, ruta):
@@ -465,16 +496,17 @@ class Pentagrama(QWidget):
         try:
             g.setRenderHint(QPainter.Antialiasing)
             g.setWindow(0, 0, A4_ANCHO, A4_ALTO)
-            margen, alto, e = 60, self._alto_sistema(1.0), ESP
-            papel = QRectF(margen, margen, A4_ANCHO - 2 * margen, A4_ALTO - 2 * margen)
+            z = self.zoom
+            alto = self._alto_sistema(z)
+            papel = QRectF(MARGEN, MARGEN, A4_ANCHO - 2 * MARGEN, A4_ALTO - 2 * MARGEN)
             paginas, hechos = self.paginas(), 0
             total = sum(len(p) for p in paginas)
             for n, pagina in enumerate(paginas):
                 if n:
                     pdf.newPage()
-                arriba = papel.top() + (96 if n == 0 else 0)
-                bases = [arriba + self._sobre(1.0) + k * alto for k in range(len(pagina))]
-                self._pintar(g, papel, pagina, bases, 1.0, n == 0, range(hechos, hechos + len(pagina)), total, False, -1)
+                arriba = papel.top() + (CABECERA * z if n == 0 else 0)
+                bases = [arriba + self._sobre(z) + k * alto for k in range(len(pagina))]
+                self._pintar(g, papel, pagina, bases, z, n == 0, range(hechos, hechos + len(pagina)), total, False, -1)
                 hechos += len(pagina)
                 g.setFont(self._fuente(10, 1.0))
                 g.setPen(QColor(TENUE))
@@ -488,7 +520,7 @@ class Pentagrama(QWidget):
         """(n.º de sistema, posición en el pentagrama) más cercanos a esa altura."""
         if not self._sis_y:
             return 0, 0, self.clave
-        e = ESP * self.zoom
+        e = ESP * self._z
         s = min(range(len(self._sis_y)), key=lambda k: abs(self._sis_y[k] - 2 * e - y))
         base = self._sis_y[s]
         if self.piano and y > base + 2.5 * e:
@@ -521,7 +553,7 @@ class Pentagrama(QWidget):
             return QToolTip.showText(ev.globalPosition().toPoint(), texto, self) if texto else QToolTip.hideText()
         if self._arrastre:   # arrastrar una nota arriba o abajo cambia su altura, un paso por línea o espacio
             i, y0, pos0, ultimo, primero, clave = self._arrastre
-            pasos = round((y0 - ev.position().y()) / (ESP * self.zoom / 2))
+            pasos = round((y0 - ev.position().y()) / (ESP * self._z / 2))
             if pasos != ultimo:
                 self._arrastre[3], self._arrastre[4] = pasos, False
                 self.arrastrada.emit(i, partituras.midi_de(pos0 + pasos, clave), primero)
